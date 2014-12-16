@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0004 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0005 CD $
 # ############################################################################ 
 package main;
 use strict;
@@ -866,7 +866,7 @@ sub SB_SERVER_Alive( $ ) {
         # close our ping mechanism again
         $p->close( );
 
-        Log3( $hash, 5, "SB_SERVER_Alive($name): " . 
+        Log3( $hash, 5, "SB_SERVER_Alive($name): " .
               "RCC:" . $rccstatus . " Ping:" . $pingstatus );
     }
 
@@ -892,50 +892,52 @@ sub SB_SERVER_Alive( $ ) {
 
             # quicker update to capture CLI connection faster
             $nexttime = gettimeofday() + 10;
-        }
+        } else {                                                                    # CD 0005
+            # check the CLI connection (sub-state)
+            if( $hash->{ALIVECHECK} eq "waiting" ) {
+                # ups, we did not receive any answer in the last minutes
+                # SB Server potentially dead or shut-down
+                Log3( $hash, 2, "SB_SERVER_Alive($name): overrun SB-Server dead." );    # CD 0004 changed log level from 5 to 2
 
-        # check the CLI connection (sub-state)
-        if( $hash->{ALIVECHECK} eq "waiting" ) {
-            # ups, we did not receive any answer in the last minutes
-            # SB Server potentially dead or shut-down
-            Log3( $hash, 2, "SB_SERVER_Alive($name): overrun SB-Server dead." );    # CD 0004 changed log level from 5 to 2
+                $hash->{CLICONNECTION} = "off";
 
-            $hash->{CLICONNECTION} = "off";
-
-            # signal that to our clients
-            SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
-
-            # close the device
-            DevIo_CloseDev( $hash ); 
-            # CD 0000 start - exit infinite loop after socket has been closed
-            $hash->{ALIVECHECK} = "?";
-            $hash->{STATE}="disconnected";
-            readingsSingleUpdate( $hash, "power", "off", 1 );
-            # test: clear stack ?
-            $SB_SERVER_CmdStack{$name}{last_n} = 0;
-            $SB_SERVER_CmdStack{$name}{first_n} = 0;
-            $SB_SERVER_CmdStack{$name}{cnt} = 0;
-            # CD end
-
-            # remove all timers we created
-            RemoveInternalTimer( $hash );
-        } else {
-            if( $hash->{CLICONNECTION} eq "off" ) {
                 # signal that to our clients
-                # to be revisited, should only be sent after CLI established
-                SB_SERVER_Broadcast( $hash, "SERVER",  "ON" );
-                SB_SERVER_LMS_Status( $hash );
+                SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
+
+                # close the device
+                DevIo_CloseDev( $hash ); 
+                # CD 0000 start - exit infinite loop after socket has been closed
+                $hash->{ALIVECHECK} = "?";
+                $hash->{STATE}="disconnected";
+                # CD 0005 line above does not work (on Linux), fix:
+                DevIo_setStates($hash, "disconnected");
+                
+                readingsSingleUpdate( $hash, "power", "off", 1 );
+                # test: clear stack ?
+                $SB_SERVER_CmdStack{$name}{last_n} = 0;
+                $SB_SERVER_CmdStack{$name}{first_n} = 0;
+                $SB_SERVER_CmdStack{$name}{cnt} = 0;
+                # CD end
+
+                # remove all timers we created
+                RemoveInternalTimer( $hash );
+            } else {
+                if( $hash->{CLICONNECTION} eq "off" ) {
+                    # signal that to our clients
+                    # to be revisited, should only be sent after CLI established
+                    SB_SERVER_Broadcast( $hash, "SERVER",  "ON" );
+                    SB_SERVER_LMS_Status( $hash );
+                }
+                
+                $hash->{CLICONNECTION} = "on";
+
+                # just send something to the SB-Server. It will echo it
+                # if we receive the echo, the server is still alive
+                $hash->{ALIVECHECK} = "waiting";
+                DevIo_SimpleWrite( $hash, "fhemalivecheck\n", 0 );
+                
             }
-            
-            $hash->{CLICONNECTION} = "on";
-
-            # just send something to the SB-Server. It will echo it
-            # if we receive the echo, the server is still alive
-            $hash->{ALIVECHECK} = "waiting";
-            DevIo_SimpleWrite( $hash, "fhemalivecheck\n", 0 );
-            
         }
-
     } elsif( ( $rccstatus eq "off" ) && ( $pingstatus eq "off" ) ) {
         if( ReadingsVal( $name, "power", "on" ) eq "on" ) {
             # the first time we realize the server is off
@@ -954,6 +956,8 @@ sub SB_SERVER_Alive( $ ) {
             DevIo_CloseDev( $hash );
             # CD 0004 set STATE, needed for reconnect
             $hash->{STATE}="disconnected";
+            # CD 0005 line above does not work (on Linux), fix:
+            DevIo_setStates($hash, "disconnected");
             # remove all timers we created
             RemoveInternalTimer( $hash );
         }
@@ -1606,43 +1610,43 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 #  the Notify function
 # ----------------------------------------------------------------------------
 sub SB_SERVER_Notify( $$ ) {
-  my ( $hash, $dev_hash ) = @_;
-  my $name = $hash->{NAME}; # own name / hash
-  my $devName = $dev_hash->{NAME}; # Device that created the events
+    my ( $hash, $dev_hash ) = @_;
+    my $name = $hash->{NAME}; # own name / hash
+    my $devName = $dev_hash->{NAME}; # Device that created the events
 
-  # CD start
-  if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
+    # CD start
+    if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
     DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit" );
-  }
-  # CD end
-  #Log3( $hash, 4, "SB_SERVER_Notify($name): called" . 
-  #    "Own:" . $name . " Device:" . $devName );
+    }
+    # CD end
+    #Log3( $hash, 4, "SB_SERVER_Notify($name): called" . 
+    #    "Own:" . $name . " Device:" . $devName );
   
-  if( $devName eq $hash->{RCCNAME} ) {
-      if( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "off" ) {
-	  RemoveInternalTimer( $hash );
-	  InternalTimer( gettimeofday() + 10, 
-			 "SB_SERVER_Alive", 
-			 $hash, 
-			 0 );
-	  DevIo_CloseDev( $hash );
-      } elsif( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "on" ) {
-	  RemoveInternalTimer( $hash );
-	  # do an update of the status, but SB CLI must come up
-	  InternalTimer( gettimeofday() + 20, 
-			 "SB_SERVER_Alive", 
-			 $hash, 
-			 0 );
-      } else {
-	  return( undef );
-      }
-      return( "" );
-  } else {
-      return( undef );
-  }
-
+    if( $devName eq $hash->{RCCNAME} ) {
+        if( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "off" ) {
+            RemoveInternalTimer( $hash );
+            InternalTimer( gettimeofday() + 10, 
+                 "SB_SERVER_Alive", 
+                 $hash, 
+                 0 );
+            DevIo_CloseDev( $hash );
+            # CD 0005 set state after DevIo_CloseDev
+            DevIo_setStates($hash, "disconnected");
+        } elsif( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "on" ) {
+            RemoveInternalTimer( $hash );
+            # do an update of the status, but SB CLI must come up
+            InternalTimer( gettimeofday() + 20, 
+                 "SB_SERVER_Alive", 
+                 $hash, 
+                 0 );
+        } else {
+            return( undef );
+        }
+        return( "" );
+    } else {
+        return( undef );
+    }
 }
-
 
 # ----------------------------------------------------------------------------
 #  start up the LMS server status
