@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0010 CD $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0011 CD $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -649,7 +649,7 @@ sub SB_PLAYER_Parse( $$ ) {
                 readingsBulkUpdate( $hash, "shuffle", "?" );
             }
         } elsif( $args[ 0 ] eq "name" ) {
-            if(defined($args[ 1 ])) {            # CD 0009 check empty name
+            if(defined($args[ 1 ]) && ($args[ 1 ] ne '?')) {            # CD 0009 check empty name - 0011 ignore '?'
                 shift( @args );
                 readingsBulkUpdate( $hash, "currentPlaylistName", 
                                     join( " ", @args ) );
@@ -661,7 +661,7 @@ sub SB_PLAYER_Parse( $$ ) {
 Log3( $hash, 2, "SB_PLAYER_Parse($name): CD - playlist name: $pn" );     # CD 0009 debug
                 $pn=SB_SERVER_FavoritesName2UID(join( " ", @args ));
 Log3( $hash, 2, "SB_PLAYER_Parse($name): CD - UID: $pn" );               # CD 0009 debug
-                if( defined($hash->{helper}{SB_PLAYER_Favs}{$pn}{ID})) {
+                if( defined($hash->{helper}{SB_PLAYER_Favs}{$pn}) && defined($hash->{helper}{SB_PLAYER_Favs}{$pn}{ID})) {   # CD 0011 check if defined($hash->{helper}{SB_PLAYER_Favs}{$pn})
                 #if( defined( $SB_PLAYER_Favs{$name}{$pn}{ID} ) ) {
                     $hash->{FAVSELECT} = $pn;
                     readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$pn" );
@@ -1466,8 +1466,8 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             SB_PLAYER_Amplifier( $hash );
         } elsif( $args[ 0 ] eq "ON" ) {
             # the server is back
-            readingsSingleUpdate( $hash, "state", "on", 1 );
-            readingsSingleUpdate( $hash, "power", "on", 1 );
+            #readingsSingleUpdate( $hash, "state", "on", 1 );   # CD 0011 ob der Player eingeschaltet ist, ist hier noch nicht bekannt, SB_PLAYER_GetStatus abwarten 
+            #readingsSingleUpdate( $hash, "power", "on", 1 );   # CD 0011 ob der Player eingeschaltet ist, ist hier noch nicht bekannt, SB_PLAYER_GetStatus abwarten 
             # do and update of the status
             InternalTimer( gettimeofday() + 10, 
                            "SB_PLAYER_GetStatus", 
@@ -1787,14 +1787,21 @@ sub SB_PLAYER_CoverArt( $ ) {
             ".jpg?player=$hash->{PLAYERMAC}";
     } elsif( ( $hash->{ISREMOTESTREAM} eq "1" ) ||
              ( $hash->{ISREMOTESTREAM} == 1 ) ) {
-        $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
-            "imageproxy?u=" . $hash->{ARTWORKURL} . 
-            "&h=" . AttrVal( $name, "coverartheight", 50 ) . 
-            "&w=". AttrVal( $name, "coverartwidth", 50 );
-
+        # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
+        if($hash->{ARTWORKURL} ne "?") {
+            $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
+                "imageproxy?u=" . $hash->{ARTWORKURL} . 
+                "&h=" . AttrVal( $name, "coverartheight", 50 ) . 
+                "&w=". AttrVal( $name, "coverartwidth", 50 );
+        } else {
+            $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
+                $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) . 
+                "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
+        }
+        # CD 0011 Ende
     } else {
         $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" . 
-            "-160206228/cover_" . AttrVal( $name, "coverartheight", 50 ) . 
+            $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) .     # CD 0011 -160206228 durch $hash->{COVERID} ersetzt
             "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
     }
 
