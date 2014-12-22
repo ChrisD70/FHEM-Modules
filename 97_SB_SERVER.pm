@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0007 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0008 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -683,11 +683,16 @@ sub SB_SERVER_DoInit( $ ) {
         DevIo_CloseDev( $hash ); 
     }
 
+    Log3( $hash, 2, "SB_SERVER_DoInit($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));    # CD 0008
+
     if( $hash->{STATE} eq "disconnected" ) {
         # server is off after FHEM start, broadcast to clients
         if( ( ReadingsVal( $name, "power", "on" ) eq "on" ) ||
             ( ReadingsVal( $name, "power", "on" ) eq "?" ) ) {
-            # obviously the first we realize the Server is off
+            Log3( $hash, 2, "SB_SERVER_DoInit($name): " .                   # CD 0008
+              "SB-Server in hibernate / suspend?." );
+
+              # obviously the first we realize the Server is off
             readingsSingleUpdate( $hash, "power", "off", 1 );
 
             # and signal to our clients
@@ -702,6 +707,8 @@ sub SB_SERVER_DoInit( $ ) {
         $hash->{CLICONNECTION} = "on";
         if( ( ReadingsVal( $name, "power", "on" ) eq "off" ) ||
             ( ReadingsVal( $name, "power", "on" ) eq "?" ) ) {
+            Log3( $hash, 2, "SB_SERVER_DoInit($name): " .                   # CD 0008
+              "SB-Server is back again." );
 
             # CD 0007 cleanup
             if(defined($hash->{helper}{WOLFastReconnectUntil})) {
@@ -745,6 +752,8 @@ sub SB_SERVER_DoInit( $ ) {
 	return( 1 );
     }
 
+	Log3( $hash, 2, "SB_SERVER_DoInit: something went wrong!" );        # CD 0008 nur für Testzwecke
+    return(0);                                                          # CD 0008 nur für Testzwecke
     return( 1 );
 }
 
@@ -1713,6 +1722,38 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
     return;
 }
 
+# CD 0008 start
+sub SB_SERVER_CheckConnection($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    Log3( $hash, 2, "SB_SERVER_CheckConnection($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+    if(ReadingsVal( $name, "power", "X" ) ne "on") {
+        Log3( $hash, 2, "SB_SERVER_CheckConnection($name): forcing power on");
+        
+        $hash->{helper}{pingCounter}=0;
+            
+        SB_SERVER_Broadcast( $hash, "SERVER", 
+                 "IP " . $hash->{IP} . ":" .
+                 AttrVal( $name, "httpport", "9000" ) );
+        $hash->{helper}{doBroadcast}=1;
+
+        SB_SERVER_LMS_Status( $hash );
+        if( AttrVal( $name, "doalivecheck", "false" ) eq "false" ) {
+            readingsSingleUpdate( $hash, "power", "on", 1 );
+        } elsif( AttrVal( $name, "doalivecheck", "false" ) eq "true" ) {
+            # start the alive checking mechanism
+            InternalTimer( gettimeofday() + 
+                       AttrVal( $name, "alivetimer", 10 ),
+                       "SB_SERVER_Alive", 
+                       $hash, 
+                       0 );
+        }
+    }
+    RemoveInternalTimer( "CheckConnection:$name");
+}    
+# CD 0008 end
 
 # ----------------------------------------------------------------------------
 #  the Notify function
@@ -1729,7 +1770,23 @@ sub SB_SERVER_Notify( $$ ) {
     # CD end
     #Log3( $hash, 4, "SB_SERVER_Notify($name): called" . 
     #    "Own:" . $name . " Device:" . $devName );
-  
+
+    # CD 0008 start
+    if($devName eq $name ) {
+        if (grep (m/^DISCONNECTED$/,@{$dev_hash->{CHANGED}})) {
+            Log3( $hash, 2, "SB_SERVER_Notify($name): DISCONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+            RemoveInternalTimer( "CheckConnection:$name");
+        }
+        if (grep (m/^CONNECTED$/,@{$dev_hash->{CHANGED}})) {
+            Log3( $hash, 2, "SB_SERVER_Notify($name): CONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+            InternalTimer( gettimeofday() + 2, 
+                "SB_SERVER_CheckConnection", 
+                "CheckConnection:$name",
+                 0 );
+        }
+    }
+    # CD 0008 end
+
     if( $devName eq $hash->{RCCNAME} ) {
         if( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "off" ) {
             RemoveInternalTimer( $hash );
