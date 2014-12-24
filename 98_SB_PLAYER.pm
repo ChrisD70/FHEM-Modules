@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0011 CD $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0012 CD $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -102,6 +102,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "coverartwidth:50,100,200 ";
     # CD 0007
     $hash->{AttrList}  .= "syncVolume ";
+    $hash->{AttrList}  .= "amplifierDelayOff ";         # CD 0012
     $hash->{AttrList}  .= $readingFnAttributes;
 }
 
@@ -132,6 +133,16 @@ sub SB_PLAYER_Attr( @ ) {
         
         }
     }
+    # CD 0012 start - bei Änderung des Attributes Zustand überprüfen
+    if( $args[ 0 ] eq "amplifier" ) {
+        RemoveInternalTimer( "DelayAmplifier:$name");
+        InternalTimer( gettimeofday() + 0.01, 
+           "SB_PLAYER_DelayAmplifier", 
+           "DelayAmplifier:$name", 
+           0 );
+    }
+    return;
+    # CD 0012
 }
 # CD 0007 end
 
@@ -690,7 +701,7 @@ readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$pn" );                   # CD 00
                                 join( " ", @args ) );
 
         } elsif( $args[ 0 ] eq "stop" ) {
-            readingsBulkUpdate( $hash, "power", "off" );
+            readingsBulkUpdate( $hash, "playStatus", "stopped" );                # CD 0012 'power off' durch 'playStatus stopped' ersetzt
             SB_PLAYER_Amplifier( $hash );
             
         } else {
@@ -1702,6 +1713,19 @@ sub SB_PLAYER_ServerTurnOn( $ ) {
 # ----------------------------------------------------------------------------
 #  used to turn on a connected amplifier
 # ----------------------------------------------------------------------------
+# CD 0012 start
+sub SB_PLAYER_DelayAmplifier( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    Log 0,"SB_PLAYER_DelayAmplifier";
+    $hash->{helper}{AMPLIFIERDELAYOFF}=1;
+
+    SB_PLAYER_Amplifier($hash);
+}
+# CD 0012 end
+
 sub SB_PLAYER_Amplifier( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
@@ -1709,6 +1733,7 @@ sub SB_PLAYER_Amplifier( $ ) {
     if( ( $hash->{AMPLIFIER} eq "none" ) || 
         ( !defined( $defs{$hash->{AMPLIFIER}} ) ) ) {
         # amplifier not specified
+        delete($hash->{helper}{AMPLIFIERDELAYOFF}) if defined($hash->{helper}{AMPLIFIERDELAYOFF});  # CD 0012
         return;
     }
 
@@ -1752,13 +1777,28 @@ sub SB_PLAYER_Amplifier( $ ) {
           "and set:$setvalue" );
 
     if ( $actualState ne $setvalue) {
+        # CD 0012 start - Abschalten über Attribut verzögern, generell verzögern damit set-Event funktioniert
+        my $delayAmp=($setvalue eq "off")?AttrVal( $name, "amplifierDelayOff", 0 ):0.1;
+        $delayAmp=0.01 if($delayAmp==0);
+        if (!defined($hash->{helper}{AMPLIFIERDELAYOFF})) {
+            Log3( $hash, 5, 'SB_PLAYER_Amplifier($name): delaying amplifier on/off' );
+            RemoveInternalTimer( "DelayAmplifier:$name");
+            InternalTimer( gettimeofday() + $delayAmp, 
+               "SB_PLAYER_DelayAmplifier", 
+               "DelayAmplifier:$name", 
+               0 );
+            return;
+        }
+        # CD 0012 end
         fhem( "set $hash->{AMPLIFIER} $setvalue" );
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name):amplifier changed to " . 
+        
+        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): amplifier changed to " . 
               $setvalue );
     } else {
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name):no amplifier " . 
+        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): no amplifier " . 
               "state change" );
     }
+    delete($hash->{helper}{AMPLIFIERDELAYOFF}) if (defined($hash->{helper}{AMPLIFIERDELAYOFF}));
 
     return;
 }
