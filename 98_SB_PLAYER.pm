@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0012 CD $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0013 CD $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -753,7 +753,7 @@ readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$pn" );                   # CD 00
             
             SB_PLAYER_Amplifier( $hash );
         } elsif( $args[ 0 ] eq "0" ) {
-            readingsBulkUpdate( $hash, "presence", "absent" );
+            #readingsBulkUpdate( $hash, "presence", "absent" );      # CD 0013 deaktiviert, power sagt nichts über presence
             readingsBulkUpdate( $hash, "state", "off" );
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
@@ -839,7 +839,7 @@ readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$pn" );                   # CD 00
                         SB_PLAYER_Amplifier( $hash );
                 } elsif( $args[ 2 ] eq "0" ) {
                         #Log 0,"$name power off";
-                        readingsBulkUpdate( $hash, "presence", "absent" );
+                        #readingsBulkUpdate( $hash, "presence", "absent" );       # CD 0013 deaktiviert, power sagt nichts über presence
                         readingsBulkUpdate( $hash, "state", "off" );
                         readingsBulkUpdate( $hash, "power", "off" );
                         SB_PLAYER_Amplifier( $hash );
@@ -1719,7 +1719,7 @@ sub SB_PLAYER_DelayAmplifier( $ ) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
-    Log 0,"SB_PLAYER_DelayAmplifier";
+    #Log 0,"SB_PLAYER_DelayAmplifier";
     $hash->{helper}{AMPLIFIERDELAYOFF}=1;
 
     SB_PLAYER_Amplifier($hash);
@@ -1819,6 +1819,8 @@ sub SB_PLAYER_CoverArt( $ ) {
     }
     # CD 0003 end
 
+    my $lastCoverartUrl=$hash->{COVERARTURL};           # CD 0013
+    
     # compile the link to the album cover
     if( $hash->{ISREMOTESTREAM} eq "0" ) {
         $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" . 
@@ -1854,8 +1856,10 @@ sub SB_PLAYER_CoverArt( $ ) {
         # weblink not specified
         return;
     } else {
-        fhem( "modify " . $hash->{COVERARTLINK} . " image " . 
-              $hash->{COVERARTURL} );
+        if ($lastCoverartUrl ne $hash->{COVERARTURL}) {                 # CD 0013 nur bei Änderung aktualisieren
+            fhem( "modify " . $hash->{COVERARTLINK} . " image " . 
+                  $hash->{COVERARTURL} );
+        }                                                               # CD 0013
     }
 }
 
@@ -2148,14 +2152,14 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
                         if (defined($sva2) && ($sva eq $sva2)) {
                             if ($vol>0) {   # CD 0010
                                 if(ReadingsVal($chash->{NAME}, "volumeStraight", $vol)!=$vol) {
-                                    Log 0,$chash->{NAME}." setting volume to ".$vol." (from ".$hash->{NAME}.")";
+                                    #Log 0,$chash->{NAME}." setting volume to ".$vol." (from ".$hash->{NAME}.")";
                                     $chash->{helper}{setSyncVolume}=$vol;
                                     fhem "set ".$chash->{NAME}." volumeStraight ".$vol." x";
                                 }
                                 # CD 0010 start
                             } else {
                                 if(ReadingsVal($chash->{NAME}, "volume", "x") ne "muted") {
-                                    Log 0,$chash->{NAME}." muting (from ".$hash->{NAME}.")";
+                                    #Log 0,$chash->{NAME}." muting (from ".$hash->{NAME}.")";
                                     IOWrite( $chash, "$chash->{PLAYERMAC} mixer muting 1\n" );
                                 }
                             # CD 0010 end
