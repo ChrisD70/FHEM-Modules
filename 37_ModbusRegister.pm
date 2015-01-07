@@ -1,10 +1,12 @@
-# $Id: 37_ModbusRegister.pm 0006 $
+# $Id: 37_ModbusRegister.pm 0008 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
 # 140506 0004 added _BE plcDataTypes, use readingsBulkUpdate, fixed RAW
 # 140507 0005 fixed {helper}{nread} in ModbusRegister_Define
 # 140507 0006 delete $hash->{helper}{addr} in modules list on redefine (modify)
+# 150106 0007 added 3WORD and 3WORD_BE 
+# 150107 0008 added QWORD and QWORD_BE 
 #
 # TODO:
 
@@ -15,7 +17,7 @@ use warnings;
 use SetExtensions;
 
 sub ModbusRegister_Parse($$);
-sub _ModbusRegister_SetMinMax($);
+sub ModbusRegister_SetMinMax($);
 
 ## Modbus function code
 # standard
@@ -41,11 +43,12 @@ ModbusRegister_Initialize($)
   $hash->{ParseFn}   = "ModbusRegister_Parse";
   $hash->{AttrFn}    = "ModbusRegister_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE ".
+                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,QWORD,QWORD_BE ".
                        "conversion ".
                        "updateIntervall ".
                        "disableRegisterMapping:0,1 ".
                        "registerType:Holding,Input ".
+                       "stateAlias ".
                        "$readingFnAttributes";
 }
 
@@ -111,19 +114,29 @@ ModbusRegister_Define($$)
 
   $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
   Log3 $name, 5, "Def $hash->{helper}{addr} $name";
-  Log 0, "Def $hash->{helper}{addr} $name";
+  #Log 0, "Def $hash->{helper}{addr} $name"; # CD 0007
   $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
 
   if(defined($attr{$name}{plcDataType})) {
     if(($attr{$name}{plcDataType}=~/^DWORD/) || ($attr{$name}{plcDataType}=~/^DINT/) || ($attr{$name}{plcDataType}=~/^REAL/)) {
       $hash->{helper}{nread}=2;
     }
+    # CD 0007 start
+    if($attr{$name}{plcDataType}=~/^3WORD/) {
+      $hash->{helper}{nread}=3;
+    }
+    # CD 0007 end
+    # CD 0008 start
+    if($attr{$name}{plcDataType}=~/^QWORD/) {
+      $hash->{helper}{nread}=4;
+    }
+    # CD 0008 end
   }
   $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
   $hash->{helper}{updateIntervall}=0.1 if (!defined($hash->{helper}{updateIntervall}));
   $hash->{helper}{nextUpdate}=time();
   
-  _ModbusRegister_SetMinMax($hash);
+  ModbusRegister_SetMinMax($hash);
   return undef;
 }
 
@@ -158,14 +171,14 @@ ModbusRegister_Set($@)
     return SetExtensions($hash, $list, @a); 
   }
 
-  if(($na==2)&&_is_float($a[1])) {
+  if(($na==2) && ModbusRegister_is_float($a[1])) {
     $a[2]=$a[1];
     $a[1]="value";
     $na=3;
   }
   return "no set value specified" if($na<3);
   #Log 0,"$a[1] $a[2] $na";
-  return "invalid value for set" if(($na>3)||!_is_float($a[2])||($a[2]<$hash->{helper}{cnv}{min})||($a[2]>$hash->{helper}{cnv}{max}));
+  return "invalid value for set" if(($na>3)||!ModbusRegister_is_float($a[2])||($a[2]<$hash->{helper}{cnv}{min})||($a[2]>$hash->{helper}{cnv}{max}));
 
   return "writing to input registers not allowed" if ($hash->{helper}{registerType}==4);
   
@@ -187,6 +200,12 @@ ModbusRegister_Set($@)
       if($plcDataType=~ /^DWORD/) {
         $wlen=2;
       }
+      if($plcDataType=~ /^3WORD/) {
+        $wlen=3;
+      }
+      if($plcDataType=~ /^QWORD/) {
+        $wlen=4;
+      }
       if($plcDataType=~ /^DINT/){
         $v+= 4294967296 if $v<0;
         $wlen=2;
@@ -202,6 +221,20 @@ ModbusRegister_Set($@)
       } else {
         $msg=pack("CCnnCnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 2, 4, $v%65536, $v>>16);
       }
+    # CD 0008 start
+    } elsif($wlen==3) {
+      if($plcDataType=~ /_BE$/) {
+      $msg=pack("CCnnCnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 3, 6, ($v/4294967296.0)%65536, ($v/65536.0)%65536, $v%65536);
+      } else {
+        $msg=pack("CCnnCnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 3, 6, $v%65536, ($v/65536.0)%65536, ($v/4294967296.0)%65536);
+      }
+    } elsif($wlen==4) {
+      if($plcDataType=~ /_BE$/) {
+        $msg=pack("CCnnCnnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 4, 8, $v/281474976710656.0, ($v/4294967296.0)%65536, ($v/65536.0)%65536, $v%65536);
+      } else {
+        $msg=pack("CCnnCnnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 4, 8, $v%65536, ($v/65536.0)%65536, ($v/4294967296.0)%65536, $v/281474976710656.0);
+      }
+    # CD 0008 end
     } else {
       $msg=pack("CCnn", $hash->{helper}{unitId}, 6, $hash->{helper}{address}, $v);
     }
@@ -267,6 +300,22 @@ ModbusRegister_Parse($$)
         if($plcDataType eq "DWORD_BE"){
           $v=($vals[0]<<16)+$vals[1];
         }
+        # CD 0007 start
+        if($plcDataType eq "3WORD"){
+          $v=(4294967296.0*$vals[2])+($vals[1]<<16)+$vals[0];
+        }
+        if($plcDataType eq "3WORD_BE"){
+          $v=(4294967296.0*$vals[0])+($vals[1]<<16)+$vals[2];
+        }
+        # CD 0007 end
+        # CD 0008 start
+        if($plcDataType eq "QWORD"){
+          $v=(281474976710656.0*$vals[3])+(4294967296.0*$vals[2])+($vals[1]<<16)+$vals[0];
+        }
+        if($plcDataType eq "QWORD_BE"){
+          $v=(281474976710656.0*$vals[0])+(4294967296.0*$vals[1])+($vals[2]<<16)+$vals[3];
+        }
+        # CD 0008 end
         if($plcDataType eq "DINT"){
           $v=($vals[1]<<16)+$vals[0];
           $v-= 4294967296 if $v>2147483647;
@@ -287,6 +336,7 @@ ModbusRegister_Parse($$)
         readingsBeginUpdate($lh);
         readingsBulkUpdate($lh,"state",$v);
         readingsBulkUpdate($lh,"RAW",unpack "H*",pack "n*", @vals); #sprintf("%08x",pack "n*", @vals));
+        readingsBulkUpdate($lh,AttrVal($n,"stateAlias",undef),$v) if(defined(AttrVal($n,"stateAlias",undef)));  # CD 0007
         readingsEndUpdate($lh,1);
         push(@list, $n); 
       }
@@ -312,7 +362,17 @@ ModbusRegister_Attr(@)
       if(($attrVal eq "DWORD") || ($attrVal eq "DINT") || ($attrVal eq "REAL") || ($attrVal eq "DWORD_BE") || ($attrVal eq "DINT_BE") || ($attrVal eq "REAL_BE")) {
         $hash->{helper}{nread}=2;
       }
-      _ModbusRegister_SetMinMax($hash);
+      # CD 0007 start
+      if(($attrVal eq "3WORD") || ($attrVal eq "3WORD_BE")) {
+        $hash->{helper}{nread}=3;
+      }
+      # CD 0007 end
+      # CD 0008 start
+      if(($attrVal eq "QWORD") || ($attrVal eq "QWORD_BE")) {
+        $hash->{helper}{nread}=4;
+      }
+      # CD 0008 end
+      ModbusRegister_SetMinMax($hash);
     }
     $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
   }
@@ -323,14 +383,14 @@ ModbusRegister_Attr(@)
         $attr{$name}{conversion} = $attrVal;
         $hash->{helper}{cnv}{a}=$a[0];
         $hash->{helper}{cnv}{b}=$a[1];
-        _ModbusRegister_SetMinMax($hash);
+        ModbusRegister_SetMinMax($hash);
       } else {
         return "wrong syntax: conversion a:b";
       }
     } else {
       $hash->{helper}{cnv}{a}=1;
       $hash->{helper}{cnv}{b}=0;
-      _ModbusRegister_SetMinMax($hash);
+      ModbusRegister_SetMinMax($hash);
     }
   }
   elsif($attrName eq "updateIntervall") {
@@ -396,7 +456,7 @@ ModbusRegister_Attr(@)
 }
 
 sub
-_ModbusRegister_SetMinMax($)
+ModbusRegister_SetMinMax($)
 {
   my ($hash)=@_;
   
@@ -421,6 +481,19 @@ _ModbusRegister_SetMinMax($)
     $vmin=0;
     $vmax=0xffffffff;
   }
+  # CD 0007 start
+  if($plcDataType=~ /^3WORD/) {
+    $vmin=0;
+    $vmax=2**48-1;
+  }
+  # CD 0007 end
+  # CD 0008 start
+  if($plcDataType=~ /^QWORD/) {
+    $vmin=0;
+    $vmax=2**64-1;
+    Log 0,$vmax;
+  }
+  # CD 0008 end
   if($plcDataType=~ /^DINT/) {
     $vmin=-2**31;
     $vmax=2**31-1;
@@ -442,11 +515,11 @@ _ModbusRegister_SetMinMax($)
   }
 }
 
-sub _is_integer {
+sub ModbusRegister_is_integer { # CD 0007 renamed
    defined $_[0] && $_[0] =~ /^[+-]?\d+$/;
 }
 
-sub _is_float {
+sub ModbusRegister_is_float {   # CD 0007 renamed
    defined $_[0] && $_[0] =~ /^[+-]?\d+(\.\d+)?$/;
 }
 
