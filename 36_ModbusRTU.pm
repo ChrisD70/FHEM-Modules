@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 36_ModbusRTU.pm 0005 $
+# $Id: 36_ModbusRTU.pm 0006 $
 # 140503 0001 initial release
 # 140505 0002 fix dummy on startup
 # 140507 0003 added 'use bytes', fixed partial data handling in read function
