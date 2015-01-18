@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 36_ModbusTCPServer.pm 0005 $
+# $Id: 36_ModbusTCPServer.pm 0006 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
