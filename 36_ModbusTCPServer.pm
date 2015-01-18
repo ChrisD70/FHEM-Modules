@@ -5,7 +5,7 @@
 # 140506 0003 added 'use bytes'
 # 140508 0004 added REREADCFG to ModbusTCPServer_Notify
 # 140819 0005 added statistics and support for coils
-#
+# 150118 0006 removed defaultUnitId, completed documentation
 # TODO:
 
 package main;
@@ -167,11 +167,6 @@ sub ModbusTCPServer_Attr(@) {###################################################
       if ($init_done){
         InternalTimer(gettimeofday()+$aVal/1000.0, "ModbusTCPServer_Poll", "poll:".$name, 0);
       }
-    }
-  }
-  elsif($aName eq "defaultUnitId") {
-    if ($cmd eq "set") {
-      $attr{$name}{defaultUnitId} = $aVal;
     }
   }
   elsif($aName eq "timeout") {
@@ -336,28 +331,11 @@ sub ModbusTCPServer_DoInit($) {#################################################
   my $tn = gettimeofday();
   my $pollIntervall = AttrVal($name,"pollIntervall",3000)/1000.0;
 
-  # read device identification
-  #$hash->{helper}{state}="readdevid";
-  #InternalTimer($tn+1, "ModbusTCPServer_ReadDevId", "readdevid:".$name, 0);
-
   $hash->{helper}{state}="idle";
   RemoveInternalTimer( "poll:".$name);
   InternalTimer($tn+$pollIntervall, "ModbusTCPServer_Poll", "poll:".$name, 0);
 
   return undef;
-}
-
-sub ModbusTCPServer_ReadDevId($) {##################################################
-  my($in ) = shift;
-  my(undef,$name) = split(':',$in);
-  my $hash = $defs{$name};
-
-  $hash->{helper}{hd_tr_id}=int(rand 65535);
-  $hash->{helper}{hd_unit_id}=$attr{$name}{defaultUnitId} if defined($attr{$name}{defaultUnitId});
-  my $msg=pack("nnnCCCCC", 0,0,5,$hash->{helper}{hd_unit_id}, MODBUS_ENCAPSULATED_INTERFACE, 0x0e, 0x01, 0x00);
-  _MbLogFrame($hash,"ReadDevId",$msg);
-  $hash->{STATE} = "read device id";
-  ModbusTCPServer_SimpleWrite($hash,$msg);
 }
 
 sub ModbusTCPServer_Poll($) {##################################################
@@ -570,7 +548,39 @@ sub ModbusTCPServer_UpdateStatistics($$$$$) {###################################
 <a name="ModbusTCPServer"></a>
 <h3>ModbusTCPServer</h3>
 <ul>
-    Todo
+  This module allows you to connect to a Modbus TCP/IP server.<br><br>
+  This module provides an IODevice for:
+  <ul>
+    <li><a href="#ModbusRegister">ModbusRegister</a> a module for accessing holding and input registers</li>
+    <li><a href="#ModbusCoil">ModbusCoil</a> a module for accessing coils and discrete inputs</li>
+  </ul>
+  <br><br>
+  <a name="ModbusTCPServerdefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; ModbusTCPServer &lt;ip-address[:port]&gt;</code> <br>
+    <br>
+    If no port is specified 502 will be used.<br/>
+
+  </ul>
+  <br>
+  <a name="ModbusTCPServerset"></a>
+  <b>Set</b> <ul>N/A</ul><br>
+  <a name="ModbusTCPServerget"></a>
+  <b>Get</b> <ul>N/A</ul><br>
+  <a name="ModbusTCPServerattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a href="#attrdummy">dummy</a></li><br>
+    <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
+    <li><a name="">pollIntervall</a><br>
+        Intervall in seconds for the reading cycle. Default: 0.1</li><br>
+    <li><a name="">timeout</a><br>
+        Timeout in seconds waiting for data from the server. Default: 3</li><br>
+    <li><a name="">presenceLink</a><br>
+        Name of a <a href="#PRESENCE">PRESENCE</a> instance. Used to detect if the server is accessible.</li><br>
+    
+  </ul>
 </ul>
 
 =end html
