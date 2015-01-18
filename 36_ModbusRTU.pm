@@ -5,7 +5,7 @@
 # 140507 0003 added 'use bytes', fixed partial data handling in read function
 # 140507 0004 fixed call to parse in read function
 # 140508 0005 added REREADCFG to ModbusRTU_Notify, added timer if $init_done==0
-#
+# 150118 0006 removed defaultUnitId and presenceLink, completed documentation
 # TODO:
 
 package main;
@@ -29,16 +29,15 @@ sub ModbusRTU_Ready($);
 sub ModbusRTU_SimpleWrite(@);
 sub ModbusRTU_DoInit($);
 sub ModbusRTU_Poll($);
-sub ModbusRTU_ReadDevId($);
 sub ModbusRTU_AddWQueue($$);
 sub ModbusRTU_AddRQueue($$);
 sub ModbusRTU_Timeout($);
 sub ModbusRTU_HandleWriteQueue($);
 sub ModbusRTU_HandleReadQueue($);
 sub ModbusRTU_Reconnect($);
-sub _MbLogRTUFrame($$$);
-sub _ModbusRTU_crc_is_ok($);
-sub _ModbusRTU_crc($);
+sub ModbusRTU_Frame($$$);
+sub ModbusRTU_crc_is_ok($);
+sub ModbusRTU_crc($);
 
 my $debug = 1; # set 1 for better log readability
 
@@ -200,11 +199,6 @@ sub ModbusRTU_Attr(@) {#########################################################
       }
     }
   }
-  elsif($aName eq "defaultUnitId") {
-    if ($cmd eq "set") {
-      $attr{$name}{defaultUnitId} = $aVal;
-    }
-  }
   elsif($aName eq "timeout") {
     if ($cmd eq "set") {
       $attr{$name}{timeout} = $aVal;
@@ -268,14 +262,6 @@ sub ModbusRTU_Attr(@) {#########################################################
       }
     }
   }
-  elsif($aName eq "presenceLink"){
-    if ($cmd eq "set" && defined($aVal)){
-      $attr{$name}{presenceLink} = $aVal;
-      $hash->{helper}{presence} = $aVal;
-    } else {
-      delete($hash->{helper}{presence});
-    }
-  }
   return;
 }
 
@@ -292,9 +278,9 @@ sub ModbusRTU_Write($$) {#######################################################
   my $tx_hd_pr_id      = 0;
   my $tx_hd_length     = bytes::length($msg);
 
-  my $crc = pack 'v', _ModbusRTU_crc($msg);
+  my $crc = pack 'v', ModbusRTU_crc($msg);
   
-  _MbLogRTUFrame($hash,"AddWQueue",$msg.$crc);
+  ModbusRTU_Frame($hash,"AddWQueue",$msg.$crc);
   ModbusRTU_AddWQueue($hash, $msg.$crc);
 }
 
@@ -309,9 +295,9 @@ sub ModbusRTU_Read($) {#########################################################
   my $pdata = $hash->{helper}{PARTIAL};
   $pdata .= $buf;
 
-  _MbLogRTUFrame($hash,"Read",$pdata);
+  ModbusRTU_Frame($hash,"Read",$pdata);
 
-  if(( bytes::length($pdata) >= 4 ) && ( _ModbusRTU_crc_is_ok($pdata)))
+  if(( bytes::length($pdata) >= 4 ) && ( ModbusRTU_crc_is_ok($pdata)))
   {
     ModbusRTU_Parse($hash, $pdata);
     $hash->{helper}{PARTIAL} = undef;
@@ -328,7 +314,7 @@ sub ModbusRTU_Parse($$) {#######################################################
   my ($hash, $rmsg) = @_;
   my $name = $hash->{NAME};
 
-  _MbLogRTUFrame($hash,"Received",$rmsg);
+  ModbusRTU_Frame($hash,"Received",$rmsg);
 
   if($hash->{helper}{state} eq "idle") {
     return undef;
@@ -397,7 +383,7 @@ sub ModbusRTU_SimpleWrite(@) {##################################################
     $hash->{helper}{hd_tr_id}=unpack("x2n",$msg);
     $hash->{helper}{state}="active";
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusRTU_Timeout", "timeout:".$name, 1);
-    _MbLogRTUFrame($hash,"SimpleWrite",$msg);
+    ModbusRTU_Frame($hash,"SimpleWrite",$msg);
     $hash->{USBDev}->write($msg)    if($hash->{USBDev});
     syswrite($hash->{DIODev}, $msg) if($hash->{DIODev});
 
@@ -424,28 +410,11 @@ sub ModbusRTU_DoInit($) {#######################################################
   my $tn = gettimeofday();
   my $pollIntervall = AttrVal($name,"pollIntervall",3000)/1000.0;
 
-  # read device identification
-  #$hash->{helper}{state}="readdevid";
-  #InternalTimer($tn+1, "ModbusRTU_ReadDevId", "readdevid:".$name, 0);
-
   $hash->{helper}{state}="idle";
   RemoveInternalTimer( "poll:".$name);
   InternalTimer($tn+$pollIntervall, "ModbusRTU_Poll", "poll:".$name, 0);
 
   return undef;
-}
-
-sub ModbusRTU_ReadDevId($) {##################################################
-  my($in ) = shift;
-  my(undef,$name) = split(':',$in);
-  my $hash = $defs{$name};
-
-  $hash->{helper}{hd_tr_id}=int(rand 65535);
-  $hash->{helper}{hd_unit_id}=$attr{$name}{defaultUnitId} if defined($attr{$name}{defaultUnitId});
-  my $msg=pack("CCCCC", $hash->{helper}{hd_unit_id}, MODBUS_ENCAPSULATED_INTERFACE, 0x0e, 0x01, 0x00);
-  _MbLogRTUFrame($hash,"ReadDevId",$msg);
-  $hash->{STATE} = "read device id";
-  ModbusRTU_SimpleWrite($hash,$msg);
 }
 
 sub ModbusRTU_Poll($) {##################################################
@@ -465,9 +434,9 @@ sub ModbusRTU_Poll($) {##################################################
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
           if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<time())) {
             my $msg=$chash->{helper}{readCmd};
-            my $crc = pack 'v', _ModbusRTU_crc($msg);
+            my $crc = pack 'v', ModbusRTU_crc($msg);
 
-            _MbLogRTUFrame($hash,"AddRQueue",$msg.$crc);
+            ModbusRTU_Frame($hash,"AddRQueue",$msg.$crc);
             ModbusRTU_AddRQueue($hash, $msg.$crc);
             $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
           }
@@ -606,7 +575,7 @@ ModbusRTU_HandleReadQueue($) ##################################################
   }
 } 
 
-sub _MbLogRTUFrame($$$) {
+sub ModbusRTU_Frame($$$) {
   my ($hash,$c,$data)=@_;
 
   my @dump = map {sprintf "%02X", $_ } unpack("C*", $data);
@@ -630,7 +599,7 @@ sub _MbLogRTUFrame($$$) {
 # Compute modbus CRC16 (for RTU mode).
 #   _crc(modbus_frame)
 #   return the CRC
-sub _ModbusRTU_crc($) {
+sub ModbusRTU_crc($) {
   my ($frame) =@_;
   my $crc = 0xFFFF;
   my ($chr, $lsb);
@@ -649,10 +618,10 @@ sub _ModbusRTU_crc($) {
 # Check the CRC of modbus RTU frame.
 #   _crc_is_ok(modbus_frame_with_crc)
 #   return true if CRC is ok
-sub _ModbusRTU_crc_is_ok($) {
+sub ModbusRTU_crc_is_ok($) {
   my ($frame) = @_;
   my $crc = unpack('v', bytes::substr($frame, -2));
-  return ($crc == _ModbusRTU_crc(bytes::substr($frame,0,-2)));
+  return ($crc == ModbusRTU_crc(bytes::substr($frame,0,-2)));
 }
 
 1;
@@ -663,7 +632,43 @@ sub _ModbusRTU_crc_is_ok($) {
 <a name="ModbusRTU"></a>
 <h3>ModbusRTU</h3>
 <ul>
-    Todo
+  This module implements a Modbus master for communicating with Modbus slaves over serial line.<br><br>
+  This module provides an IODevice for:
+  <ul>
+    <li><a href="#ModbusRegister">ModbusRegister</a> a module for accessing holding and input registers</li>
+    <li><a href="#ModbusCoil">ModbusCoil</a> a module for accessing coils and discrete inputs</li>
+  </ul>
+  <br><br>
+  <a name="ModbusRTUdefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; ModbusRTU &lt;serial port&gt;</code> <br>
+    <br>
+      You can specify a baudrate if the device name contains the @
+      character, e.g.: /dev/ttyS0@9600<br>The port is opened with 8 data bits, 1 stop bit and even parity.<br>
+      If the slaves use different settings they can be specified with the <a href="#ModbusRTUattrcharformat">charformat</a> attribute.<br>
+      All slaves connected to a master must use the same character format.<br>
+
+      Note: this module requires the Device::SerialPort or Win32::SerialPort module if the devices is connected via USB or a serial port. 
+  </ul>
+  <br>
+  <a name="ModbusRTUset"></a>
+  <b>Set</b> <ul>N/A</ul><br>
+  <a name="ModbusRTUget"></a>
+  <b>Get</b> <ul>N/A</ul><br>
+  <a name="ModbusRTUattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a href="#attrdummy">dummy</a></li><br>
+    <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
+    <li><a name="">pollIntervall</a><br>
+        Intervall in seconds for the reading cycle. Default: 0.1</li><br>
+    <li><a name="">timeout</a><br>
+        Timeout in seconds waiting for data from the server. Default: 3</li><br>
+    <li><a name="ModbusRTUattrcharformat">charformat</a><br>
+        Character format to be used for communication with the slaves. Default: 8E1.</li><br>
+    
+  </ul>
 </ul>
 
 =end html
