@@ -1,6 +1,7 @@
-# $Id: 37_ModbusCoil.pm 0002 $
+﻿# $Id: 37_ModbusCoil.pm 0003 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
+# 150118 0003 completed documentation
 # TODO:
 
 package main;
@@ -35,7 +36,6 @@ ModbusCoil_Initialize($)
   $hash->{ParseFn}   = "ModbusCoil_Parse";
   $hash->{AttrFn}    = "ModbusCoil_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "conversion ".
                        "updateIntervall ".
                        "disableRegisterMapping:0,1 ".
                        "source:Coil,Input ".
@@ -306,7 +306,57 @@ sub ModbusCoil_is_float {
 <a name="ModbusCoil"></a>
 <h3>ModbusCoil</h3>
 <ul>
-  Todo
+  This module implements a coil or discrete input as defined in the Modbus specification.<br>
+  <br><br>
+  <a name="ModbusCoildefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; ModbusCoil &lt;unitId or slave address&gt; &lt;element number&gt;</code><br>
+    <br>
+    The unitId allows addressing slaves on a serial line sub-network connected to a ModbusTCP gateway.<br/>
+    Most ModbusTCP servers that do not act as a gateway ignore this setting, in that case 0, 1 or 255 should be used.<br/>
+    <br/>
+    On a serial Modbus network the slave address (1-254) of the device must be indicated.<br/><br/>
+    The module supports 2 addressing modes for the element, the attribute <a href="#ModbusCoildisableRegisterMapping">disableRegisterMapping</a> defines
+    how the element number is interpreted.<br/>
+  </ul>
+  <br>
+  <a name="ModbusCoilset"></a>
+  <b>Set </b>
+  <ul>
+    <code>set &lt;name&gt; &lt;value&gt;</code>
+    <br><br>
+    where <code>value</code> is one of:<br>
+    <ul><code>
+       on<br>
+       off<br>
+       0<br>
+       1<br>
+    </code></ul><br>
+    The <a href="#setExtensions"> set extensions</a> are also supported.<br>
+    <br>
+  </ul><br>
+  <a name="ModbusCoilget"></a>
+  <b>Get</b> <ul>N/A</ul><br>
+  <a name="ModbusCoilattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
+    <li><a name="">updateIntervall</a><br>
+        Intervall in seconds for reading the coil. If the value is smaller than the pollIntervall attribute of the IODev,
+        the setting from the IODev takes precedence over this attribute. Default: 0.1</li><br>
+    <li><a name="">IODev</a><br>
+        IODev: Sets the ModbusTCP or ModbusRTU device which should be used for sending and receiving data for this coil.</li><br>
+    <li><a name="ModbusCoildisableRegisterMapping">disableRegisterMapping</a><br>
+        The Modbus specification defines 2 bit-addressable data blocks with elements numbered from 1 to n. Some vendors use in their
+        documentation a numbering scheme starting from 0. If this attribute is not defined or set to 0 the numbering starts at 1 and
+        the used data block depends on the coil number. Numbers 1-9999 are read and written to the coil block, numbers 10001-19999 are
+        read from the discrete input block (read-only). If the attribute is set to 1 the numbering starts at 0. By default data is then read
+        from the coil block, this can be changed with the attribute <a href="#ModbusCoilsource">source</a></li><br>
+    <li><a name="ModbusCoilsource">source</a><br>
+        This attribute can be used to define from which block (coils or discrete input) data is read. If the attribute
+        <a href="#ModbusCoildisableRegisterMapping">disableRegisterMapping</a> is set to 0 or not defined, this attribute is ignored.</li><br>
+  </ul>
 </ul>
 
 =end html
