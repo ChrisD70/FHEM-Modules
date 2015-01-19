@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0016 CD/MM $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0017 CD/MM $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -102,7 +102,8 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "coverartwidth:50,100,200 ";
     # CD 0007
     $hash->{AttrList}  .= "syncVolume ";
-    $hash->{AttrList}  .= "amplifierDelayOff ";         # CD 0012
+    $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
+    $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= $readingFnAttributes;
 }
 
@@ -997,9 +998,9 @@ sub SB_PLAYER_Parse( $$ ) {
         elsif( $args[ 0 ] eq "alarmsEnabled" ) {
           if (defined($args[1])) {
             if( $args[1] eq "1" ) {
-                readingsBulkUpdate( $hash, "alarmsEnabled", "yes" );    # CD 0016 Internal durch Reading ersetzt
+                readingsBulkUpdate( $hash, "alarmsEnabled", "on" );    # CD 0016 Internal durch Reading ersetzt # CD 0017 'yes' durch 'on' ersetzt
             } else {
-                readingsBulkUpdate( $hash, "alarmsEnabled", "no" );     # CD 0016 Internal durch Reading ersetzt
+                readingsBulkUpdate( $hash, "alarmsEnabled", "off" );   # CD 0016 Internal durch Reading ersetzt # CD 0017 'no' durch 'off' ersetzt
             }
           }
         }
@@ -1160,8 +1161,8 @@ sub SB_PLAYER_Set( $@ ) {
             "volumeStraight:slider,0,1,100 " . 
             "volumeUp:noArg volumeDown:noArg " . 
             "mute:noArg repeat:off,one,all show statusRequest:noArg " . 
-            "shuffle:on,off next:noArg prev:noArg playlist sleep " . 
-            "allalarms:enable,disable,statusRequest,delete,add " . # CD 0015 alarm1 alarm2 entfernt
+            "shuffle:off,on,song,album next:noArg prev:noArg playlist sleep " . # CD 0017 song und album hinzugefügt
+            "allalarms:enable,disable,statusRequest,delete,add " .              # CD 0015 alarm1 alarm2 entfernt
             "alarmsSnooze:slider,0,1,30 alarmsTimeout:slider,0,5,90  alarmsDefaultVolume:slider,0,1,100 alarmsFadeIn:on,off alarmsEnabled:on,off " . # CD 0016, von MM übernommen, Namen geändert
             "cliraw talk sayText " .     # CD 0014 sayText hinzugefügt
             "unsync:noArg ";
@@ -1186,6 +1187,9 @@ sub SB_PLAYER_Set( $@ ) {
         return( $res );
     }
 
+    my $updateReadingsOnSet=AttrVal($name, "updateReadingsOnSet", false);           # CD 0017
+    my $donotnotify=AttrVal($name, "donotnotify", true);                           # CD 0017
+    
     # as we have some other command, we need to turn on the server
     #if( AttrVal( $name, "serverautoon", "true" ) eq "true" ) {
        #SB_PLAYER_ServerTurnOn( $hash );
@@ -1302,10 +1306,13 @@ sub SB_PLAYER_Set( $@ ) {
         }
         if( $arg[ 0 ] eq "off" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 0\n" );
+            readingsSingleUpdate( $hash, "repeat", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif( $arg[ 0 ] eq "one" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 1\n" );
+            readingsSingleUpdate( $hash, "repeat", "one", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif( $arg[ 0 ] eq "all" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 2\n" );
+            readingsSingleUpdate( $hash, "repeat", "all", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } else {
             my $msg = "SB_PLAYER_Set: unknown argument for repeat given.";
             Log3( $hash, 3, $msg );
@@ -1321,8 +1328,15 @@ sub SB_PLAYER_Set( $@ ) {
         }
         if( $arg[ 0 ] eq "off" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 0\n" );
-        } elsif( $arg[ 0 ] eq "on" ) {
+            readingsSingleUpdate( $hash, "shuffle", "off", $donotnotify ) if($updateReadingsOnSet);     # CD 0017
+        } elsif(( $arg[ 0 ] eq "on" ) || ($arg[ 0 ] eq "song" )) {                                      # CD 0017 'song' hinzugefügt
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 1\n" );
+            readingsSingleUpdate( $hash, "shuffle", "song", $donotnotify ) if($updateReadingsOnSet);    # CD 0017
+        # CD 0017 start
+        } elsif( $arg[ 0 ] eq "album" ) {
+            IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 2\n" );
+            readingsSingleUpdate( $hash, "shuffle", "album", $donotnotify ) if($updateReadingsOnSet);
+        # CD 0017 end
         } else {
             my $msg = "SB_PLAYER_Set: unknown argument for shuffle given.";
             Log3( $hash, 3, $msg );
@@ -1376,7 +1390,8 @@ sub SB_PLAYER_Set( $@ ) {
         }
         # CD 0014 start
         if (@arg>1) {
-            my $outstr = uri_escape(join( " ", @arg[1..$#arg]));
+            my $outstr = uri_escape(decode('utf-8',join( " ", @arg[1..$#arg])));        # CD 0017
+
             Log3( $hash, 5, "SB_PLAYER_Set($name): playlists command = $arg[ 0 ] param = $outstr" );
 
             if( $arg[ 0 ] eq "track" ) {
@@ -1409,8 +1424,10 @@ sub SB_PLAYER_Set( $@ ) {
     } elsif( $cmd eq "allalarms" ) {
         if( $arg[ 0 ] eq "enable" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled 1\n" );        # MM 0016
+            readingsSingleUpdate( $hash, "alarmsEnabled", "on", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif( $arg[ 0 ] eq "disable" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled 0\n" );        # MM 0016
+            readingsSingleUpdate( $hash, "alarmsEnabled", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif( $arg[ 0 ] eq "statusRequest" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
             # CD 0016 start
@@ -1436,21 +1453,28 @@ sub SB_PLAYER_Set( $@ ) {
     } elsif( index( $cmd, "alarms" ) != -1 ) {
         if($cmd eq "alarmsSnooze") {
             IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmSnoozeSeconds ". $arg[0]*60 ."\n" );
+            readingsSingleUpdate( $hash, "alarmsSnooze", $arg[ 0 ], $donotnotify ) if($updateReadingsOnSet);   # CD 0017
         } elsif($cmd eq "alarmsTimeout") {
             IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmTimeoutSeconds ". $arg[0]*60 ."\n" );
+            readingsSingleUpdate( $hash, "alarmsTimeout", $arg[ 0 ], $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif($cmd eq "alarmsDefaultVolume") {
             IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmDefaultVolume ". $arg[0] ."\n" );
+            readingsSingleUpdate( $hash, "alarmsDefaultVolume", $arg[ 0 ], $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         } elsif($cmd eq "alarmsFadeIn") {
             if($arg[0] eq 'on') {
                 IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmfadeseconds 1\n" );
+                readingsSingleUpdate( $hash, "alarmsFadeIn", "on", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
             } else {
                 IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmfadeseconds 0\n" );
+                readingsSingleUpdate( $hash, "alarmsFadeIn", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
             }
         } elsif($cmd eq "alarmsEnabled") {
             if( $arg[ 0 ] eq "on" ) {
                 IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled 1\n" );
+                readingsSingleUpdate( $hash, "alarmsEnabled", "on", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
             } else {
                 IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled 0\n" );
+                readingsSingleUpdate( $hash, "alarmsEnabled", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
             }
         }
     # CD 0016
@@ -1640,10 +1664,11 @@ sub SB_PLAYER_Alarm( $$@ ) {
     #}   
 
     my $id = ReadingsVal( "$name", "alarm".$n."_id", "none" );  # CD 0015 angepasst
+    my $updateReadingsOnSet=AttrVal($name, "updateReadingsOnSet", false);          # CD 0017
+    my $donotnotify=AttrVal($name, "donotnotify", true);                           # CD 0017
 
     Log3( $hash, 5, "SB_PLAYER_Alarm: $name: ID:$id, N:$n" );
     my $cmdstr = "";
-
     if( $arg[ 0 ] eq "set" ) {
         # set <name> alarm set 0..6 hh:mm:ss playlist
         if( ( @arg != 4 ) && ( @arg != 3 ) ) {
@@ -1695,6 +1720,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
             $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
             $cmdstr .= "enabled:1\n";
             IOWrite( $hash, $cmdstr );
+            readingsSingleUpdate( $hash, "alarm".$n."_state", "on", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         }
 
     } elsif(( $arg[ 0 ] eq "disable" )||( $arg[ 0 ] eq "off" )) {   # CD 0015 'off' hinzugefügt
@@ -1702,6 +1728,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
             $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
             $cmdstr .= "enabled:0\n";
             IOWrite( $hash, $cmdstr );
+            readingsSingleUpdate( $hash, "alarm".$n."_state", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         }
 
     } elsif( $arg[ 0 ] eq "volume" ) {
@@ -1709,6 +1736,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
             $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
             $cmdstr .= "volume:" . $arg[ 1 ] . "\n";
             IOWrite( $hash, $cmdstr );
+            readingsSingleUpdate( $hash, "alarm".$n."_volume", $arg[ 1 ], $donotnotify ) if($updateReadingsOnSet);  # CD 0017
         }
     # CD 0015 start
     } elsif( $arg[ 0 ] eq "sound" ) {
@@ -1716,6 +1744,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
             if( defined($arg[ 1 ]) ) {
                 $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
                 my $url=join( " ", @arg[1..$#arg]);
+                readingsSingleUpdate( $hash, "alarm".$n."_sound", $url, $donotnotify ) if($updateReadingsOnSet);  # CD 0017
                 if (defined($hash->{helper}{alarmPlaylists})) {
                     foreach my $e ( keys %{$hash->{helper}{alarmPlaylists}} ) {
                         if($url eq $hash->{helper}{alarmPlaylists}{$e}{title}) {
@@ -1724,8 +1753,8 @@ sub SB_PLAYER_Alarm( $$@ ) {
                         }
                     }
                 }
-                $cmdstr .= " playlist:" . uri_escape($url);
-                #IOWrite( $hash, $cmdstr );
+                $cmdstr .= " playlist:" . uri_escape(decode('utf-8',$url));         # CD 0017 decode hinzugefügt
+                IOWrite( $hash, $cmdstr );                                          # CD 0017 reaktiviert
             } else {
                 my $msg = "SB_PLAYER_Set: alarm, no value for sound.";
                 Log3( $hash, 3, $msg );
@@ -1738,8 +1767,10 @@ sub SB_PLAYER_Alarm( $$@ ) {
                 $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
                 if(($arg[ 1 ] eq "1")||($arg[ 1 ] eq "on")||($arg[ 1 ] eq "yes")) {
                     $cmdstr .= "repeat:1\n";
+                    readingsSingleUpdate( $hash, "alarm".$n."_repeat", "on", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
                 } else {
                     $cmdstr .= "repeat:0\n";
+                    readingsSingleUpdate( $hash, "alarm".$n."_repeat", "off", $donotnotify ) if($updateReadingsOnSet);  # CD 0017
                 }
                 IOWrite( $hash, $cmdstr );
             } else {
@@ -1752,8 +1783,27 @@ sub SB_PLAYER_Alarm( $$@ ) {
         if( $id ne "none" ) {
             if( defined($arg[ 1 ]) ) {
                 $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
-                $cmdstr .= "dow:" . SB_PLAYER_CheckWeekdays(join( "", @arg[1..$#arg])) . "\n";  # CD 0016 SB_PLAYER_CheckWeekdays verwenden
+                my $dow=SB_PLAYER_CheckWeekdays(join( "", @arg[1..$#arg]));     # CD 0017
+                $cmdstr .= "dow:" . $dow . "\n";                                # CD 0016 SB_PLAYER_CheckWeekdays verwenden
                 IOWrite( $hash, $cmdstr );
+                # CD 0017 start
+                if($updateReadingsOnSet) {
+                    my $rdaystr="";
+                    if ($dow ne "") {
+                        $rdaystr = "Mo" if( index( $dow, "1" ) != -1 );
+                        $rdaystr .= " Tu" if( index( $dow, "2" ) != -1 );
+                        $rdaystr .= " We" if( index( $dow, "3" ) != -1 );
+                        $rdaystr .= " Th" if( index( $dow, "4" ) != -1 );
+                        $rdaystr .= " Fr" if( index( $dow, "5" ) != -1 );
+                        $rdaystr .= " Sa" if( index( $dow, "6" ) != -1 );
+                        $rdaystr .= " Su" if( index( $dow, "0" ) != -1 );
+                    } else {
+                        $rdaystr = "none";
+                    }
+                    $rdaystr =~ s/^\s+|\s+$//g;
+                    readingsSingleUpdate( $hash, "alarm".$n."_wdays", $rdaystr, $donotnotify );
+                }
+                # CD 0017 end
             } else {
                 my $msg = "SB_PLAYER_Set: no weekdays specified for alarm.";
                 Log3( $hash, 3, $msg );
@@ -1780,6 +1830,15 @@ sub SB_PLAYER_Alarm( $$@ ) {
             $cmdstr = "$hash->{PLAYERMAC} alarm update id:$id ";
             $cmdstr .= "time:" . $secs . "\n";
             IOWrite( $hash, $cmdstr );
+            # CD 0017 start
+            if($updateReadingsOnSet) {
+                my $buf = sprintf( "%02d:%02d:%02d", 
+                                   int( scalar( $secs ) / 3600 ),
+                                   int( ( $secs % 3600 ) / 60 ),
+                                   int( $secs % 60 ) );
+                readingsSingleUpdate( $hash, "alarm".$n."_time", $buf, $donotnotify );
+            }
+            # CD 0017 end
         }
     # CD 0015 end
     } elsif( $arg[ 0 ] eq "delete" ) {
@@ -2328,8 +2387,7 @@ sub SB_PLAYER_CoverArt( $ ) {
             "current/cover_" . AttrVal( $name, "coverartheight", 50 ) . 
             "x" . AttrVal( $name, "coverartwidth", 50 ) . 
             ".jpg?player=$hash->{PLAYERMAC}";
-    } elsif( ( $hash->{ISREMOTESTREAM} eq "1" ) ||
-             ( $hash->{ISREMOTESTREAM} == 1 ) ) {
+    } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
         # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
         if($hash->{ARTWORKURL} ne "?") {
             $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
@@ -2753,17 +2811,20 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
   <ul>
     <code>define &lt;name&gt; SB_PLAYER &lt;player_mac_adress&gt; [&lt;ampl&gt;] [&lt;coverart&gt;]</code>
     <br><br>
-    This module allows you to control Squeezebox Media Players connected with an defined Logitech Media Server. A SB_SERVER device is need to work.<br>
+    This module allows you to control Squeezebox Media Players connected with a defined Logitech Media Server. An SB_SERVER device is needed to work.<br>
    Normally you don't need to define your SB_PLAYERS because autocreate will do that if enabled.<br><br>
 
    <ul>
       <li><code>&lt;player_mac_adress&gt;</code>: Mac adress of the player found in the LMS.  </li>
-   </ul>   
-   <b>Optional</b>
+   </ul><br>   
+   <b>Optional</b><br><br>
    <ul>
-      <li><code>&lt;[ampl]&gt;</code>: You can define a FHEM Device to react when an on or off event is received. With the attribute amplifier you can specify to turn the selected FHEM Device on|off or play|stop.  </li>
-      <li><code>&lt;[coverart]&gt;</code>: You can define a FHEM weblink. The player will update the weblink with the current coverart. Useful for putting coverarts in the floorplan  </li>
+      <li><code>&lt;[ampl]&gt;</code>: You can define an FHEM Device to command when an on or off event is received. With the attribute
+      <a href="#SBplayeramplifier">amplifier</a> you can specify whether to command the selected FHEM Device on on|off or play|stop.</li>
+      <li><code>&lt;[coverart]&gt;</code>: You can define an FHEM weblink. The player will update the weblink with the current coverart.
+      Useful for putting coverarts in the floorplan.</li>
    </ul><br><br>
+  </ul>
    
   <a name="SBplayerset"></a>
   <b>Set</b>
@@ -2772,21 +2833,21 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
     <br><br>
     This module supports the following commands:<br>
    
-    SB_Player related commands:<br>
+    SB_Player related commands:<br><br>
    <ul>
       <li><b>play</b> -  starts the playback (might only work if previously paused).</li>
-     <li><b>pause [&lt;0|1&gt;]</b> -  toggles between play and pause. With parameter 0 it unpause and with 1 it pause the player, doesn't matter which state it has before</li>
+     <li><b>pause [&lt;0|1&gt;]</b> -  toggles between play and pause. With parameter 0 it unpauses and with 1 it pauses the player, it doesn't matter which state it had before</li>
      <li><b>stop</b> -  stop the playback</li>
-     <li><b>next|channelUp</b> -  jump to the next track</li> /* CHECK SYNTAX
-     <li><b>prev|channelDown</b> -  jump to the previous track or the beginning of the current track.</li> /* CHECK SYNTAX
-     <li><b>mute</b> -  toggels between mute and unmuted</li>
+     <li><b>next|channelUp</b> -  jump to the next track</li>
+     <li><b>prev|channelDown</b> -  jump to the previous track or the beginning of the current track.</li>
+     <li><b>mute</b> -  toggles between muted and unmuted</li>
      <li><b>volume &lt;n&gt;</b> -  sets the volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  same as volume</li>
-     <li><b>volumeDown|volDown &lt;n&gt;</b> -  volume down</li> /* CHECK SYNTAX
-     <li><b>volumeUp|volUp &lt;n&gt;</b> -  volume up</li> /* CHECK SYNTAX
+     <li><b>volumeDown|volDown &lt;n&gt;</b> -  volume down</li>
+     <li><b>volumeUp|volUp &lt;n&gt;</b> -  volume up</li>
      <li><b>on</b> -  set the player on if possible. Otherwise it does play</li>
      <li><b>off</b> -  set the player off if possible. Otherwise it does stop</li>
-     <li><b>shuffle &lt;on|off&gt;</b> -  Enables/Disables shuffle mode</li>
+     <li><b>shuffle &lt;on|off|song|album&gt;</b> -  Enables/Disables shuffle mode</li>
      <li><b>repeat &lt;one|all|off&gt;</b> -  Sets the repeat mode</li>
      <li><b>sleep &lt;n&gt;</b> -  Sets the player off in &lt;n&gt; seconds and fade the player volume down</li>   
      <li><b>favorites &lt;favorit&gt;</b> -  Empty the current playlist and start the selected playlist. Favorites are selectable through a dropdown list</li>   
@@ -2813,7 +2874,7 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
    You can define up to 2 alarms.
       <code>set sbradio alarm1 set &lt;weekday&gt; &lt;time&gt;</code>
      <li><b>&lt;weekday&gt;</b> -  Number of weekday. The week starts with Sunday and is 0</li>
-     <li><b>&lt;time&gt;</b> -  Timeformat HH:MM:SS</li>
+     <li><b>&lt;time&gt;</b> -  Timeformat HH:MM[:SS]</li>
    Example:<br>
    <code>set sbradio alarm1 set 5 12:23:17<br>
 set sbradio alarm2 set 4 17:18:00</code>
@@ -2825,6 +2886,7 @@ set sbradio alarm2 set 4 17:18:00</code>
    <br>
       
   <br>
+  </ul>
   <b>Generated Readings</b><br>
   <ul>
    <li><b>READING</b> - READING DESCRIPTIONS</li>  /* CHECK TODO
@@ -2834,14 +2896,20 @@ set sbradio alarm2 set 4 17:18:00</code>
   <a name="SBplayerattr"></a>
   <b>Attributes</b>
   <ul>
+    <li>IODev<br>
+      The name of the SB_SERVER device to which this player is connected.</li><br>
+    <li>donotnotify<br>
+      Disables all events from the device. Must be explicitly set to <code>false</code> to enable events.</li><br>
     <li>volumeLimit<br>
-      Sets the volume limit of the player between 0 and 100. 100 means the function is disabled.</li>
-    <li>amplifier<br>
-      ATTRIBUTE DESCRIPTION</li>  /* CHECK TODO
+      Sets the volume limit of the player between 0 and 100. 100 means the function is disabled.</li><br>
+    <li><a name="SBplayeramplifier">amplifier</a><br>
+      Defines how a configured amplifier will be controlled. If set to <code>on</code>, the amplifier will be turned on and off with the
+      player. If set to <code>play</code> the amplifier will be turned on on play and off on stop.</li><br>
+    <li>amplifierDelayOff<br>
+      Sets the delay in seconds before turning the amplifier off after the player has stopped or been turned off.</li><br>
+    <li>updateReadingsOnSet<br>
+      If set to true most readings are immediately updated when a set command is executed without waiting for the reply from the server.</li><br>
   </ul>
 </ul>
-</ul>
-</ul>
-test
 =end html
 =cut
