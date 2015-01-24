@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0017 CD/MM $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0018 CD/MM $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -454,7 +454,7 @@ sub SB_PLAYER_tcb_QueryCoverArt($) {    # CD 0014 Name geändert
 
     # CD 0005 query cover art for synced players
     if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
-        if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?')) {
+        if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {    # CD 0018 none hinzugefügt
             my @pl=split(",",$hash->{SYNCGROUP});
             foreach (@pl) {
                 IOWrite( $hash, "$_ status - 1 tags:Kc\n" );
@@ -655,7 +655,7 @@ sub SB_PLAYER_Parse( $$ ) {
 
             # CD 0000 start - sync players in same group
             if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
-                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?')) {
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {        # CD 0018 none hinzugefügt
                     my @pl=split(",",$hash->{SYNCGROUP});
                     foreach (@pl) {
                         #Log 0,"SB_Player to sync: $_";
@@ -974,6 +974,10 @@ sub SB_PLAYER_Parse( $$ ) {
                     readingsBulkUpdate( $hash, "alarmsFadeIn", "off" );
                 }
             # CD 0016 end
+            # CD 0018 start
+            } elsif( $args[ 1 ] eq "syncgroupid" ) {
+                IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
+            # CD 0018 end
             }
         } else {
             readingsBulkUpdate( $hash, "lastunkowncmd", 
@@ -1036,6 +1040,12 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "playlist_tracks" ) {
         readingsBulkUpdate( $hash, "playlistTracks", $args[ 0 ] );
     # CD 0014 end
+    # CD 0018 sync Meldungen auswerten, alle anderen Player abfragen
+    } elsif( $cmd eq "sync" ) {
+        foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
+            IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kc\n" );
+        }
+    # CD 0018
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for 
         # autocreate
@@ -1516,22 +1526,37 @@ sub SB_PLAYER_Set( $@ ) {
         SB_PLAYER_GetStatus( $hash );
 
     } elsif( $cmd eq "sync" ) {
-        if( @arg == 1 ) {
-            if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$arg[0]}{MAC} ) ) {
-                IOWrite( $hash, "$hash->{PLAYERMAC} sync " . 
-                         "$hash->{helper}{SB_PLAYER_SyncMasters}{$arg[0]}{MAC}\n" );
-                SB_PLAYER_GetStatus( $hash );
-            } else {
-                my $msg = "SB_PLAYER_Set: no arguments for sync given.";
-                Log3( $hash, 3, $msg );
-                return( $msg );
-            }
+        # CD 0018 wenn der Player bereits in einer Gruppe ist und 'new' ist vorhanden, wird der Player zuerst aus der Gruppe entfernt
+        if(( @arg == 2) && ($arg[1] eq "new") && ($hash->{SYNCED} eq 'yes')) {
+            IOWrite( $hash, "$hash->{PLAYERMAC} sync -\n" );
         }
-
+        # CD 0018 end
+        # CD 0018 Synchronisation mehrerer Player 
+        if(( @arg == 1 ) || ( @arg == 2)) {
+            my $msg;
+            my $dev;
+            my @dvs=();
+            my $doGetStatus=0;
+            @dvs=split(",",$arg[0]);
+            foreach (@dvs) {
+                my $dev=$_;
+                # CD 0018 end
+                if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC} ) ) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} sync " . 
+                             "$hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC}\n" );
+                    $doGetStatus=1;
+                } else {
+                    my $msg = "SB_PLAYER_Set: no MAC for player ".$dev.".";
+                    Log3( $hash, 3, $msg );
+                    #return( $msg );        # CD 0018 wenn keine MAC vorhanden weitermachen
+                }
+            }   # CD 0018
+            SB_PLAYER_GetStatus( $hash ) if($doGetStatus==1);
+        }
+        # CD 0018 end
     } elsif( $cmd eq "unsync" ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} sync -\n" );
         SB_PLAYER_GetStatus( $hash );
-        
     } elsif( $cmd eq "playlists" ) {
         if( @arg == 1 ) {
             my $msg;
@@ -2479,6 +2504,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     # set default values for stuff not always send
     $hash->{SYNCMASTER} = "none";
     $hash->{SYNCGROUP} = "none";
+    $hash->{SYNCMASTERPN} = "none";      # CD 0018
+    $hash->{SYNCGROUPPN} = "none";       # CD 0018
     $hash->{SYNCED} = "no";
     $hash->{COVERID} = "?";
     $hash->{ARTWORKURL} = "?";
@@ -2574,10 +2601,30 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
         } elsif( $cur =~ /^(sync_master:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
             $hash->{SYNCMASTER} = $2;
             $hash->{SYNCED} = "yes";
+            $hash->{SYNCMASTERPN} = SB_PLAYER_MACToPlayername($hash,$2);  # CD 0018
             next;
 
         } elsif( $cur =~ /^(sync_slaves:)(.*)/ ) {
             $hash->{SYNCGROUP} = $2;
+            # CD 0018 start
+            my @macs=split(",",$hash->{SYNCGROUP});
+            my $syncgroup;
+            foreach ( @macs ) {
+                my $mac=$_;
+                my $dev=SB_PLAYER_MACToPlayername($hash,$mac);
+                $syncgroup.="," if(defined($syncgroup));
+                if(defined($dev)) {
+                    $syncgroup.=$dev;
+                } else {
+                    if($mac eq $hash->{PLAYERMAC}) {
+                        $syncgroup.=$name;
+                    } else {
+                        $syncgroup.=$mac;
+                    }
+                }
+            }
+            $hash->{SYNCGROUPPN} = $syncgroup;
+            # CD 0018 end
             next;
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
@@ -2681,6 +2728,27 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
 
 }
+
+# CD 0018 start
+# ----------------------------------------------------------------------------
+#  convert MAC to playername
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_MACToPlayername( $$ ) {
+    my( $hash, $mac ) = @_;
+    my $name = $hash->{NAME};
+
+    return $hash->{PLAYERNAME} if($hash->{PLAYERMAC} eq $mac);
+
+    my $dev;
+    foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
+        if($mac eq $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}) {
+            $dev=$e;
+            last;
+        }
+    }
+    return $dev;
+}
+# CD 0018 end
 
 # CD 0014 start
 # ----------------------------------------------------------------------------
