@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0018 CD/MM $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0019 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -1925,6 +1925,7 @@ sub SB_PLAYER_CheckWeekdays( $ ) {
     {
         $weekdays='7';
     }
+    $weekdays=~ s/,$//;     # CD 0019 letztes , entfernen
     return $weekdays;
 }
 
@@ -2625,6 +2626,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             }
             $hash->{SYNCGROUPPN} = $syncgroup;
             # CD 0018 end
+            readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}" );    # Matthew 0019 hinzugefügt
             next;
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
@@ -2718,6 +2720,11 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
         }
     }
+    # Matthew 0019 start
+    if( $hash->{SYNCED} ne "yes") {
+        readingsBulkUpdate( $hash, "synced", "none" );
+    }
+    # Matthew 0019 end
 
     # CD 0003 moved before readingsEndUpdate
     # update the cover art
