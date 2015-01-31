@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0019 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0020 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -1703,7 +1703,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
         }
         
         if( $id ne "none" ) {
-            IOWrite( $hash, "$hash->{PLAYERMAC} alarm delete $id\n" );
+            IOWrite( $hash, "$hash->{PLAYERMAC} alarm delete id:$id\n" );   # CD 0020 'id' fehlt
             # readingsSingleUpdate( $hash, "alarmid$n", "none", 0 );        # CD 0015 deaktiviert
         }
         
@@ -1732,7 +1732,7 @@ sub SB_PLAYER_Alarm( $$@ ) {
                 }
             }
             # CD 0015 end
-            $cmdstr .= " playlist:" . uri_escape($url);   # CD 0015 uri_escape und join hinzugefügt
+            $cmdstr .= " playlist:" . uri_escape(decode('utf-8',$url));   # CD 0015 uri_escape und join hinzugefügt # CD 0020 decode hinzugefügt
         }
         $cmdstr .= " time:$secs\n";
 
