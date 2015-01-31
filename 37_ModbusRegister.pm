@@ -1,4 +1,4 @@
-# $Id: 37_ModbusRegister.pm 0008 $
+# $Id: 37_ModbusRegister.pm 0009 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -7,7 +7,7 @@
 # 140507 0006 delete $hash->{helper}{addr} in modules list on redefine (modify)
 # 150106 0007 added 3WORD and 3WORD_BE 
 # 150107 0008 added QWORD and QWORD_BE 
-#
+# 150118 0009 completed documentation
 # TODO:
 
 package main;
@@ -531,8 +531,76 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
 <a name="ModbusRegister"></a>
 <h3>ModbusRegister</h3>
 <ul>
-  Todo
+  This module implements a set of registers as defined in the Modbus specification.<br>
+  <br><br>
+  <a name="ModbusRegisterdefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; ModbusRegister &lt;unitId or slave address&gt; &lt;element number&gt;</code><br>
+    <br>
+    The unitId allows addressing slaves on a serial line sub-network connected to a ModbusTCP gateway.<br/>
+    Most ModbusTCP servers that do not act as a gateway ignore this setting, in that case 0, 1 or 255 should be used.<br/>
+    <br/>
+    On a serial Modbus network the slave address (1-254) of the device must be indicated.<br/><br/>
+    The module supports 2 addressing modes for the element, the attribute <a href="#ModbusRegisterdisableRegisterMapping">disableRegisterMapping</a> defines
+    how the element number is interpreted.<br/>
+  </ul>
+  <br>
+  <a name="ModbusRegisterset"></a>
+  <b>Set </b>
+  <ul>
+    <code>set &lt;name&gt; &lt;value&gt;</code>
+    <br><br>
+        where <code>value</code> depends on the data type<br>
+    <br>
+  </ul>
+  <a name="ModbusRegisterget"></a>
+  <b>Get</b> <ul>N/A</ul><br>
+  <a name="ModbusRegisterattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
+    <li><a name="">updateIntervall</a><br>
+        Intervall in seconds for reading the register. If the value is smaller than the pollIntervall attribute of the IODev,
+        the setting from the IODev takes precedence over this attribute. Default: 0.1</li><br>
+    <li><a name="">IODev</a><br>
+        IODev: Sets the ModbusTCP or ModbusRTU device which should be used for sending and receiving data for this register.</li><br>
+    <li><a name="ModbusRegisterdisableRegisterMapping">disableRegisterMapping</a><br>
+        The Modbus specification defines 2 word-addressable data blocks with elements numbered from 1 to n. Some vendors use in their
+        documentation a numbering scheme starting from 0. If this attribute is not defined or set to 0 the numbering starts at 1 and
+        the used data block depends on the register number. Numbers 40001-49999 are read and written to the holding register block,
+        numbers 30001-39999 are read from the input register block (read-only). If the attribute is set to 1 the numbering starts at 0.
+        By default data is then read from the holding register block, this can be changed with the attribute <a href="#ModbusRegisterregisterType">registerType</a></li><br>
+    <li><a name="ModbusRegisterregisterType">registerType</a><br>
+        This attribute can be used to define from which block (holding or input) data is read. If the attribute
+        <a href="#ModbusRegisterdisableRegisterMapping">disableRegisterMapping</a> is set to 0 or not defined, this attribute is ignored.</li><br>
+    <li><a name="">conversion</a><br>
+        The read data can be scaled with this attribute. The scaling factors are defined in the form <code>a:b</code> with<br>
+        <code>returned value = a * raw data + b</code><br><br>
+        Example:<ul>For an energy meter returning the current in 0.1A steps<br><code>attr &lt;name&gt; conversion 0.1:0</code><br>scales the value to A.</ul></li><br>
+    <li><a name="">plcDataType</a><br>
+        A modbus register is 16 bit wide an contains an unsigned value ranging from 0 to 65535. With this attribute the data type
+        and size can be modified.<br>Possible values:<br>
+        <ul>
+            <li>WORD, 1 register, 16 bit unsigned, default</li>
+            <li>INT, 1 register, 16 bit signed</li>
+            <li>DWORD, 2 registers, 32 bit unsigned, little endian</li>
+            <li>DWORD_BE, 2 registers, 32 bit unsigned, big endian</li>
+            <li>DINT, 2 registers, 32 bit signed, little endian</li>
+            <li>DINT_BE, 2 registers, 32 bit signed, big endian</li>
+            <li>3WORD, 3 registers, 48 bit unsigned, little endian</li>
+            <li>3WORD_BE, 3 registers, 48 bit unsigned, big endian</li>
+            <li>QWORD, 4 registers, 64 bit unsigned, little endian</li>
+            <li>QWORD_BE, 4 registers, 64 bit unsigned, big endian</li>
+            <li>REAL, 2 registers, IEEE 754 single precision floating point number, little endian</li>
+            <li>REAL_BE, 2 registers, IEEE 754 single precision floating point number, big endian</li>
+        </ul></li><br>
+    <li><a name="">stateAlias</a><br>
+        The read data is written by default to the state reading. If this attribute is defined the data is also written to a reading with
+        the name of the attribute value. This can be used to create a reading that is easier to use in a notify or in conjunction with an
+        other module that requires a certain reading.
+    </li><br>
+  </ul>
 </ul>
-
 =end html
 =cut
