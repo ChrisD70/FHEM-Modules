@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0021 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0022 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -760,6 +760,15 @@ sub SB_PLAYER_Parse( $$ ) {
                     }
                 }
                 readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$hash->{FAVSELECT}" );
+                # CD 0022 send to synced players
+                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                    if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                        my @pl=split(",",$hash->{SYNCGROUP});
+                        foreach (@pl) {
+                            IOWrite( $hash, "$_ fhemrelay favorites $hash->{FAVSELECT}\n" );
+                        }
+                    }
+                }
             }
         # CD 0021 end
         } elsif( $args[ 0 ] eq "clear" ) {
@@ -1060,6 +1069,18 @@ sub SB_PLAYER_Parse( $$ ) {
             IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kc\n" );
         }
     # CD 0018
+    # CD 0022 fhemrelay ist keine Meldung des LMS sondern eine Info die von einem anderen Player über 98_SB_PLAYER kommt
+    } elsif( $cmd eq "fhemrelay" ) {
+        if (defined($args[0])) {
+            # CD 0022 Favoriten vom Sync-Master übernehmen
+            if ($args[0] eq "favorites") {
+                if (defined($args[1])) {
+                    $hash->{FAVSELECT} = $args[1];
+                    readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$hash->{FAVSELECT}" );
+                }
+            }
+        }
+    # CD 0022 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for 
         # autocreate
