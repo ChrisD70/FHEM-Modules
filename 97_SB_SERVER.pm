@@ -1,7 +1,7 @@
-# ############################################################################
+﻿# ############################################################################
 # ############################################################################
 #
-#  FHEM Modue for Squeezebox Servers
+#  FHEM Module for Squeezebox Servers
 #
 # ############################################################################
 #
@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0008 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0009 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -44,6 +44,7 @@ use IO::Socket;
 use URI::Escape;
 # inlcude for using the perl ping command
 use Net::Ping;
+use Encode qw(decode encode);           # CD 0009 hinzugefügt
 
 
 # this will hold the hash of hashes for all instances of SB_SERVER
@@ -58,6 +59,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
+use constant SB_SERVER_VERSION => '0009';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -298,6 +300,9 @@ sub SB_SERVER_Define( $$ ) {
 
     $hash->{helper}{pingCounter}=0;     # CD 0004
     
+    # CD 0009 set module version, needed for reload
+    $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
+    
     # open the IO device
     my $ret;
 
@@ -529,8 +534,8 @@ sub SB_SERVER_Set( $@ ) {
 	Log3( $hash, 5, "SB_SERVER_Set: statusRequest" );
 	DevIo_SimpleWrite( $hash, "version ?\n", 0 );
 	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
-	DevIo_SimpleWrite( $hash, "favorites items 0 " . 
-			   AttrVal( $name, "maxfavorites", 100 ) . "\n", 
+	DevIo_SimpleWrite( $hash, "favorites items 0 " .
+			   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
 			   0 );
 	DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
 	
@@ -586,15 +591,15 @@ sub SB_SERVER_Read( $ ) {
 	}
 
 
-	Log3( $hash, 5, "SB_SERVER_Read($name): please implement the " .
-	      "sending of the CMDStack." );
+	#Log3( $hash, 5, "SB_SERVER_Read($name): please implement the " .   # CD 0009 Meldung deaktiviert
+	#      "sending of the CMDStack." );                                # CD 0009 Meldung deaktiviert
     }
 
     # if there are remains from the last time, append them now
     $buf = $hash->{PARTIAL} . $buf;
 
     $buf = uri_unescape( $buf );
-    Log3( $hash, 6, "SB_SERVER_Read: the buf: $buf" );
+    Log3( $hash, 6, "SB_SERVER_Read: the buf: $buf" );  # CD TEST 6
 
 
     # if we have received multiline commands, they are split by \n
@@ -620,6 +625,19 @@ sub SB_SERVER_Read( $ ) {
 	SB_SERVER_DispatchCommandLine( $hash, $_  );
     }
 
+    # CD 0009 check for reload of newer version
+    if (!defined($hash->{helper}{SB_SERVER_VERSION}) || ($hash->{helper}{SB_SERVER_VERSION} ne SB_SERVER_VERSION))
+    {
+        $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
+        DevIo_SimpleWrite( $hash, "version ?\n", 0 );
+        DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "favorites items 0 " . 
+                   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",        # CD 0009 url mit abfragen
+                   0 );
+        DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+    }
+    # CD 0009 end
+    
     Log3( $hash, 5, "+++++++++++++++++++++++++++++++++++++++++++++++++++++" );
     Log3( $hash, 5, "Squeezebox Server Read cycle ends here" );
     Log3( $hash, 5, "+++++++++++++++++++++++++++++++++++++++++++++++++++++" );
@@ -635,7 +653,7 @@ sub SB_SERVER_Write( $$$ ) {
     my ( $hash, $fn, $msg ) = @_;
     my $name = $hash->{NAME};
 
-    Log3( $hash, 4, "SB_SERVER_Write($name): called with FN:$fn" );
+    Log3( $hash, 4, "SB_SERVER_Write($name): called with FN:$fn" );  # CD TEST 4
 
     if( !defined( $fn ) ) {
 	return( undef );
@@ -679,17 +697,17 @@ sub SB_SERVER_DoInit( $ ) {
     Log3( $hash, 4, "SB_SERVER_DoInit($name): called" );
 
     if( !$hash->{TCPDev} ) {
-        Log3( $hash, 5, "SB_SERVER_DoInit: no TCPDev available?" );
+        Log3( $hash, 2, "SB_SERVER_DoInit: no TCPDev available?" );     # CD 0009 level 5->2
         DevIo_CloseDev( $hash ); 
     }
 
-    Log3( $hash, 2, "SB_SERVER_DoInit($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));    # CD 0008
+    Log3( $hash, 3, "SB_SERVER_DoInit($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));    # CD 0009 level 2 -> 3
 
     if( $hash->{STATE} eq "disconnected" ) {
         # server is off after FHEM start, broadcast to clients
         if( ( ReadingsVal( $name, "power", "on" ) eq "on" ) ||
             ( ReadingsVal( $name, "power", "on" ) eq "?" ) ) {
-            Log3( $hash, 2, "SB_SERVER_DoInit($name): " .                   # CD 0008
+            Log3( $hash, 3, "SB_SERVER_DoInit($name): " .                   # CD 0009 level 2 -> 3
               "SB-Server in hibernate / suspend?." );
 
               # obviously the first we realize the Server is off
@@ -707,7 +725,7 @@ sub SB_SERVER_DoInit( $ ) {
         $hash->{CLICONNECTION} = "on";
         if( ( ReadingsVal( $name, "power", "on" ) eq "off" ) ||
             ( ReadingsVal( $name, "power", "on" ) eq "?" ) ) {
-            Log3( $hash, 2, "SB_SERVER_DoInit($name): " .                   # CD 0008
+            Log3( $hash, 3, "SB_SERVER_DoInit($name): " .                   # CD 0009 level 2 -> 3
               "SB-Server is back again." );
 
             # CD 0007 cleanup
@@ -752,8 +770,8 @@ sub SB_SERVER_DoInit( $ ) {
 	return( 1 );
     }
 
-	Log3( $hash, 2, "SB_SERVER_DoInit: something went wrong!" );        # CD 0008 nur f�r Testzwecke
-    return(0);                                                          # CD 0008 nur f�r Testzwecke
+	#Log3( $hash, 3, "SB_SERVER_DoInit: something went wrong!" );        # CD 0008 nur für Testzwecke 0009 deaktiviert
+    #return(0);                                                          # CD 0008 nur für Testzwecke 0009 deaktiviert
     return( 1 );
 }
 
@@ -839,7 +857,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    readingsSingleUpdate( $hash, "serversecure", $args[ 1 ], 0 );
 	    if( $args[ 1 ] eq "1" ) {
 		# username and password is required
-        # CD 0011 zu sp�t, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
+        # CD 0011 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
 		if( ( $hash->{USERNAME} ne "?" ) && 
 		    ( $hash->{PASSWORD} ne "?" ) ) {
 		    DevIo_SimpleWrite( $hash, "login " . 
@@ -878,7 +896,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    # we need to trigger the favorites update here
 	    DevIo_SimpleWrite( $hash, "favorites items 0 " . 
 			       AttrVal( $name, "maxfavorites", 100 ) . 
-			       "\n", 0 );
+			       " want_url:1\n", 0 );           # CD 0009 url mit abfragen
 	} elsif( $args[ 0 ] eq "items" ) {
 	    Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites items" );
 	    # the response to our query of the favorites
@@ -892,7 +910,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 
     } elsif( $cmd eq "playlists" ) {
         Log3( $hash, 4, "SB_SERVER_ParseCmds($name): playlists" );
-        # CD 0004 Playlisten neu anfragen bei �nderung
+        # CD 0004 Playlisten neu anfragen bei Änderung
         if(($args[0] eq "rename")||($args[0] eq "delete")) {
             DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
         } else {
@@ -920,7 +938,7 @@ sub SB_SERVER_Alive( $ ) {
     my $pingstatus = "off";
     my $nexttime = gettimeofday() + AttrVal( $name, "alivetimer", 120 );
 
-    Log3( $hash, 2, "SB_SERVER_Alive($name): called" );                     # CD 0006 changed log level from 4 to 2 
+    Log3( $hash, 3, "SB_SERVER_Alive($name): called" );                     # CD 0006 changed log level from 4 to 2 # CD 0009 level 2->3
 
     if( AttrVal( $name, "doalivecheck", "false" ) eq "false" ) {
         Log3( $hash, 5, "SB_SERVER_Alive($name): alivechecking is off" );
@@ -939,7 +957,7 @@ sub SB_SERVER_Alive( $ ) {
             && defined($defs{$hash->{PRESENCENAME}})
             && defined($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL})
             && (($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) < AttrVal( $name, "alivetimer", 30 ))) {
-            Log3( $hash, 2,"SB_SERVER_Alive($name): using $hash->{PRESENCENAME}");
+            Log3( $hash, 4,"SB_SERVER_Alive($name): using $hash->{PRESENCENAME}");                      # CD 0009 level 2->4
             if( ReadingsVal( $hash->{PRESENCENAME}, "state", "absent" ) eq "present" ) {
                 $pingstatus = "on";
                 $hash->{helper}{pingCounter}=0;
@@ -950,7 +968,7 @@ sub SB_SERVER_Alive( $ ) {
             }
         } else {
         # CD 0007 end
-            Log3( $hash, 2,"SB_SERVER_Alive($name): using internal ping");                              # CD 0007
+            Log3( $hash, 4,"SB_SERVER_Alive($name): using internal ping");                              # CD 0007 # CD 0009 level 2->4
             # check via ping
             my $p = Net::Ping->new( 'tcp' );
             if( $p->ping( $hash->{IP}, 2 ) ) {
@@ -963,8 +981,8 @@ sub SB_SERVER_Alive( $ ) {
             # close our ping mechanism again
             $p->close( );
         } # CD 0007
-        Log3( $hash, 2, "SB_SERVER_Alive($name): " .
-              "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 
+        Log3( $hash, 3, "SB_SERVER_Alive($name): " .
+              "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 # CD 0009 level 2->3
     }
 
     # set the status of the server accordingly
@@ -975,7 +993,7 @@ sub SB_SERVER_Alive( $ ) {
         # the server is reachable
         if( ReadingsVal( $name, "power", "on" ) eq "off" ) {
             # the first time we see the server being on
-            Log3( $hash, 2, "SB_SERVER_Alive($name): " .    # CD 0004 changed log level from 5 to 2
+            Log3( $hash, 3, "SB_SERVER_Alive($name): " .    # CD 0004 changed log level from 5 to 2 # CD 0009 level 2->3
               "SB-Server is back again." );
             # first time we realized server is away
             if( $hash->{STATE} eq "disconnected" ) {
@@ -995,7 +1013,7 @@ sub SB_SERVER_Alive( $ ) {
             if( $hash->{ALIVECHECK} eq "waiting" ) {
                 # ups, we did not receive any answer in the last minutes
                 # SB Server potentially dead or shut-down
-                Log3( $hash, 2, "SB_SERVER_Alive($name): overrun SB-Server dead." );    # CD 0004 changed log level from 5 to 2
+                Log3( $hash, 3, "SB_SERVER_Alive($name): overrun SB-Server dead." );    # CD 0004 changed log level from 5 to 2 # CD 0009 level 2->3
 
                 $hash->{CLICONNECTION} = "off";
 
@@ -1044,7 +1062,7 @@ sub SB_SERVER_Alive( $ ) {
     } elsif( ( $rccstatus eq "off" ) && ( $pingstatus eq "off" ) ) {
         if( ReadingsVal( $name, "power", "on" ) eq "on" ) {
             # the first time we realize the server is off
-            Log3( $hash, 2, "SB_SERVER_Alive($name): " .    # CD 0004 changed log level from 5 to 2
+            Log3( $hash, 3, "SB_SERVER_Alive($name): " .    # CD 0004 changed log level from 5 to 2 # CD 0009 level 2->3
               "SB-Server in hibernate / suspend?." );
 
             # first time we realized server is away
@@ -1454,6 +1472,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $idbuf = "";
     my $hasitemsbuf = false;
     my $isaudiobuf = "";
+    my $url = "?";           # CD 0009 hinzugefügt
 
     foreach ( @data ) {
 	if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
@@ -1462,12 +1481,14 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 	    if( $firstone == false ) {
 		if( $hasitemsbuf == false ) {
 		    # derive our hash entry
-		    my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );
+		    my $entryuid = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));     # CD 0009 decode hinzugefügt
 		    $favorites{$name}{$entryuid} = {
 			ID => $idbuf,
-			Name => $namebuf, };
+			Name => $namebuf,
+            URL => $url, };         # CD 0009 hinzugefügt
 		    $namebuf = "";
 		    $isaudiobuf = "";
+            $url = "?";              # CD 0009 hinzugefügt
 		    $hasitemsbuf = false;
 		} else {
 		    # that is a folder we found, but we don't handle that
@@ -1504,11 +1525,17 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 		$namestarted = false;
 	    }
 
-	} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {
+	#} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {     # CD 0007   # CD 0009 deaktiviert
+	} elsif( $_ =~ /^(name:)(.*)/ ) {     # CD 0009 hinzugefügt
 	    $namebuf = $2;
 	    $namestarted = true;
-
-	} else {
+    
+    # CD 0009 start
+	} elsif( $_ =~ /^(url:)(.*)/ ) {
+	    $url = $2;
+        $url =~ s/file:\/\/\///;
+    # CD 0009 end
+    } else {
 	    # no regexp matched, so it must be part of the name
 	    if( $namestarted == true ) {
 		$namebuf .= " " . $_;
@@ -1520,10 +1547,11 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
 	if( $hasitemsbuf == false ) {
 	    # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
-        my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );
+        my $entryuid = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf) );             # CD 0009 decode hinzugefügt
 	    $favorites{$name}{$entryuid} = {
 		ID => $idbuf,
-		Name => $namebuf, };
+		Name => $namebuf,
+        URL => $url, };         # CD 0009 hinzugefügt
 	} else {
 	    # that is a folder we found, but we don't handle that
 	}
@@ -1538,11 +1566,11 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     foreach my $titi ( keys %{$favorites{$name}} ) {
 	Log3( $hash, 5, "SB_SERVER_ParseFavorites($name): " . 
 	      "ID:" .  $favorites{$name}{$titi}{ID} . 
-	      " Name:" . $favorites{$name}{$titi}{Name} . "$titi" );
+	      " Name:" . $favorites{$name}{$titi}{Name} . " $titi" );
 	$favsetstring .= "$titi,";
 	SB_SERVER_Broadcast( $hash, "FAVORITES",  
 			     "ADD $name $favorites{$name}{$titi}{ID} " . 
-			     "$titi", undef );
+			     "$titi $favorites{$name}{$titi}{URL} $favorites{$name}{$titi}{Name}", undef );     # CD 0009 URL an Player schicken
     }
     #chop( $favsetstring );
     #$favsetstring .= " ";
@@ -1556,12 +1584,19 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     my $namestr = shift( @_ );
 
     # eliminate spaces
-    $namestr = join( "", split( " ", $namestr ) );
+    $namestr = join( "_", split( " ", $namestr ) );     # CD 0009 Leerzeichen durch _ ersetzen statt löschen
+
+    # CD 0009 verschiedene Sonderzeichen ersetzen und nicht mehr löschen
+    my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
+                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
+    my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
+    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
+    # CD 0009
 
     # this defines the regexp. Please add new stuff with the seperator |
-    # CD 0003 changed �� to �|�
-    my $tobereplaced = '[�|�|�|�|�|�|\[|\]|\{|\}|\(|\)|\\\\|' . 
-	'\/|\'|\.|\"|\^|�|\$|\||%|@]|ü|&';
+    # CD 0003 changed öÜ to ö|Ü
+    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|' . 
+	'\/|\'|\.|\"|\^|°|\$|\||%|@|&|\+]';     # CD 0021 + hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;
 
@@ -1692,7 +1727,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
 		  "id:$idbuf name:$namebuf " );
 	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );
+		$uniquename = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));          # CD 0009 decode hinzugefügt
 		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
 				     "ADD $namebuf $idbuf $uniquename", undef );
 	    }
@@ -1708,7 +1743,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
 		  "id:$idbuf name:$namebuf " );
 	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );
+		$uniquename = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));          # CD 0009 decode hinzugefügt
 		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
 				     "ADD $namebuf $idbuf $uniquename", undef );
 	    }
@@ -1728,9 +1763,9 @@ sub SB_SERVER_CheckConnection($) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
-    Log3( $hash, 2, "SB_SERVER_CheckConnection($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+    Log3( $hash, 3, "SB_SERVER_CheckConnection($name): STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" )); # CD 0009 level 2->3
     if(ReadingsVal( $name, "power", "X" ) ne "on") {
-        Log3( $hash, 2, "SB_SERVER_CheckConnection($name): forcing power on");
+        Log3( $hash, 3, "SB_SERVER_CheckConnection($name): forcing power on");      # CD 0009 level 2->3
         
         $hash->{helper}{pingCounter}=0;
             
@@ -1774,11 +1809,11 @@ sub SB_SERVER_Notify( $$ ) {
     # CD 0008 start
     if($devName eq $name ) {
         if (grep (m/^DISCONNECTED$/,@{$dev_hash->{CHANGED}})) {
-            Log3( $hash, 2, "SB_SERVER_Notify($name): DISCONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+            Log3( $hash, 3, "SB_SERVER_Notify($name): DISCONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));   # CD 0009 level 2->3
             RemoveInternalTimer( "CheckConnection:$name");
         }
         if (grep (m/^CONNECTED$/,@{$dev_hash->{CHANGED}})) {
-            Log3( $hash, 2, "SB_SERVER_Notify($name): CONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));
+            Log3( $hash, 3, "SB_SERVER_Notify($name): CONNECTED - STATE: " . $hash->{STATE} . " power: ". ReadingsVal( $name, "power", "X" ));      # CD 0009 level 2->3
             InternalTimer( gettimeofday() + 2, 
                 "SB_SERVER_CheckConnection", 
                 "CheckConnection:$name",
@@ -1858,7 +1893,7 @@ sub SB_SERVER_LMS_Status( $ ) {
     DevIo_SimpleWrite( $hash, "version ?\n", 0 );
     DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
     DevIo_SimpleWrite( $hash, "favorites items 0 " . 
-		       AttrVal( $name, "maxfavorites", 100 ) . "\n", 0 );
+		       AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
     DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
 
     return( true );
