@@ -4,6 +4,5 @@
 - Umlaute bei Favoriten umwandeln statt zu löschen
 - diverse Loglevel geändert
 - in UTF8 gespeichert
-
 98_SB_PLAYER 0022:
 - erratenen Favoriten vom Sync-Master an verbundene Player weitergeben
