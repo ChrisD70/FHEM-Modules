@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0023 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0024 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -733,7 +733,8 @@ sub SB_PLAYER_Parse( $$ ) {
                 shift( @args );
                 readingsBulkUpdate( $hash, "currentPlaylistName", 
                                     join( " ", @args ) );
-                my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',join( " ", @args )));     # CD 0021 verschoben, decode hinzugefügt
+                my $pn=SB_SERVER_FavoritesName2UID(join( " ", @args ));     # CD 0021 verschoben, decode hinzugefügt # CD 0023 decode entfernt
+                Log 0,$pn." - ".join( " ", @args );
                 # CD 0008 update playlists reading
                 readingsBulkUpdate( $hash, "playlists", $pn);           # CD 0021 $pn verwenden wegen Dropdown
                 #                   join( "_", @args ) );               # CD 0021 deaktiviert
