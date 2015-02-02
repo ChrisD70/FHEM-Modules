@@ -1,8 +1,0 @@
-﻿97_SB_SERVER 0009:
-- URL der Favoriten abfragen und an Player verteilen
-- Namen der Favoriten nicht mehr abschneiden bei Umlauten
-- Umlaute bei Favoriten umwandeln statt zu löschen
-- diverse Loglevel geändert
-- in UTF8 gespeichert
-98_SB_PLAYER 0022:
-- erratenen Favoriten vom Sync-Master an verbundene Player weitergeben
