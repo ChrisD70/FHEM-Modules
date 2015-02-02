@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0022 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0023 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -760,12 +760,14 @@ sub SB_PLAYER_Parse( $$ ) {
                     }
                 }
                 readingsBulkUpdate( $hash, "$hash->{FAVSET}", "$hash->{FAVSELECT}" );
-                # CD 0022 send to synced players
-                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                # CD 0022 send to synced players # CD 0023 fixed
+                if( $hash->{SYNCED} eq "yes") {
                     if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
-                        my @pl=split(",",$hash->{SYNCGROUP});
+                        my @pl=split(",",$hash->{SYNCGROUP}.",".$hash->{SYNCMASTER});
                         foreach (@pl) {
-                            IOWrite( $hash, "$_ fhemrelay favorites $hash->{FAVSELECT}\n" );
+                            if ($hash->{PLAYERMAC} ne $_) {
+                                IOWrite( $hash, "$_ fhemrelay favorites $hash->{FAVSELECT}\n" );
+                            }
                         }
                     }
                 }
