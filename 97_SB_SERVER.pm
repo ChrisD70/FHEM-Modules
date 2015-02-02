@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0009 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0010 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -59,7 +59,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0009';
+use constant SB_SERVER_VERSION => '0010';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -1481,7 +1481,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 	    if( $firstone == false ) {
 		if( $hasitemsbuf == false ) {
 		    # derive our hash entry
-		    my $entryuid = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));     # CD 0009 decode hinzugefügt
+		    my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 		    $favorites{$name}{$entryuid} = {
 			ID => $idbuf,
 			Name => $namebuf,
@@ -1547,7 +1547,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
 	if( $hasitemsbuf == false ) {
 	    # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
-        my $entryuid = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf) );             # CD 0009 decode hinzugefügt
+        my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 	    $favorites{$name}{$entryuid} = {
 		ID => $idbuf,
 		Name => $namebuf,
@@ -1727,7 +1727,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
 		  "id:$idbuf name:$namebuf " );
 	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));          # CD 0009 decode hinzugefügt
+		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
 				     "ADD $namebuf $idbuf $uniquename", undef );
 	    }
@@ -1743,7 +1743,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
 		  "id:$idbuf name:$namebuf " );
 	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( decode('utf-8',$namebuf ));          # CD 0009 decode hinzugefügt
+		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
 				     "ADD $namebuf $idbuf $uniquename", undef );
 	    }
