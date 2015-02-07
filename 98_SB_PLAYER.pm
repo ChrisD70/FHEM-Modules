@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0024 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0025 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -646,10 +646,18 @@ sub SB_PLAYER_Parse( $$ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist index ?\n" );
             IOWrite( $hash, "$hash->{PLAYERMAC} time ?\n" );
             # CD 0002 Coverart anfordern, todo: Zeit variabel
-            InternalTimer( gettimeofday() + 10, 
-                    "SB_PLAYER_tcb_QueryCoverArt",  # CD 0014 Name geändert
-                    "QueryCoverArt:$name",          # CD 0014 Name geändert
-                    0 );
+            # CD 0025 bei lokalen Playlisten schneller abfragen
+            if( $hash->{ISREMOTESTREAM} eq "0" ) {
+                InternalTimer( gettimeofday() + 3, 
+                        "SB_PLAYER_tcb_QueryCoverArt",
+                        "QueryCoverArt:$name",
+                        0 );
+            } else {
+                InternalTimer( gettimeofday() + 10, 
+                        "SB_PLAYER_tcb_QueryCoverArt",  # CD 0014 Name geändert
+                        "QueryCoverArt:$name",          # CD 0014 Name geändert
+                        0 );
+            }
             # CD 0002 zu früh, CoverArt ist noch nicht verfügbar
             # SB_PLAYER_CoverArt( $hash );
 
@@ -2451,7 +2459,7 @@ sub SB_PLAYER_CoverArt( $ ) {
         $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" . 
             "current/cover_" . AttrVal( $name, "coverartheight", 50 ) . 
             "x" . AttrVal( $name, "coverartwidth", 50 ) . 
-            ".jpg?player=$hash->{PLAYERMAC}";
+            ".jpg?player=$hash->{PLAYERMAC}%x=".int(rand(100000));      # CD 0025 added rand() to force browser refresh 
     } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
         # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
         if($hash->{ARTWORKURL} ne "?") {
