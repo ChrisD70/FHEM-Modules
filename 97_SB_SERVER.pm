@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0010 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0011 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -59,7 +59,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0010';
+use constant SB_SERVER_VERSION => '0011';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -538,6 +538,7 @@ sub SB_SERVER_Set( $@ ) {
 			   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
 			   0 );
 	DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+    DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
 	
     } elsif( $cmd eq "cliraw" ) {
 	# write raw messages to the CLI interface per player
@@ -857,7 +858,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    readingsSingleUpdate( $hash, "serversecure", $args[ 1 ], 0 );
 	    if( $args[ 1 ] eq "1" ) {
 		# username and password is required
-        # CD 0011 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
+        # CD 0007 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
 		if( ( $hash->{USERNAME} ne "?" ) && 
 		    ( $hash->{PASSWORD} ne "?" ) ) {
 		    DevIo_SimpleWrite( $hash, "login " . 
@@ -897,6 +898,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    DevIo_SimpleWrite( $hash, "favorites items 0 " . 
 			       AttrVal( $name, "maxfavorites", 100 ) . 
 			       " want_url:1\n", 0 );           # CD 0009 url mit abfragen
+        DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
 	} elsif( $args[ 0 ] eq "items" ) {
 	    Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites items" );
 	    # the response to our query of the favorites
@@ -913,11 +915,18 @@ sub SB_SERVER_ParseCmds( $$ ) {
         # CD 0004 Playlisten neu anfragen bei Änderung
         if(($args[0] eq "rename")||($args[0] eq "delete")) {
             DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+            DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );   # CD 0011
         } else {
             SB_SERVER_ParseServerPlaylists( $hash, \@args );
         }
     } elsif( $cmd eq "client" ) {
 
+    # CD 0011 start
+    } elsif( $cmd eq "alarm" ) {
+        if( $args[0] eq "playlists" ) {
+            SB_SERVER_ParseServerAlarmPlaylists( $hash, \@args );
+        }
+    # CD 0011 end
     } else {
 	# unkown
     }
@@ -1595,8 +1604,8 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
 
     # this defines the regexp. Please add new stuff with the seperator |
     # CD 0003 changed öÜ to ö|Ü
-    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|' . 
-	'\/|\'|\.|\"|\^|°|\$|\||%|@|&|\+]';     # CD 0021 + hinzugefügt
+    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|' .       # CD 0011 ,:? hinzugefügt
+	'\/|\'|\.|\"|\^|°|\$|\||%|@|&|\+]';     # CD 0009 + hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;
 
@@ -1678,6 +1687,41 @@ sub SB_SERVER_CMDStackPop( $ ) {
     return( $res );
 }
 
+
+# CD 0011 start
+# ----------------------------------------------------------------------------
+#  parse the list of known alarm playlists
+# ----------------------------------------------------------------------------
+sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
+    my( $hash, $dataptr ) = @_;
+    
+    my $name = $hash->{NAME};
+
+    Log3( $hash, 4, "SB_SERVER_ParseServerAlarmPlaylists($name): called" );
+
+    # force all clients to delete alarm playlists
+    SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+			 "FLUSH dont care", undef );
+
+    my @r=split("category:",join(" ",@{$dataptr}));
+    foreach my $a (@r){
+        my $i1=index($a," title:");
+        my $i2=index($a," url:");
+        my $i3=index($a," singleton:");
+        if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
+            my $url=substr($a,$i2+5,$i3-$i2-5);
+            $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
+            my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));
+            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                        "ADD $pn category ".substr($a,0,$i1), undef );
+            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                        "ADD $pn title ".substr($a,$i1+7,$i2-$i1-7), undef );
+            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                        "ADD $pn url $url", undef );
+        }
+    }
+}
+# CD 0011 end
 
 # ----------------------------------------------------------------------------
 #  parse the list of known Playlists
@@ -1875,7 +1919,7 @@ sub SB_SERVER_LMS_Status( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME}; # own name / hash
 
-    # CD 0011 login muss als erstes gesendet werden
+    # CD 0007 login muss als erstes gesendet werden
     $hash->{helper}{SB_SERVER_LMS_Status}=time();
     if( ( $hash->{USERNAME} ne "?" ) && 
         ( $hash->{PASSWORD} ne "?" ) ) {
@@ -1895,6 +1939,7 @@ sub SB_SERVER_LMS_Status( $ ) {
     DevIo_SimpleWrite( $hash, "favorites items 0 " . 
 		       AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
     DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+    DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
 
     return( true );
 }
