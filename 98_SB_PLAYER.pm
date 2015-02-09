@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0025 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0026 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -173,7 +173,7 @@ sub SB_PLAYER_Define( $$ ) {
     # needed for manual creation of the Player; autocreate checks in ParseFn
     if( SB_PLAYER_IsValidMAC( $a[ 0] ) == 1 ) {
         # the MAC adress is valid
-        $hash->{PLAYERMAC} = $a[ 0 ];
+        $hash->{PLAYERMAC} = lc($a[ 0 ]);       # CD 0026 lc added
     } else {
         my $msg = "SB_PLAYER_Define: playerid ist keine MAC Adresse " . 
             "im Format xx:xx:xx:xx:xx:xx oder xx-xx-xx-xx-xx-xx";
@@ -629,7 +629,7 @@ sub SB_PLAYER_Parse( $$ ) {
         #IOWrite( $hash, "$hash->{PLAYERMAC} title ?\n" );
         IOWrite( $hash, "$hash->{PLAYERMAC} remote ?\n" );
         #IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
-        SB_PLAYER_CoverArt( $hash );
+        #SB_PLAYER_CoverArt( $hash );       # CD 0026 deaktiviert
 
     } elsif( $cmd eq "playlist" ) {
         my $queryMode=1;    # CD 0014
@@ -646,6 +646,7 @@ sub SB_PLAYER_Parse( $$ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist index ?\n" );
             IOWrite( $hash, "$hash->{PLAYERMAC} time ?\n" );
             # CD 0002 Coverart anfordern, todo: Zeit variabel
+            $hash->{helper}{CoverOk}="";   # CD 0026 added
             # CD 0025 bei lokalen Playlisten schneller abfragen
             if( $hash->{ISREMOTESTREAM} eq "0" ) {
                 InternalTimer( gettimeofday() + 3, 
@@ -742,7 +743,6 @@ sub SB_PLAYER_Parse( $$ ) {
                 readingsBulkUpdate( $hash, "currentPlaylistName", 
                                     join( " ", @args ) );
                 my $pn=SB_SERVER_FavoritesName2UID(join( " ", @args ));     # CD 0021 verschoben, decode hinzugefügt # CD 0023 decode entfernt
-                Log 0,$pn." - ".join( " ", @args );
                 # CD 0008 update playlists reading
                 readingsBulkUpdate( $hash, "playlists", $pn);           # CD 0021 $pn verwenden wegen Dropdown
                 #                   join( "_", @args ) );               # CD 0021 deaktiviert
@@ -804,7 +804,7 @@ sub SB_PLAYER_Parse( $$ ) {
             SB_PLAYER_GetStatus( $hash );
         } elsif( $args[ 0 ] eq "delete" ) {
             $queryMode=0;
-            IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" );     # CD 0016 get available elements for alarms
+            #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" );     # CD 0016 get available elements for alarms    # CD 0026 deaktiviert
             SB_PLAYER_GetStatus( $hash );
         } elsif( $args[ 0 ] eq "load_done" ) {
             if(defined($hash->{helper}{recallPending})) {
@@ -907,13 +907,13 @@ sub SB_PLAYER_Parse( $$ ) {
                 #readingsBulkUpdate( $hash, "alarmid$hash->{LASTALARM}", $2 );  # CD 0015 deaktiviert
             } else {
             }
-            IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists})); # CD 0015 get available elements for alarms CD 0016 nur wenn nicht vorhanden abfragen
+            #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists})); # CD 0015 get available elements for alarms CD 0016 nur wenn nicht vorhanden abfragen # CD 0026 wird über Server verteilt
             IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" ); # CD 0015 update alarm list
         } elsif( $args[ 0 ] eq "_cmd" ) {
             #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ); # CD 0015 get available elements for alarms CD 0016 deaktiviert, nicht nötig
             IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
         } elsif( $args[ 0 ] eq "update" ) {
-            IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists})); # CD 0015 get available elements for alarms CD 0016 nur wenn nicht vorhanden abfragen
+            #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists})); # CD 0015 get available elements for alarms CD 0016 nur wenn nicht vorhanden abfragen # CD 0026 wird über Server verteilt
             IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
         } elsif( $args[ 0 ] eq "delete" ) {
             if(!defined($hash->{helper}{deleteAllAlarms})) {                    # CD 0015 do not query while deleting all alarms
@@ -921,22 +921,23 @@ sub SB_PLAYER_Parse( $$ ) {
             }
         # CD 0015 start
         # verfügbare Elemente für Alarme, zwischenspeichern für Anzeige
-        } elsif( $args[ 0 ] eq "playlists" ) {
-            delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));
-            my @r=split("category:",join(" ",@args));
-            foreach my $a (@r){
-                my $i1=index($a," title:");
-                my $i2=index($a," url:");
-                my $i3=index($a," singleton:");
-                if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
-                    my $url=substr($a,$i2+5,$i3-$i2-5);
-                    $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
-                    my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));               # CD 0021 decode hinzugefügt
-                    $hash->{helper}{alarmPlaylists}{$pn}{category}=substr($a,0,$i1);
-                    $hash->{helper}{alarmPlaylists}{$pn}{title}=substr($a,$i1+7,$i2-$i1-7);
-                    $hash->{helper}{alarmPlaylists}{$pn}{url}=$url;
-                }
-            }
+        # CD 0026 deaktiviert, kommt über Broadcast vom Server
+        #} elsif( $args[ 0 ] eq "playlists" ) {
+        #    delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));
+        #    my @r=split("category:",join(" ",@args));
+        #    foreach my $a (@r){
+        #        my $i1=index($a," title:");
+        #        my $i2=index($a," url:");
+        #        my $i3=index($a," singleton:");
+        #        if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
+        #            my $url=substr($a,$i2+5,$i3-$i2-5);
+        #            $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
+        #            my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));               # CD 0021 decode hinzugefügt
+        #            $hash->{helper}{alarmPlaylists}{$pn}{category}=substr($a,0,$i1);
+        #            $hash->{helper}{alarmPlaylists}{$pn}{title}=substr($a,$i1+7,$i2-$i1-7);
+        #            $hash->{helper}{alarmPlaylists}{$pn}{url}=$url;
+        #        }
+        #    }
         # CD 0015
         } else {
         }
@@ -1997,7 +1998,7 @@ sub SB_PLAYER_GetStatus( $ ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist url ?\n" );
         IOWrite( $hash, "$hash->{PLAYERMAC} remote ?\n" );
         IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists}));  # CD 0016 get available elements for alarms before querying the alarms
+        #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists}));  # CD 0016 get available elements for alarms before querying the alarms # CD 0026 wird über Server verteilt
         IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
         # MM 0016 start
         IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled ?\n" );
@@ -2163,6 +2164,14 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
         } else {
         }
 
+    # CD 0026 start
+    } elsif( $cmd eq "ALARMPLAYLISTS" ) {
+        if( $args[ 0 ] eq "ADD" ) {
+            $hash->{helper}{alarmPlaylists}{$args[ 1 ]}{$args[ 2 ]}=join( " ", @args[3..$#args]);
+        } elsif( $args[ 0 ] eq "FLUSH" ) {
+            delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));
+        }
+    # CD 0026 end
     } else {
 
     }
@@ -2443,6 +2452,8 @@ sub SB_PLAYER_Amplifier( $ ) {
 sub SB_PLAYER_CoverArt( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
+
+    return if (defined($hash->{helper}{CoverOk}) && ($hash->{helper}{CoverOk} == 1) && ( $hash->{ISREMOTESTREAM} eq "0" ));   # CD 0026 added
     
     # CD 0003 fix missing server    
     if(!defined($hash->{SBSERVER})||($hash->{SBSERVER} eq '?')) {
@@ -2455,11 +2466,12 @@ sub SB_PLAYER_CoverArt( $ ) {
     my $lastCoverartUrl=$hash->{COVERARTURL};           # CD 0013
     
     # compile the link to the album cover
-    if( $hash->{ISREMOTESTREAM} eq "0" ) {
+    if(( $hash->{ISREMOTESTREAM} eq "0" ) || ($hash->{ARTWORKURL} =~ /imageproxy%2F/)) {    # CD 0026 LMS 7.8/7.9
         $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" . 
             "current/cover_" . AttrVal( $name, "coverartheight", 50 ) . 
             "x" . AttrVal( $name, "coverartwidth", 50 ) . 
             ".jpg?player=$hash->{PLAYERMAC}&x=".int(rand(100000));      # CD 0025 added rand() to force browser refresh 
+        $hash->{helper}{CoverOk}=1;                                     # CD 0026 added
     } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
         # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
         if($hash->{ARTWORKURL} ne "?") {
@@ -2965,8 +2977,8 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
      <li><b>mute</b> -  toggles between muted and unmuted</li>
      <li><b>volume &lt;n&gt;</b> -  sets the volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  same as volume</li>
-     <li><b>volumeDown|volDown &lt;n&gt;</b> -  volume down</li>
-     <li><b>volumeUp|volUp &lt;n&gt;</b> -  volume up</li>
+     <li><b>volumeDown &lt;n&gt;</b> -  volume down</li>
+     <li><b>volumeUp &lt;n&gt;</b> -  volume up</li>
      <li><b>on</b> -  set the player on if possible. Otherwise it does play</li>
      <li><b>off</b> -  set the player off if possible. Otherwise it does stop</li>
      <li><b>shuffle &lt;on|off|song|album&gt;</b> -  Enables/Disables shuffle mode</li>
