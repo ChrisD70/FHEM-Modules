@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0026 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0027 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -646,7 +646,7 @@ sub SB_PLAYER_Parse( $$ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist index ?\n" );
             IOWrite( $hash, "$hash->{PLAYERMAC} time ?\n" );
             # CD 0002 Coverart anfordern, todo: Zeit variabel
-            $hash->{helper}{CoverOk}="";   # CD 0026 added
+            $hash->{helper}{CoverOk}=0;   # CD 0026 added # CD 0027 changed
             # CD 0025 bei lokalen Playlisten schneller abfragen
             if( $hash->{ISREMOTESTREAM} eq "0" ) {
                 InternalTimer( gettimeofday() + 3, 
@@ -2453,7 +2453,7 @@ sub SB_PLAYER_CoverArt( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
-    return if (defined($hash->{helper}{CoverOk}) && ($hash->{helper}{CoverOk} == 1) && ( $hash->{ISREMOTESTREAM} eq "0" ));   # CD 0026 added
+    # return if (defined($hash->{helper}{CoverOk}) && ($hash->{helper}{CoverOk} == 1) && ( $hash->{ISREMOTESTREAM} eq "0" ));   # CD 0026 added # CD 0027 removed
     
     # CD 0003 fix missing server    
     if(!defined($hash->{SBSERVER})||($hash->{SBSERVER} eq '?')) {
