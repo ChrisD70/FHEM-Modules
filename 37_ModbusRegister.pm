@@ -8,6 +8,7 @@
 # 150106 0007 added 3WORD and 3WORD_BE 
 # 150107 0008 added QWORD and QWORD_BE 
 # 150118 0009 completed documentation
+# 150215 0010 fixed bug with registerType and disableRegisterMapping (thanks Dieter1)
 # TODO:
 
 package main;
@@ -444,7 +445,11 @@ ModbusRegister_Attr(@)
         }
       }
     } else {
-      $hash->{helper}{registerType}=AttrVal($name,"registerType",3);
+      if(AttrVal($name,"registerType",'Holding') eq 'Input') {
+        $hash->{helper}{registerType}=4;
+      } else {
+        $hash->{helper}{registerType}=3;
+      }
       $hash->{helper}{address}=$hash->{helper}{register};
     }
     $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
