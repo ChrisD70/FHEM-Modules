@@ -2,6 +2,7 @@
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
+# 150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
 # TODO:
 
 package main;
@@ -279,7 +280,11 @@ ModbusCoil_Attr(@)
         }
       }
     } else {
-      $hash->{helper}{registerType}=AttrVal($name,"source",1);
+      if(AttrVal($name,"source",'') eq 'Input') {
+        $hash->{helper}{registerType}=2;
+      } else {
+        $hash->{helper}{registerType}=1;
+      }
       $hash->{helper}{address}=$hash->{helper}{register};
     }
     $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
