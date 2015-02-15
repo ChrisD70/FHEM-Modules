@@ -6,6 +6,7 @@
 # 140507 0004 fixed call to parse in read function
 # 140508 0005 added REREADCFG to ModbusRTU_Notify, added timer if $init_done==0
 # 150118 0006 removed defaultUnitId and presenceLink, completed documentation
+# 150215 0007 added support for hostname:port (by Dieter1)
 # TODO:
 
 package main;
@@ -105,7 +106,7 @@ sub ModbusRTU_Define($$) {######################################################
 
   if(@a != 3) {
     my $msg = "wrong syntax: define <name> ModbusRTU {devicename[\@baudrate] ".
-                        "| devicename\@directio}";
+                        "| devicename\@directio | hostname:port}";
     Log3 $hash, 2, $msg;
     return $msg;
   }
@@ -114,21 +115,7 @@ sub ModbusRTU_Define($$) {######################################################
 
   my $name = $a[0];
   my $dev = $a[2];
-  $dev .= "\@9600" if( $dev !~ m/\@/ );
-  
-  my (undef, $baudrate) = split("@", $dev);
-  # calculate t35 (inter-frame delay) and t15 (inter-character time-out)
-  # 1 byte = 11 bits, t35 = 39 bits, t15 = 17 bits
-  # currently not used, FHEM is too slow
-  if (($baudrate>19200)||($baudrate==0)) {
-    $hash->{helper}{t35}=1.750;
-    $hash->{helper}{t15}=0.750;
-  } else {
-    $hash->{helper}{t35}=39/$baudrate*1000;
-    $hash->{helper}{t15}=17/$baudrate*1000;
-  }
-
-  Log3 $hash, 5, "t35: ".$hash->{helper}{t35}." ms, t15: ".$hash->{helper}{t15}." ms";
+  $dev .= "\@9600" if( ($dev !~ m/\@/) && ($dev !~ m/:/));
   
   $hash->{DeviceName} = $dev;
   $hash->{STATE} = "disconnected";
@@ -379,13 +366,14 @@ sub ModbusRTU_SimpleWrite(@) {##################################################
 
   my $name = $hash->{NAME};
   my $len = length($msg);
-  if(($hash->{USBDev})||($hash->{DIODev})) {
+  if(($hash->{USBDev})||($hash->{DIODev})||($hash->{TCPDev})) {
     $hash->{helper}{hd_tr_id}=unpack("x2n",$msg);
     $hash->{helper}{state}="active";
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusRTU_Timeout", "timeout:".$name, 1);
     ModbusRTU_Frame($hash,"SimpleWrite",$msg);
     $hash->{USBDev}->write($msg)    if($hash->{USBDev});
     syswrite($hash->{DIODev}, $msg) if($hash->{DIODev});
+    syswrite($hash->{TCPDev}, $msg) if($hash->{TCPDev});    # CD 0007
 
     # Some linux installations are broken with 0.001, T01 returns no answer
     select(undef, undef, undef, 0.01);
@@ -642,7 +630,7 @@ sub ModbusRTU_crc_is_ok($) {
   <a name="ModbusRTUdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; ModbusRTU &lt;serial port&gt;</code> <br>
+    <code>define &lt;name&gt; ModbusRTU &lt;device&gt;</code> <br>
     <br>
       You can specify a baudrate if the device name contains the @
       character, e.g.: /dev/ttyS0@9600<br>The port is opened with 8 data bits, 1 stop bit and even parity.<br>
@@ -650,7 +638,11 @@ sub ModbusRTU_crc_is_ok($) {
       All slaves connected to a master must use the same character format.<br>
 
       Note: this module requires the Device::SerialPort or Win32::SerialPort module if the devices is connected via USB or a serial port. 
-  </ul>
+    <br><br>
+      For network-connected devices (serial to ethernet gateways)<br>
+      &lt;device&gt; specifies the host:port of the device, e.g.
+      192.168.0.246:10001
+    </ul> 
   <br>
   <a name="ModbusRTUset"></a>
   <b>Set</b> <ul>N/A</ul><br>
