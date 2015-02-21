@@ -1,11 +1,12 @@
-##############################################
-# $Id: 36_ModbusTCPServer.pm 0006 $
+﻿##############################################
+# $Id: 36_ModbusTCPServer.pm 0007 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
 # 140508 0004 added REREADCFG to ModbusTCPServer_Notify
 # 140819 0005 added statistics and support for coils
 # 150118 0006 removed defaultUnitId, completed documentation
+# 150221 0007 added info to bad frame message
 # TODO:
 
 package main;
@@ -249,7 +250,7 @@ sub ModbusTCPServer_Parse($$) {#################################################
   # check header
   if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
         ($rx_hd_length == bytes::length($rmsg)-6) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
-    Log3 $hash, 1,"ModbusTCPServer: bad frame";
+    Log3 $hash, 1,"ModbusTCPServer: bad frame: $rx_hd_tr_id - ".$hash->{helper}{hd_tr_id}.", $rx_hd_pr_id, $rx_hd_length - ".bytes::length($rmsg)-6;
     $hash->{STATE} = "error";
   } else {
     # check except
