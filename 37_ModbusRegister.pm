@@ -1,4 +1,4 @@
-# $Id: 37_ModbusRegister.pm 0009 $
+﻿# $Id: 37_ModbusRegister.pm 0011 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -9,6 +9,7 @@
 # 150107 0008 added QWORD and QWORD_BE 
 # 150118 0009 completed documentation
 # 150215 0010 fixed bug with registerType and disableRegisterMapping (thanks Dieter1)
+# 150221 0011 fixed typo in attribute name updateIntervall
 # TODO:
 
 package main;
@@ -40,13 +41,14 @@ ModbusRegister_Initialize($)
   $hash->{DefFn}     = "ModbusRegister_Define";
   $hash->{UndefFn}   = "ModbusRegister_Undef";
   $hash->{SetFn}     = "ModbusRegister_Set"; 
+  $hash->{NotifyFn}  = "ModbusRegister_Notify";
   #$hash->{FingerprintFn}   = "ModbusRegister_Fingerprint";
   $hash->{ParseFn}   = "ModbusRegister_Parse";
   $hash->{AttrFn}    = "ModbusRegister_Attr";
   $hash->{AttrList}  = "IODev ".
                        "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,QWORD,QWORD_BE ".
                        "conversion ".
-                       "updateIntervall ".
+                       "updateInterval updateIntervall ".
                        "disableRegisterMapping:0,1 ".
                        "registerType:Holding,Input ".
                        "stateAlias ".
@@ -394,12 +396,14 @@ ModbusRegister_Attr(@)
       ModbusRegister_SetMinMax($hash);
     }
   }
-  elsif($attrName eq "updateIntervall") {
+  elsif(($attrName eq "updateIntervall")||($attrName eq "updateInterval")) {
     if ($cmd eq "set") {
-      $attr{$name}{updateIntervall} = $attrVal;
+      $attr{$name}{updateInterval} = $attrVal;
       $hash->{helper}{updateIntervall}=$attrVal;
     } else {
       $hash->{helper}{updateIntervall}=0.1;
+      delete $attr{$name}{updateInterval} if defined($attr{$name}{updateInterval});
+      delete $attr{$name}{updateIntervall} if defined($attr{$name}{updateIntervall});
     }
     $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
   }
@@ -458,6 +462,21 @@ ModbusRegister_Attr(@)
     $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
   }
   return undef;
+}
+
+sub ModbusRegister_Notify(@) {##########################################################
+  my ($hash,$dev) = @_;
+  if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
+    my $name = $hash->{NAME};
+
+    if (defined($attr{$name}{updateIntervall})) {
+      Log 0,"$name - removing updateIntervall";
+      $attr{$name}{updateInterval}=$attr{$name}{updateIntervall} if(!defined($attr{$name}{updateInterval}));
+      delete $attr{$name}{updateIntervall};
+    }
+    $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
+  }
+  return;
 }
 
 sub
@@ -565,8 +584,8 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
   <b>Attributes</b>
   <ul>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
-    <li><a name="">updateIntervall</a><br>
-        Intervall in seconds for reading the register. If the value is smaller than the pollIntervall attribute of the IODev,
+    <li><a name="">updateInterval</a><br>
+        Interval in seconds for reading the register. If the value is smaller than the pollInterval attribute of the IODev,
         the setting from the IODev takes precedence over this attribute. Default: 0.1</li><br>
     <li><a name="">IODev</a><br>
         IODev: Sets the ModbusTCP or ModbusRTU device which should be used for sending and receiving data for this register.</li><br>
