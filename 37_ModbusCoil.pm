@@ -1,8 +1,9 @@
-﻿# $Id: 37_ModbusCoil.pm 0003 $
+﻿# $Id: 37_ModbusCoil.pm 0005 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
 # 150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
+# 150221 0005 fixed typo in attribute name updateIntervall
 # TODO:
 
 package main;
@@ -33,11 +34,12 @@ ModbusCoil_Initialize($)
   $hash->{DefFn}     = "ModbusCoil_Define";
   $hash->{UndefFn}   = "ModbusCoil_Undef";
   $hash->{SetFn}     = "ModbusCoil_Set"; 
+  $hash->{NotifyFn}  = "ModbusCoil_Notify";
   #$hash->{FingerprintFn}   = "ModbusCoil_Fingerprint";
   $hash->{ParseFn}   = "ModbusCoil_Parse";
   $hash->{AttrFn}    = "ModbusCoil_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "updateIntervall ".
+                       "updateInterval updateIntervall ".
                        "disableRegisterMapping:0,1 ".
                        "source:Coil,Input ".
                        "$readingFnAttributes";
@@ -229,12 +231,14 @@ ModbusCoil_Attr(@)
   my ($cmd, $name, $attrName, $attrVal) = @_;
   my $hash=$defs{$name};
 
-  if($attrName eq "updateIntervall") {
+  if(($attrName eq "updateIntervall") || ($attrName eq "updateInterval")) {
     if ($cmd eq "set") {
-      $attr{$name}{updateIntervall} = $attrVal;
+      $attr{$name}{updateInterval} = $attrVal;
       $hash->{helper}{updateIntervall}=$attrVal;
     } else {
       $hash->{helper}{updateIntervall}=0.1;
+      delete $attr{$name}{updateInterval} if defined($attr{$name}{updateInterval});
+      delete $attr{$name}{updateIntervall} if defined($attr{$name}{updateIntervall});
     }
     $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
   }
@@ -295,6 +299,20 @@ ModbusCoil_Attr(@)
   return undef;
 }
 
+sub ModbusCoil_Notify(@) {##########################################################
+  my ($hash,$dev) = @_;
+  if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
+    my $name = $hash->{NAME};
+
+    if (defined($attr{$name}{updateIntervall})) {
+      $attr{$name}{updateInterval}=$attr{$name}{updateIntervall} if(!defined($attr{$name}{updateInterval}));
+      delete $attr{$name}{updateIntervall};
+    }
+    $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
+  }
+  return;
+}
+
 sub ModbusCoil_is_integer {
    defined $_[0] && $_[0] =~ /^[+-]?\d+$/;
 }
@@ -347,8 +365,8 @@ sub ModbusCoil_is_float {
   <b>Attributes</b>
   <ul>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
-    <li><a name="">updateIntervall</a><br>
-        Intervall in seconds for reading the coil. If the value is smaller than the pollIntervall attribute of the IODev,
+    <li><a name="">updateInterval</a><br>
+        Interval in seconds for reading the coil. If the value is smaller than the pollInterval attribute of the IODev,
         the setting from the IODev takes precedence over this attribute. Default: 0.1</li><br>
     <li><a name="">IODev</a><br>
         IODev: Sets the ModbusTCP or ModbusRTU device which should be used for sending and receiving data for this coil.</li><br>
