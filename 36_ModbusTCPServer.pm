@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0007 $
+# $Id: 36_ModbusTCPServer.pm 0008 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -7,6 +7,7 @@
 # 140819 0005 added statistics and support for coils
 # 150118 0006 removed defaultUnitId, completed documentation
 # 150221 0007 added info to bad frame message
+# 150222 0008 fixed info for bad frame message
 # TODO:
 
 package main;
@@ -38,7 +39,7 @@ sub ModbusTCPServer_HandleWriteQueue($);
 sub ModbusTCPServer_HandleReadQueue($);
 sub ModbusTCPServer_Reconnect($);
 sub ModbusTCPServer_UpdateStatistics($$$$$);
-sub _MbLogFrame($$$);
+sub ModbusTCPServer_LogFrame($$$$);
 
 my $debug = 1; # set 1 for better log readability
 
@@ -220,7 +221,7 @@ sub ModbusTCPServer_Write($$) {#################################################
   my $f_mbap = pack("nnn", $id, $tx_hd_pr_id,
                             $tx_hd_length);
 
-  _MbLogFrame($hash,"AddWQueue",$f_mbap.$msg);
+  ModbusTCPServer_LogFrame($hash,"AddWQueue",$f_mbap.$msg,5);
   ModbusTCPServer_AddWQueue($hash, $f_mbap.$msg);
 }
 
@@ -238,7 +239,10 @@ sub ModbusTCPServer_Parse($$) {#################################################
   my ($hash, $rmsg) = @_;
   my $name = $hash->{NAME};
 
-  _MbLogFrame($hash,"Received",$rmsg);
+  my $lastFrame="unknown";
+  $lastFrame=$hash->{helper}{lastFrame} if (defined($hash->{helper}{lastFrame}));
+  
+  ModbusTCPServer_LogFrame($hash,"Received",$rmsg,5);
 
   if($hash->{helper}{state} eq "idle") {
     return undef;
@@ -250,7 +254,8 @@ sub ModbusTCPServer_Parse($$) {#################################################
   # check header
   if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
         ($rx_hd_length == bytes::length($rmsg)-6) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
-    Log3 $hash, 1,"ModbusTCPServer: bad frame: $rx_hd_tr_id - ".$hash->{helper}{hd_tr_id}.", $rx_hd_pr_id, $rx_hd_length - ".bytes::length($rmsg)-6;
+    Log3 $hash, 1,"ModbusTCPServer: bad frame, sent: $lastFrame";
+    ModbusTCPServer_LogFrame($hash,"ModbusTCPServer: bad frame, received: ",$rmsg,1);
     $hash->{STATE} = "error";
   } else {
     # check except
@@ -319,7 +324,7 @@ sub ModbusTCPServer_SimpleWrite(@) {############################################
     $hash->{helper}{hd_tr_id}=unpack("n",$msg);
     $hash->{helper}{state}="active";
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1);
-    _MbLogFrame($hash,"SimpleWrite",$msg);
+    ModbusTCPServer_LogFrame($hash,"SimpleWrite",$msg,5);
     ModbusTCPServer_UpdateStatistics($hash,0,1,0,bytes::length($msg));
     syswrite($hash->{TCPDev}, $msg);     
   }
@@ -361,7 +366,7 @@ sub ModbusTCPServer_Poll($) {##################################################
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            _MbLogFrame($hash,"AddRQueue",$f_mbap.$msg);
+            ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
             ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
             $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
           }
@@ -379,7 +384,7 @@ sub ModbusTCPServer_Poll($) {##################################################
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            _MbLogFrame($hash,"AddRQueue",$f_mbap.$msg);
+            ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
             ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
             $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
           }
@@ -517,14 +522,16 @@ ModbusTCPServer_HandleReadQueue($) #############################################
   }
 } 
 
-sub _MbLogFrame($$$) {
-  my ($hash,$c,$data)=@_;
+sub ModbusTCPServer_LogFrame($$$$) {
+  my ($hash,$c,$data,$verbose)=@_;
 
   my @dump = map {sprintf "%02X", $_ } unpack("C*", $data);
   $dump[0] = "[".$dump[0];
   $dump[5] = $dump[5]."]";
-  
-  Log3 $hash, 5,$c." ".join(" ",@dump)
+
+  $hash->{helper}{lastFrame}=$c." ".join(" ",@dump);
+
+  Log3 $hash, $verbose,$c." ".join(" ",@dump);
 }
 
 sub ModbusTCPServer_UpdateStatistics($$$$$) {############################################################
