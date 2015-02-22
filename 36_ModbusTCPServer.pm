@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0008 $
+# $Id: 36_ModbusTCPServer.pm 0009 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -8,6 +8,7 @@
 # 150118 0006 removed defaultUnitId, completed documentation
 # 150221 0007 added info to bad frame message
 # 150222 0008 fixed info for bad frame message
+# 150222 0009 fixed typo in attribute name pollIntervall, added ModbusTCPServer_CalcNextUpdate
 # TODO:
 
 package main;
@@ -96,7 +97,7 @@ sub ModbusTCPServer_Initialize($) {
   $hash->{DefFn}   = "ModbusTCPServer_Define";
   $hash->{UndefFn} = "ModbusTCPServer_Undef";
   $hash->{AttrList}= "do_not_notify:1,0 dummy:1,0 " .
-                     "pollIntervall " .
+                     "pollIntervall pollInterval " .
                      "timeout " .
                      "presenceLink " .
                      $readingFnAttributes;
@@ -152,6 +153,14 @@ sub ModbusTCPServer_Notify(@) {#################################################
   my ($hash,$dev) = @_;
   #Log 0,"ModbusTCPServer_Notify :" . $dev->{NAME};
   if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
+    my $name = $hash->{NAME};
+    if (defined($attr{$name}{pollIntervall})) {
+      Log 0,"$name - removing pollIntervall";
+      $attr{$name}{pollInterval}=$attr{$name}{pollIntervall} if(!defined($attr{$name}{pollInterval}));
+      delete $attr{$name}{pollIntervall};
+    }
+    $modules{$hash->{TYPE}}{AttrList} =~ s/pollIntervall.//;
+
     if(!defined($hash->{helper}{presence}) || (Value($hash->{helper}{presence}) eq "present")) {
       DevIo_OpenDev($hash, 0, "ModbusTCPServer_DoInit");
     } else {
@@ -162,9 +171,9 @@ sub ModbusTCPServer_Notify(@) {#################################################
 }
 sub ModbusTCPServer_Attr(@) {############################################################
   my ($cmd,$name, $aName,$aVal) = @_;
-  if($aName eq "pollIntervall") {
+  if(($aName eq "pollIntervall") || ($aName eq "pollInterval")) {
     if ($cmd eq "set") {
-      $attr{$name}{pollIntervall} = $aVal;
+      $attr{$name}{pollInterval} = $aVal;
       RemoveInternalTimer( "poll:".$name);
       if ($init_done){
         InternalTimer(gettimeofday()+$aVal/1000.0, "ModbusTCPServer_Poll", "poll:".$name, 0);
@@ -335,13 +344,37 @@ sub ModbusTCPServer_DoInit($) {#################################################
   my $name = $hash->{NAME};
 
   my $tn = gettimeofday();
-  my $pollIntervall = AttrVal($name,"pollIntervall",3000)/1000.0;
+  my $pollInterval = AttrVal($name,"pollInterval",0.5);
 
   $hash->{helper}{state}="idle";
   RemoveInternalTimer( "poll:".$name);
-  InternalTimer($tn+$pollIntervall, "ModbusTCPServer_Poll", "poll:".$name, 0);
+  InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
 
   return undef;
+}
+
+sub ModbusTCPServer_CalcNextUpdate(@) {##########################################################
+    my ($hash)=@_;
+    my $name = $hash->{NAME};
+
+    if(defined($hash->{helper}{updateIntervall})) {
+        if(defined($hash->{helper}{alignUpdateInterval})) {
+            my $t=int(time());
+            my @lt = localtime($t);
+            
+            $t -= ($lt[2]*3600+$lt[1]*60+$lt[0]);
+            my $nextUpdate=$t+$hash->{helper}{alignUpdateInterval};
+            while($nextUpdate<time()) {
+                $nextUpdate+=$hash->{helper}{updateIntervall};
+            }
+            $hash->{nextUpdate}=localtime($nextUpdate);
+            $hash->{helper}{nextUpdate}=$nextUpdate;
+        } else {
+            $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+        }
+    } else {
+        $hash->{helper}{nextUpdate}=time()+0.01;
+    }
 }
 
 sub ModbusTCPServer_Poll($) {##################################################
@@ -351,7 +384,11 @@ sub ModbusTCPServer_Poll($) {##################################################
 
   if($hash->{STATE} ne "disconnected") {
     my $tn = gettimeofday();
-    my $pollIntervall = AttrVal($name,"pollIntervall",3);
+    if (defined($attr{$name}{pollIntervall})) {
+      $attr{$name}{pollInterval}=$attr{$name}{pollIntervall} if(!defined($attr{$name}{pollInterval}));
+      delete $attr{$name}{pollIntervall};
+    }
+    my $pollInterval = AttrVal($name,"pollInterval",0.5);
 
     if(!defined($hash->{RQUEUE})) {
       my @chlds=devspec2array("TYPE=ModbusRegister");
@@ -368,7 +405,7 @@ sub ModbusTCPServer_Poll($) {##################################################
 
             ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
             ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
-            $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
+            ModbusTCPServer_CalcNextUpdate($chash);
           }
         }
       }
@@ -391,10 +428,10 @@ sub ModbusTCPServer_Poll($) {##################################################
         }
       }
     }
-    if($tn+$pollIntervall<=gettimeofday()) {
-      $tn=gettimeofday()-$pollIntervall+0.05;
+    if($tn+$pollInterval<=gettimeofday()) {
+      $tn=gettimeofday()-$pollInterval+0.05;
     }
-    InternalTimer($tn+$pollIntervall, "ModbusTCPServer_Poll", "poll:".$name, 0);
+    InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
   }
 }
 
@@ -581,8 +618,8 @@ sub ModbusTCPServer_UpdateStatistics($$$$$) {###################################
   <ul>
     <li><a href="#attrdummy">dummy</a></li><br>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
-    <li><a name="">pollIntervall</a><br>
-        Intervall in seconds for the reading cycle. Default: 0.1</li><br>
+    <li><a name="">pollInterval</a><br>
+        Intervall in seconds for the reading cycle. Default: 0.5</li><br>
     <li><a name="">timeout</a><br>
         Timeout in seconds waiting for data from the server. Default: 3</li><br>
     <li><a name="">presenceLink</a><br>
