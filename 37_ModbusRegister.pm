@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0011 $
+﻿# $Id: 37_ModbusRegister.pm 0012 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -10,6 +10,7 @@
 # 150118 0009 completed documentation
 # 150215 0010 fixed bug with registerType and disableRegisterMapping (thanks Dieter1)
 # 150221 0011 fixed typo in attribute name updateIntervall
+# 150222 0012 added alignUpdateInterval
 # TODO:
 
 package main;
@@ -48,7 +49,7 @@ ModbusRegister_Initialize($)
   $hash->{AttrList}  = "IODev ".
                        "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,QWORD,QWORD_BE ".
                        "conversion ".
-                       "updateInterval updateIntervall ".
+                       "updateInterval updateIntervall alignUpdateInterval ".
                        "disableRegisterMapping:0,1 ".
                        "registerType:Holding,Input ".
                        "stateAlias ".
@@ -398,14 +399,33 @@ ModbusRegister_Attr(@)
   }
   elsif(($attrName eq "updateIntervall")||($attrName eq "updateInterval")) {
     if ($cmd eq "set") {
+      if($attrVal =~ m/:/) {
+        my ($err, $hr, $min, $sec, $fn) = GetTimeSpec($attrVal);
+        return $err if($err);
+        $hash->{helper}{updateIntervall}=($hr*60+$min)*60+$sec;
+      } else {
+        $hash->{helper}{updateIntervall}=$attrVal;
+      }
       $attr{$name}{updateInterval} = $attrVal;
-      $hash->{helper}{updateIntervall}=$attrVal;
     } else {
       $hash->{helper}{updateIntervall}=0.1;
       delete $attr{$name}{updateInterval} if defined($attr{$name}{updateInterval});
       delete $attr{$name}{updateIntervall} if defined($attr{$name}{updateIntervall});
     }
-    $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+    ModbusRegister_CalcNextUpdate($hash);
+  }
+  elsif($attrName eq "alignUpdateInterval") {
+    if (($cmd eq "set") && defined($attrVal)) {
+        my @args=split(",",$attrVal);
+        if(@args>0) {
+            my ($err, $hr, $min, $sec, $fn) = GetTimeSpec($args[0]);
+            return $err if($err);
+            $hash->{helper}{alignUpdateInterval}=($hr*60+$min)*60+$sec;
+        }
+    } else {
+        delete($hash->{helper}{alignUpdateInterval}) if (defined($hash->{helper}{alignUpdateInterval}));
+    }
+    ModbusRegister_CalcNextUpdate($hash);
   }
   elsif($attrName eq "registerType") {
     if ($cmd eq "set") {
@@ -464,13 +484,32 @@ ModbusRegister_Attr(@)
   return undef;
 }
 
+sub ModbusRegister_CalcNextUpdate(@) {##########################################################
+    my ($hash)=@_;
+    my $name = $hash->{NAME};
+
+    if(defined($hash->{helper}{alignUpdateInterval})) {
+        my $t=int(time());
+        my @lt = localtime($t);
+        
+        $t -= ($lt[2]*3600+$lt[1]*60+$lt[0]);
+        my $nextUpdate=$t+$hash->{helper}{alignUpdateInterval};
+        while($nextUpdate<time()) {
+            $nextUpdate+=$hash->{helper}{updateIntervall};
+        }
+        $hash->{nextUpdate}=localtime($nextUpdate);
+        $hash->{helper}{nextUpdate}=$nextUpdate;
+    } else {
+        $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+    }
+}
+
 sub ModbusRegister_Notify(@) {##########################################################
   my ($hash,$dev) = @_;
   if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
     my $name = $hash->{NAME};
 
     if (defined($attr{$name}{updateIntervall})) {
-      Log 0,"$name - removing updateIntervall";
       $attr{$name}{updateInterval}=$attr{$name}{updateIntervall} if(!defined($attr{$name}{updateInterval}));
       delete $attr{$name}{updateIntervall};
     }
