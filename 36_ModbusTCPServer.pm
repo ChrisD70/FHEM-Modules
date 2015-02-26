@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0009 $
+# $Id: 36_ModbusTCPServer.pm 0010 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -9,6 +9,7 @@
 # 150221 0007 added info to bad frame message
 # 150222 0008 fixed info for bad frame message
 # 150222 0009 fixed typo in attribute name pollIntervall, added ModbusTCPServer_CalcNextUpdate
+# 150225 0010 check if request is already in rqueue
 # TODO:
 
 package main;
@@ -155,7 +156,6 @@ sub ModbusTCPServer_Notify(@) {#################################################
   if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
     my $name = $hash->{NAME};
     if (defined($attr{$name}{pollIntervall})) {
-      Log 0,"$name - removing pollIntervall";
       $attr{$name}{pollInterval}=$attr{$name}{pollIntervall} if(!defined($attr{$name}{pollInterval}));
       delete $attr{$name}{pollIntervall};
     }
@@ -357,6 +357,8 @@ sub ModbusTCPServer_CalcNextUpdate(@) {#########################################
     my ($hash)=@_;
     my $name = $hash->{NAME};
 
+    $hash->{helper}{lastUpdate}=$hash->{helper}{nextUpdate} if(defined($hash->{helper}{nextUpdate}));
+    $hash->{lastUpdate}=$hash->{nextUpdate};
     if(defined($hash->{helper}{updateIntervall})) {
         if(defined($hash->{helper}{alignUpdateInterval})) {
             my $t=int(time());
@@ -367,7 +369,6 @@ sub ModbusTCPServer_CalcNextUpdate(@) {#########################################
             while($nextUpdate<time()) {
                 $nextUpdate+=$hash->{helper}{updateIntervall};
             }
-            $hash->{nextUpdate}=localtime($nextUpdate);
             $hash->{helper}{nextUpdate}=$nextUpdate;
         } else {
             $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
@@ -375,6 +376,7 @@ sub ModbusTCPServer_CalcNextUpdate(@) {#########################################
     } else {
         $hash->{helper}{nextUpdate}=time()+0.01;
     }
+    $hash->{nextUpdate}=localtime($hash->{helper}{nextUpdate});
 }
 
 sub ModbusTCPServer_Poll($) {##################################################
@@ -441,6 +443,8 @@ ModbusTCPServer_Timeout($) ##################################################
   my($in ) = shift;
   my(undef,$name) = split(':',$in);
   my $hash = $defs{$name};
+
+  Log3 $hash, 1,"ModbusTCPServer_Timeout, request: ".($hash->{helper}{lastFrame});
 
   $hash->{STATE} = "timeout";
   $hash->{helper}{state}="idle";
@@ -519,6 +523,7 @@ sub
 ModbusTCPServer_AddRQueue($$) ##################################################
 {
   my ($hash, $bstring) = @_;
+  
   if(!$hash->{RQUEUE}) {
     if(($hash->{helper}{state} eq "idle")&&(!defined($hash->{WQUEUE}))) {
       $hash->{RQUEUE} = [ $bstring ];
@@ -529,8 +534,16 @@ ModbusTCPServer_AddRQueue($$) ##################################################
       InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleReadQueue", $hash, 1);
     }
   } else {
-    Log3 $hash, 5,"adding to RQUEUE - ".scalar(@{$hash->{RQUEUE}});
-    push(@{$hash->{RQUEUE}}, $bstring);
+    my $add=1;
+    for my $el (@{$hash->{RQUEUE}}) {
+        if($el eq $bstring) {
+            $add=0;
+        }
+    }
+    if ($add==1) {
+        Log3 $hash, 5,"adding to RQUEUE - ".scalar(@{$hash->{RQUEUE}});
+        push(@{$hash->{RQUEUE}}, $bstring);
+    }
   }
 }
 
