@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0012 $
+﻿# $Id: 37_ModbusRegister.pm 0013 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -11,6 +11,7 @@
 # 150215 0010 fixed bug with registerType and disableRegisterMapping (thanks Dieter1)
 # 150221 0011 fixed typo in attribute name updateIntervall
 # 150222 0012 added alignUpdateInterval
+# 150226 0013 force timestamp if alignUpdateInterval is used
 # TODO:
 
 package main;
@@ -292,6 +293,9 @@ ModbusRegister_Parse($$)
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
         next if($nvals!=$lh->{helper}{nread});
+        next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0));
+        next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}));
+        
         $lh->{ModbusRegister_lastRcv} = TimeNow();
         my $v=$vals[0];
         my $plcDataType=AttrVal($n,"plcDataType","x");
@@ -338,10 +342,16 @@ ModbusRegister_Parse($$)
           $v=$v*$lh->{helper}{cnv}{a}+$lh->{helper}{cnv}{b};
         }
         readingsBeginUpdate($lh);
+        if(defined($lh->{helper}{alignUpdateInterval}) && defined($lh->{helper}{lastUpdate})) {
+            my $fmtDateTime = FmtDateTime($lh->{helper}{lastUpdate});
+            $lh->{".updateTime"} = $lh->{helper}{lastUpdate}; # in seconds since the epoch
+            $lh->{".updateTimestamp"} = $fmtDateTime;
+        }
         readingsBulkUpdate($lh,"state",$v);
         readingsBulkUpdate($lh,"RAW",unpack "H*",pack "n*", @vals); #sprintf("%08x",pack "n*", @vals));
         readingsBulkUpdate($lh,AttrVal($n,"stateAlias",undef),$v) if(defined(AttrVal($n,"stateAlias",undef)));  # CD 0007
         readingsEndUpdate($lh,1);
+        $lh->{helper}{lastUpdate}=0;
         push(@list, $n); 
       }
     }
@@ -488,6 +498,7 @@ sub ModbusRegister_CalcNextUpdate(@) {##########################################
     my ($hash)=@_;
     my $name = $hash->{NAME};
 
+    delete($hash->{helper}{lastUpdate}) if(defined($hash->{helper}{lastUpdate}));
     if(defined($hash->{helper}{alignUpdateInterval})) {
         my $t=int(time());
         my @lt = localtime($t);
@@ -554,7 +565,6 @@ ModbusRegister_SetMinMax($)
   if($plcDataType=~ /^QWORD/) {
     $vmin=0;
     $vmax=2**64-1;
-    Log 0,$vmax;
   }
   # CD 0008 end
   if($plcDataType=~ /^DINT/) {
