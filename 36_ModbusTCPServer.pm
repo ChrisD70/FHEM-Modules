@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0010 $
+# $Id: 36_ModbusTCPServer.pm 0011 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -10,6 +10,7 @@
 # 150222 0008 fixed info for bad frame message
 # 150222 0009 fixed typo in attribute name pollIntervall, added ModbusTCPServer_CalcNextUpdate
 # 150225 0010 check if request is already in rqueue
+# 150227 0011 added combineReads, try to recover bad frames
 # TODO:
 
 package main;
@@ -101,6 +102,7 @@ sub ModbusTCPServer_Initialize($) {
                      "pollIntervall pollInterval " .
                      "timeout " .
                      "presenceLink " .
+                     "combineReads " .
                      $readingFnAttributes;
 }
 sub ModbusTCPServer_Define($$) {#########################################################
@@ -171,6 +173,8 @@ sub ModbusTCPServer_Notify(@) {#################################################
 }
 sub ModbusTCPServer_Attr(@) {############################################################
   my ($cmd,$name, $aName,$aVal) = @_;
+  my $hash = $defs{$name};
+
   if(($aName eq "pollIntervall") || ($aName eq "pollInterval")) {
     if ($cmd eq "set") {
       $attr{$name}{pollInterval} = $aVal;
@@ -183,6 +187,31 @@ sub ModbusTCPServer_Attr(@) {###################################################
   elsif($aName eq "timeout") {
     if ($cmd eq "set") {
       $attr{$name}{timeout} = $aVal;
+    }
+  }
+  elsif($aName eq "combineReads") {
+    if ($cmd eq "set") {
+        if(defined($aVal)) {
+            my @args=split(':',$aVal);
+            if(defined($args[0])) {
+                if(($args[0]<0)||($args[0]>118)) {
+                    return "invalid value for combineReads";
+                }
+                $hash->{helper}{combineReads}{cfg}{maxSpace}=$args[0];
+                if(defined($args[1])) {
+                    if(($args[1]<8)||($args[1]>126)) {
+                        return "invalid value for combineReads";
+                    }
+                    $hash->{helper}{combineReads}{cfg}{maxSize}=$args[1];
+                } else {
+                    $hash->{helper}{combineReads}{cfg}{maxSize}=120;
+                }
+            } else {
+                return "invalid value for combineReads";
+            }
+        }
+    } else {
+        delete($hash->{helper}{combineReads}) if(defined($hash->{helper}{combineReads}));
     }
   }
   elsif($aName eq "dummy"){
@@ -251,7 +280,7 @@ sub ModbusTCPServer_Parse($$) {#################################################
   my $lastFrame="unknown";
   $lastFrame=$hash->{helper}{lastFrame} if (defined($hash->{helper}{lastFrame}));
   
-  ModbusTCPServer_LogFrame($hash,"Received",$rmsg,5);
+  ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: received",$rmsg,5);
 
   if($hash->{helper}{state} eq "idle") {
     return undef;
@@ -262,10 +291,35 @@ sub ModbusTCPServer_Parse($$) {#################################################
   my ($rx_hd_tr_id, $rx_hd_pr_id, $rx_hd_length, $rx_hd_unit_id, $rx_bd_fc, $f_body) = unpack "nnnCCa*", $rmsg;
   # check header
   if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
-        ($rx_hd_length == bytes::length($rmsg)-6) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
-    Log3 $hash, 1,"ModbusTCPServer: bad frame, sent: $lastFrame";
-    ModbusTCPServer_LogFrame($hash,"ModbusTCPServer: bad frame, received: ",$rmsg,1);
-    $hash->{STATE} = "error";
+        ($rx_hd_length == bytes::length($rmsg)-6) && ($hash->{helper}{fc} == $rx_bd_fc) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
+        
+    if(($rx_hd_tr_id == $hash->{helper}{last_hd_tr_id}) && ($rx_bd_fc == $hash->{helper}{last_fc}) && ($rx_hd_length <= bytes::length($rmsg)-6) ) {
+        ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: got frame for previous request: ",$rmsg,3);
+        my @btmp = unpack('C*',$rmsg);
+        my $n=$rx_hd_length+6;
+        my $act_hd_tr_id=$hash->{helper}{hd_tr_id};
+        my $act_fc=$hash->{helper}{fc};
+        $hash->{helper}{hd_tr_id}=$hash->{helper}{last_hd_tr_id};
+        $hash->{helper}{fc}=$hash->{helper}{last_fc};
+        ModbusTCPServer_Parse($hash,pack("C$n",@btmp));
+        InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1) if(!defined($hash->{helper}{badFrame}));
+        $hash->{helper}{hd_tr_id}=$act_hd_tr_id;
+        $hash->{helper}{fc}=$act_fc;
+        $hash->{helper}{badFrame}=1;
+        $hash->{helper}{state}="active";
+        if($#btmp>$n) {
+            ModbusTCPServer_Parse($hash,pack("C*",@btmp[$n..$#btmp]));
+        }
+    } else {
+        Log3 $hash, 1,"ModbusTCPServer_Parse: bad frame, sent: $lastFrame";
+        ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: bad frame, received: ",$rmsg,1);
+        $hash->{STATE} = "error";
+        if(!defined($hash->{helper}{badFrame})) {
+            $hash->{helper}{badFrame}=1;
+        } else {
+            delete($hash->{helper}{badFrame});
+        }
+    }
   } else {
     # check except
     if ($rx_bd_fc > 0x80) {
@@ -273,7 +327,7 @@ sub ModbusTCPServer_Parse($$) {#################################################
       my ($exp_code) = unpack "C", $f_body;
       $hash->{LAST_ERROR}  = MB_EXCEPT_ERR;
       $hash->{LAST_EXCEPT} = $exp_code;
-      Log3 $hash, 2,"ModbusTCPServer: except (code $exp_code)";
+      Log3 $hash, 2,"ModbusTCPServer_Parse: except (code $exp_code)";
       $hash->{STATE} = "error";
     } else {
       $hash->{STATE} = "ok";
@@ -282,7 +336,23 @@ sub ModbusTCPServer_Parse($$) {#################################################
       }
       if(($rx_bd_fc==READ_HOLDING_REGISTERS)||($rx_bd_fc==READ_INPUT_REGISTERS)) {
         my $nvals=unpack("x8C", $rmsg)/2;
-        Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9n$nvals", $rmsg)), undef); 
+        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+            my $off;
+            for my $r (@{$hash->{helper}{combineReads}{registers}})
+            {
+                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                        $off=9+($r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2])*2;
+                        Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg)), undef); 
+                        #Log 0, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg));
+                    }
+                }
+               # if($r->[0]==$rx_hd_unit_id) && ($r->[1]==)
+            }
+            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+        } else {
+            Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9n$nvals", $rmsg)), undef); 
+        }
       }
       if($rx_bd_fc==WRITE_SINGLE_REGISTER) {
         Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
@@ -298,9 +368,12 @@ sub ModbusTCPServer_Parse($$) {#################################################
         ;
       }
     }
+    delete($hash->{helper}{badFrame}) if(defined($hash->{helper}{badFrame}));
   }
-  RemoveInternalTimer( "timeout:".$name);
-  $hash->{helper}{state}="idle";
+  if(!defined($hash->{helper}{badFrame})) {
+    RemoveInternalTimer( "timeout:".$name);
+    $hash->{helper}{state}="idle";
+  }
 }
 
 sub ModbusTCPServer_Ready($) {###########################################################
@@ -330,11 +403,16 @@ sub ModbusTCPServer_SimpleWrite(@) {############################################
   my $name = $hash->{NAME};
   my $len = length($msg);
   if($hash->{TCPDev}) {
-    $hash->{helper}{hd_tr_id}=unpack("n",$msg);
+    $hash->{helper}{last_hd_tr_id}=$hash->{helper}{hd_tr_id} if(defined($hash->{helper}{hd_tr_id}) && ($hash->{helper}{hd_tr_id}!=-1));
+    $hash->{helper}{last_fc}=$hash->{helper}{fc} if(defined($hash->{helper}{fc}) && ($hash->{helper}{fc}!=-1));
+    my ($tx_hd_tr_id, $tx_hd_pr_id, $tx_hd_length, $tx_hd_unit_id, $tx_bd_fc, $f_body) = unpack "nnnCCa*", $msg;
+    $hash->{helper}{hd_tr_id}=$tx_hd_tr_id;
+    $hash->{helper}{fc}=$tx_bd_fc;
     $hash->{helper}{state}="active";
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1);
     ModbusTCPServer_LogFrame($hash,"SimpleWrite",$msg,5);
     ModbusTCPServer_UpdateStatistics($hash,0,1,0,bytes::length($msg));
+    $hash->{helper}{lastSimpleWrite}=$msg;
     syswrite($hash->{TCPDev}, $msg);     
   }
 }
@@ -383,6 +461,8 @@ sub ModbusTCPServer_Poll($) {##################################################
   my($in ) = shift;
   my(undef,$name) = split(':',$in);
   my $hash = $defs{$name};
+  
+  my @registers;
 
   if($hash->{STATE} ne "disconnected") {
     my $tn = gettimeofday();
@@ -398,25 +478,77 @@ sub ModbusTCPServer_Poll($) {##################################################
       foreach(@chlds) {
         my $chash=$defs{$_};
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
-          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<time())) {
+          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
             my $msg=$chash->{helper}{readCmd};
             my $tx_hd_length     = bytes::length($msg);
 
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
-            ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
+            if(!defined($hash->{helper}{combineReads})) {
+                ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
+                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
+            } else {
+                push(@registers,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, $chash->{helper}{nread}]);
+            }
             ModbusTCPServer_CalcNextUpdate($chash);
           }
         }
       }
+
+      if(defined($hash->{helper}{combineReads})) {
+          my @sorted=sort {
+            if($a->[0] == $b->[0]) {
+                if($a->[1] == $b->[1]) {
+                    return $a->[2] <=> $b->[2]
+                } else {
+                    return $a->[1] <=> $b->[1]
+                }
+            } else {
+                return $a->[0] <=> $b->[0]
+            }} @registers;
+          my $ui=-1;
+          my $rt=-1;
+          my $st=-1;
+          my $n=-1;
+          $hash->{helper}{seq}=65000 if(!defined($hash->{helper}{seq}));
+          delete($hash->{helper}{combineReads}{registers}) if defined($hash->{helper}{combineReads}{registers});
+          for my $r (@sorted)
+          {
+            push(@{$hash->{helper}{combineReads}{registers}},$r);
+            if($ui != $r->[0]) {
+                $ui=$r->[0]; $rt=$r->[1]; $st=$r->[2]; $n=$r->[3];
+            } else {
+                if($rt != $r->[1]) {
+                    if($rt != -1) {
+                        ModbusTCPServer_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                    }
+                    $rt=$r->[1]; $st=$r->[2]; $n=$r->[3];
+                } else {
+                    if($st+$n<$r->[2]+$r->[3]) {
+                        if(($r->[2]+$r->[3]-$st<=$hash->{helper}{combineReads}{cfg}{maxSize}) &&
+                            ($r->[2]-($st+$n)<=$hash->{helper}{combineReads}{cfg}{maxSpace})) {
+                            $n=$r->[2]+$r->[3]-$st;
+                        } else {
+                            ModbusTCPServer_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                            $st=$r->[2]; $n=$r->[3];
+                        }
+                    }
+                }
+            }
+            $hash->{helper}{seq}=65000 if($hash->{helper}{seq}>65500);
+          }
+          if($rt != -1) {
+            ModbusTCPServer_AddCombinedReads($hash, $ui, $rt, $st, $n);
+          }
+      }
+      
       @chlds=devspec2array("TYPE=ModbusCoil");
 
       foreach(@chlds) {
         my $chash=$defs{$_};
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
-          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<time())) {
+          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
             my $msg=$chash->{helper}{readCmd};
             my $tx_hd_length     = bytes::length($msg);
 
@@ -438,6 +570,18 @@ sub ModbusTCPServer_Poll($) {##################################################
 }
 
 sub
+ModbusTCPServer_AddCombinedReads($$$$$) ##################################################
+{
+    my ($hash, $ui, $rt, $st, $n) = @_;
+
+    my $tx=pack("nnnCCnn", $hash->{helper}{seq}, 0, 6, $ui, $rt, $st, $n);
+    $hash->{helper}{combineReads}{data}{$hash->{helper}{seq}}=[$ui, $rt, $st, $n];
+    $hash->{helper}{seq}++;
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx);
+}
+
+sub
 ModbusTCPServer_Timeout($) ##################################################
 {
   my($in ) = shift;
@@ -448,7 +592,10 @@ ModbusTCPServer_Timeout($) ##################################################
 
   $hash->{STATE} = "timeout";
   $hash->{helper}{state}="idle";
+  $hash->{helper}{last_hd_tr_id}=$hash->{helper}{hd_tr_id};
+  $hash->{helper}{last_fc}=$hash->{helper}{fc};
   $hash->{helper}{hd_tr_id}=-1;
+  $hash->{helper}{fc}=-1;
 }
 
 sub
@@ -579,7 +726,7 @@ sub ModbusTCPServer_LogFrame($$$$) {
   $dump[0] = "[".$dump[0];
   $dump[5] = $dump[5]."]";
 
-  $hash->{helper}{lastFrame}=$c." ".join(" ",@dump);
+  $hash->{helper}{lastFrame}=$c." ".join(" ",@dump) if($c eq 'SimpleWrite');
 
   Log3 $hash, $verbose,$c." ".join(" ",@dump);
 }
@@ -633,6 +780,10 @@ sub ModbusTCPServer_UpdateStatistics($$$$$) {###################################
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
     <li><a name="">pollInterval</a><br>
         Intervall in seconds for the reading cycle. Default: 0.5</li><br>
+    <li><a name="">combineReads</a><br>
+        Combine register reads if possible. The attribute accepts two values separated by a colon. The first value
+        defines how many consecutive unused registers will be included (1-118), the second defines the maximum
+        number of register per read (8-126).</li><br>
     <li><a name="">timeout</a><br>
         Timeout in seconds waiting for data from the server. Default: 3</li><br>
     <li><a name="">presenceLink</a><br>
