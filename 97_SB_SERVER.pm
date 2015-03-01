@@ -32,7 +32,7 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0011 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0012 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -59,7 +59,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0011';
+use constant SB_SERVER_VERSION => '0012';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -627,8 +627,10 @@ sub SB_SERVER_Read( $ ) {
     }
 
     # CD 0009 check for reload of newer version
-    if (!defined($hash->{helper}{SB_SERVER_VERSION}) || ($hash->{helper}{SB_SERVER_VERSION} ne SB_SERVER_VERSION))
+    $hash->{helper}{SB_SERVER_VERSION}=0 if (!defined($hash->{helper}{SB_SERVER_VERSION}));     # CD 0012
+    if ($hash->{helper}{SB_SERVER_VERSION} ne SB_SERVER_VERSION)
     {
+        Log3( $hash, 1,"SB_SERVER_Read: SB_SERVER_VERSION changed from ".$hash->{helper}{SB_SERVER_VERSION}." to ".SB_SERVER_VERSION);  # CD 0012
         $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
         DevIo_SimpleWrite( $hash, "version ?\n", 0 );
         DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
@@ -654,7 +656,7 @@ sub SB_SERVER_Write( $$$ ) {
     my ( $hash, $fn, $msg ) = @_;
     my $name = $hash->{NAME};
 
-    Log3( $hash, 4, "SB_SERVER_Write($name): called with FN:$fn" );  # CD TEST 4
+    Log3( $hash, 4, "SB_SERVER_Write($name): called with FN:$fn" ); # unless($fn=~m/\?/);  # CD TEST 4
 
     if( !defined( $fn ) ) {
 	return( undef );
@@ -664,9 +666,15 @@ sub SB_SERVER_Write( $$$ ) {
 	Log3( $hash, 4, "SB_SERVER_Write: MSG:$msg" );
     }
 
+    # CD 0012 fhemrelay Meldungen nicht an den LMS schicken sondern direkt an Dispatch übergeben
+    if($fn =~ m/fhemrelay/) {
+    	SB_SERVER_DispatchCommandLine( $hash, $fn );
+        return( undef );
+    }
+    
     if( ReadingsVal( $name, "serversecure", "0" ) eq "1" ) {
 	if( ( $hash->{USERNAME} ne "?" ) && ( $hash->{PASSWORD} ne "?" ) ) {
-	    # we need to send username and passord first
+	    # we need to send username and password first
 	} else {
 	    my $retmsg = "SB_SERVER_Write: Server needs username and " . 
 		"password but you did not specify those. No sending";	
