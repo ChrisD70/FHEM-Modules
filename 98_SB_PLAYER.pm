@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0028 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0029 CD/MM/Matthew $
 #
 #  FHEM Modue for Squeezebox Players
 #
@@ -191,9 +191,11 @@ sub SB_PLAYER_Attr( @ ) {
                 delete($hash->{helper}{ttsOptions}) if(defined($hash->{helper}{ttsOptions}));
                 for my $opt (@options) {
                     $hash->{helper}{ttsOptions}{debug}=1 if($opt=~ m/debug/);
+                    $hash->{helper}{ttsOptions}{debugsaverestore}=1 if($opt=~ m/debugsaverestore/); # CD 0029
                     $hash->{helper}{ttsOptions}{unsync}=1 if($opt=~ m/unsync/);
                     $hash->{helper}{ttsOptions}{nosaverestore}=1 if($opt=~ m/nosaverestore/);
                     $hash->{helper}{ttsOptions}{forcegroupon}=1 if($opt=~ m/forcegroupon/);
+                    $hash->{helper}{ttsOptions}{internalsave}=1 if($opt=~ m/internalsave/);         # CD 0029
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -684,6 +686,12 @@ sub SB_PLAYER_Parse( $$ ) {
                 SB_PLAYER_Amplifier( $hash );
                 SB_PLAYER_QueryElapsedTime( $hash );    # CD 0014
             } # CD 0014
+            # CD 0029 start
+            if(defined($hash->{helper}{ttsOptions}{logplay})) {
+                Log3( $hash, 0, "SB_PLAYER_Parse: $name: mode play");
+                delete($hash->{helper}{ttsOptions}{logplay});
+            }
+            # CD 0029
             # CD 0028 start
             if($hash->{helper}{ttsstate}==TTS_WAITFORPLAY) {
                 SB_PLAYER_SetTTSState($hash,TTS_PLAYING,1,0);
@@ -914,6 +922,12 @@ sub SB_PLAYER_Parse( $$ ) {
                 IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
                 #IOWrite( $hash, "$hash->{PLAYERMAC} playlist save fhem_talk\n" );
             }
+            # CD 0029 start
+            if(defined($hash->{helper}{ttsOptions}{logloaddone})) {
+                Log3( $hash, 0, "SB_PLAYER_Parse: $name: load_done");
+                delete($hash->{helper}{ttsOptions}{logloaddone});
+            }
+            # CD 0029 end
             if(defined($hash->{helper}{recallPending})) {
                 delete($hash->{helper}{recallPending});
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,1);
@@ -1891,6 +1905,13 @@ sub SB_PLAYER_Recall($) {
 
     # wurde überhaupt etwas gespeichert ?
     if(defined($hash->{helper}{savedPlayerState})) {
+        # CD 0029 start
+        if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
+            Log3( $hash, 0, "SB_PLAYER_Recall: $name: restoring...");
+            $hash->{helper}{ttsOptions}{logloaddone}=1;
+            $hash->{helper}{ttsOptions}{logplay}=1;
+        }
+        # CD 0029 end
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 0\n");
         if (defined($hash->{helper}{savedPlayerState}{playlistIds})) {
             # wegen Shuffle Playlist neu erzeugen
@@ -2001,22 +2022,59 @@ sub SB_PLAYER_Save($) {
     $hash->{helper}{savedPlayerState}{playlist}=ReadingsVal($name,"playlists","-");
     $hash->{helper}{savedPlayerState}{favorite}=ReadingsVal($name,"favorites","-");
 
+    # CD 0029 start
+    delete($hash->{helper}{ttsOptions}{logloaddone}) if(defined($hash->{helper}{ttsOptions}{logloaddone}));
+    delete($hash->{helper}{ttsOptions}{logplay}) if(defined($hash->{helper}{ttsOptions}{logplay}));
+    # CD 0029 end
+
     # nur 1 Track -> playlist save verwenden
-    if(ReadingsVal($name,"playlistTracks",1)<=1) {
+    if((ReadingsVal($name,"playlistTracks",1)<=1)&&(!defined($hash->{helper}{ttsOptions}{internalsave}))) {
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist save fhem_$hash->{NAME} silent:1\n" );
+        # CD 0029 start
+        if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
+            Log3( $hash, 0, "SB_PLAYER_Save: $name: 1 track in playlist, using playlist save");
+        }
+        # CD 0029 end
     } else {
         # mehr als 1 Track, auf shuffle prüfen (playlist resume funktioniert nicht richtig wenn shuffle nicht auf off steht)
         # bei negativen Ids (Remote-Streams) und shuffle geht die vorherige Reihenfolge verloren, kein Workaround bekannt
         # es werden maximal 500 Ids gespeichert, bei mehr als 500 Einträgen in der Playlists geht die vorherige Reihenfolge verloren (zu ändern)
-        if (    (ReadingsVal($name,"shuffle","?") eq "off") ||
+        if ((    (ReadingsVal($name,"shuffle","?") eq "off") ||
                 (!defined($hash->{helper}{playlistIds})) ||
                 ($hash->{helper}{playlistIds}=~ /-/) ||
-                (ReadingsVal($name,"playlistTracks",0)>500)) {
+                (ReadingsVal($name,"playlistTracks",0)>500)) && !defined($hash->{helper}{ttsOptions}{internalsave})) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist save fhem_$hash->{NAME} silent:1\n" );
+            # CD 0029 start
+            if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
+                Log3( $hash, 0, "SB_PLAYER_Save: $name: multiple tracks in playlist, using playlist save");
+            }
+            # CD 0029 end
         } else {
             $hash->{helper}{savedPlayerState}{playlistIds}=$hash->{helper}{playlistIds};
+            if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
+                # CD 0029 start
+                if(defined($hash->{helper}{ttsOptions}{internalsave})) {
+                    Log3( $hash, 0, "SB_PLAYER_Save: $name: forcing {helper}{playlistIds}: ".$hash->{helper}{playlistIds});
+                    Log3( $hash, 0, "SB_PLAYER_Save: $name: warning - negative playlist ids cannot be restored") if ($hash->{helper}{playlistIds}=~ /-/);
+                } else {
+                    Log3( $hash, 0, "SB_PLAYER_Save: $name: multiple tracks in playlist, shuffle active, using {helper}{playlistIds} (".$hash->{helper}{playlistIds}.")");
+                }
+                # CD 0029 end
+            }
         }
     }
+    # CD 0029 start
+    if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: power ".$hash->{helper}{savedPlayerState}{power} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: elapsedTime ".$hash->{helper}{savedPlayerState}{elapsedTime} ) if (defined($hash->{helper}{savedPlayerState}{elapsedTime} ));
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: playlistCurrentTrack ".$hash->{helper}{savedPlayerState}{playlistCurrentTrack} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: playStatus ".$hash->{helper}{savedPlayerState}{playStatus} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: repeat ".$hash->{helper}{savedPlayerState}{repeat} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: volumeStraight ".$hash->{helper}{savedPlayerState}{volumeStraight} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: playlist ".$hash->{helper}{savedPlayerState}{playlist} );
+        Log3( $hash, 0, "SB_PLAYER_Save: $name: favorite ".$hash->{helper}{savedPlayerState}{favorite} );
+    }
+    # CD 0029 end
 }
 # CD 0014 end
 
