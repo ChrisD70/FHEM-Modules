@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0013 $
+﻿# $Id: 37_ModbusRegister.pm 0014 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -12,6 +12,7 @@
 # 150221 0011 fixed typo in attribute name updateIntervall
 # 150222 0012 added alignUpdateInterval
 # 150226 0013 force timestamp if alignUpdateInterval is used
+# 150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
 # TODO:
 
 package main;
@@ -293,8 +294,8 @@ ModbusRegister_Parse($$)
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
         next if($nvals!=$lh->{helper}{nread});
-        next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0));
-        next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}));
+        next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0) && ($fc!=WRITE_SINGLE_REGISTER));
+        next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}) && ($fc!=WRITE_SINGLE_REGISTER));
         
         $lh->{ModbusRegister_lastRcv} = TimeNow();
         my $v=$vals[0];
@@ -342,7 +343,7 @@ ModbusRegister_Parse($$)
           $v=$v*$lh->{helper}{cnv}{a}+$lh->{helper}{cnv}{b};
         }
         readingsBeginUpdate($lh);
-        if(defined($lh->{helper}{alignUpdateInterval}) && defined($lh->{helper}{lastUpdate})) {
+        if(defined($lh->{helper}{alignUpdateInterval}) && defined($lh->{helper}{lastUpdate}) && ($fc!=WRITE_SINGLE_REGISTER)) {
             my $fmtDateTime = FmtDateTime($lh->{helper}{lastUpdate});
             $lh->{".updateTime"} = $lh->{helper}{lastUpdate}; # in seconds since the epoch
             $lh->{".updateTimestamp"} = $fmtDateTime;
@@ -351,7 +352,7 @@ ModbusRegister_Parse($$)
         readingsBulkUpdate($lh,"RAW",unpack "H*",pack "n*", @vals); #sprintf("%08x",pack "n*", @vals));
         readingsBulkUpdate($lh,AttrVal($n,"stateAlias",undef),$v) if(defined(AttrVal($n,"stateAlias",undef)));  # CD 0007
         readingsEndUpdate($lh,1);
-        $lh->{helper}{lastUpdate}=0;
+        $lh->{helper}{lastUpdate}=0 if ($fc!=WRITE_SINGLE_REGISTER);
         push(@list, $n); 
       }
     }
