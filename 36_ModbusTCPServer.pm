@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0011 $
+# $Id: 36_ModbusTCPServer.pm 0012 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -11,6 +11,7 @@
 # 150222 0009 fixed typo in attribute name pollIntervall, added ModbusTCPServer_CalcNextUpdate
 # 150225 0010 check if request is already in rqueue
 # 150227 0011 added combineReads, try to recover bad frames
+# 150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
 # TODO:
 
 package main;
@@ -347,7 +348,6 @@ sub ModbusTCPServer_Parse($$) {#################################################
                         #Log 0, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg));
                     }
                 }
-               # if($r->[0]==$rx_hd_unit_id) && ($r->[1]==)
             }
             delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
         } else {
@@ -359,7 +359,25 @@ sub ModbusTCPServer_Parse($$) {#################################################
       }
       if(($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
         my $nvals=unpack("x8C", $rmsg);
-        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9C$nvals", $rmsg)), undef); 
+        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+            $nvals*=8;
+            my $off;
+            my @coilvals=split('',unpack('x9b*',$rmsg));
+#            Log 0,unpack('x9b*',$rmsg);
+            for my $r (@{$hash->{helper}{combineReads}{coils}})
+            {
+                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                        $off=$r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2];
+#                        Log 0,"ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off];
+                        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off], undef); 
+                    }
+                }
+            }
+            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+        } else {
+            Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9C$nvals", $rmsg)), undef); 
+        }
       }
       if($rx_bd_fc==WRITE_SINGLE_COIL) {
         Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
@@ -463,6 +481,7 @@ sub ModbusTCPServer_Poll($) {##################################################
   my $hash = $defs{$name};
   
   my @registers;
+  my @coils;
 
   if($hash->{STATE} ne "disconnected") {
     my $tn = gettimeofday();
@@ -507,16 +526,23 @@ sub ModbusTCPServer_Poll($) {##################################################
             } else {
                 return $a->[0] <=> $b->[0]
             }} @registers;
+          #use Data::Dump 'dump';
+          #Log 0,dump @sorted;            
           my $ui=-1;
           my $rt=-1;
           my $st=-1;
           my $n=-1;
           $hash->{helper}{seq}=65000 if(!defined($hash->{helper}{seq}));
           delete($hash->{helper}{combineReads}{registers}) if defined($hash->{helper}{combineReads}{registers});
+          my $rlast;
           for my $r (@sorted)
           {
-            push(@{$hash->{helper}{combineReads}{registers}},$r);
+            push(@{$hash->{helper}{combineReads}{registers}},$r) if(defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])));
+            $rlast=$r;
             if($ui != $r->[0]) {
+                if($ui != -1) {
+                    ModbusTCPServer_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                }
                 $ui=$r->[0]; $rt=$r->[1]; $st=$r->[2]; $n=$r->[3];
             } else {
                 if($rt != $r->[1]) {
@@ -555,11 +581,68 @@ sub ModbusTCPServer_Poll($) {##################################################
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
-            ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
-            $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
+            if(!defined($hash->{helper}{combineReads})) {
+                ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
+                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
+            } else {
+                push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1]);
+            }
+            ModbusTCPServer_CalcNextUpdate($chash);
           }
         }
+      }
+      if(defined($hash->{helper}{combineReads})) {
+          my @sorted=sort {
+            if($a->[0] == $b->[0]) {
+                if($a->[1] == $b->[1]) {
+                    return $a->[2] <=> $b->[2]
+                } else {
+                    return $a->[1] <=> $b->[1]
+                }
+            } else {
+                return $a->[0] <=> $b->[0]
+            }} @coils;
+          #Log 0,dump @sorted;            
+          my $ui=-1;
+          my $rt=-1;
+          my $st=-1;
+          my $n=-1;
+          $hash->{helper}{seqCoils}=64000 if(!defined($hash->{helper}{seqCoils}));
+          delete($hash->{helper}{combineReads}{coils}) if defined($hash->{helper}{combineReads}{coils});
+          my $rlast;
+          for my $r (@sorted)
+          {
+            push(@{$hash->{helper}{combineReads}{coils}},$r) if(defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])));
+            $rlast=$r;
+            if($ui != $r->[0]) {
+                if($ui != -1) {
+                    ModbusTCPServer_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                }
+                $ui=$r->[0]; $rt=$r->[1]; $st=($r->[2])-($r->[2]%8); $n=8; #$r->[3]+($r->[2]%8);
+            } else {
+                if($rt != $r->[1]) {
+                    if($rt != -1) {
+                        ModbusTCPServer_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                    }
+                    $rt=$r->[1]; $st=($r->[2])-($r->[2]%8); $n=8;
+                } else {
+                    if($st+$n<$r->[2]+$r->[3]) {
+                        if(($r->[2]+$r->[3]-$st<=$hash->{helper}{combineReads}{cfg}{maxSize}) &&
+                            ($r->[2]-($st+$n)<=$hash->{helper}{combineReads}{cfg}{maxSpace})) {
+                            $n=$r->[2]+$r->[3]-$st;
+                            $n+=(8-($n%8)) if($n%8>0);
+                        } else {
+                            ModbusTCPServer_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                            $st=($r->[2])-($r->[2]%8); $n=8;
+                        }
+                    }
+                }
+            }
+            $hash->{helper}{seqCoils}=64000 if($hash->{helper}{seqCoils}>64500);
+          }
+          if($rt != -1) {
+            ModbusTCPServer_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+          }
       }
     }
     if($tn+$pollInterval<=gettimeofday()) {
@@ -567,6 +650,18 @@ sub ModbusTCPServer_Poll($) {##################################################
     }
     InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
   }
+}
+
+sub
+ModbusTCPServer_AddCombinedCoilReads($$$$$) ##################################################
+{
+    my ($hash, $ui, $rt, $st, $n) = @_;
+
+    my $tx=pack("nnnCCnn", $hash->{helper}{seqCoils}, 0, 6, $ui, $rt, $st, $n);
+    $hash->{helper}{combineReads}{data}{$hash->{helper}{seqCoils}}=[$ui, $rt, $st, $n];
+    $hash->{helper}{seqCoils}++;
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx);
 }
 
 sub
