@@ -1,0 +1,112 @@
+﻿97_SB_SERVER:
+  150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
+  150209 0011 - Alarmplaylisten an Player übertragen (benötigt 98_SB_PLAYER 0026 oder höher)
+              - weitere ungültige Zeichen aus Favoriten und Playlisten ausfiltern
+  150202 0010 - Encoding der Playlisten und Favoriten korrigiert
+  150201 0009 - URL der Favoriten abfragen und an Player verteilen
+              - Namen der Favoriten nicht mehr abschneiden bei Umlauten
+              - Umlaute bei Favoriten umwandeln statt zu löschen
+              - diverse Loglevel geändert
+              - in UTF8 gespeichert
+  141222 0008 - Testversion mit zusätzlichen Logausgaben
+  141220 0007 - PRESENCE hinzugefügt
+              - bei Verwendung von WOL Verbindungsaufbau beschleunigen
+              - Login und Passwort funktionieren wieder
+              - Broadcast ON an Player erst wenn Login funktioniert hat
+              - diverse Anpassungen am Reconnect, DevIo_Disconnected statt DevIo_CloseDev
+              - wenn CMDStack voll ist, ältesten Eintrag löschen
+              - nur CMDStack Einträge senden die nicht älter als 5 Minuten sind
+              - Dokumentation erweitert
+  141219 0006 - DevIo_setStates durch SB_SERVER_setStates ersetzt
+              - alle 30s Reconnectversuch in SB_SERVER_Ready              
+  141216 0005 - Reconnect für Rpi modifiziert
+  141213 0004 - Playlisten neu anfragen bei rename/delete
+              - Reconnect modifiziert
+  141210      - Reconnect-Logik überarbeitet
+              - alle zwischengespeicherten Befehle senden
+              - ID des letzten Favoriten korrigiert
+              - Behandlung ö und Ü in SB_SERVER_FavoritesName2UID geändert
+              - bei einem fehlenden Ping nicht sofort abschalten
+
+98_SB_PLAYER:
+  150303 0029 - zusätzliche Debug-Ausgaben für talk
+  150301 0028 - talk überarbeitet
+              - neues Attribut ttsVolume
+              - neues Attribut ttsOptions
+  150210 0027 - Cover Art wieder aktualisieren
+  150209 0026 - Alarmplaylisten vom Server empfangen (benötigt 97_SB_SERVER 0011 oder höher)
+              - MAC-Adresse beim define in lowercase konvertieren
+              - Coverart für LMS 7.8 und 7.9 geändert
+              - volDown und volUp aus der Dokumentation entfernt
+              - Coverart nicht so oft aktualisieren
+  150207 0025 - zufällige Zahl an coverarturl-Reading anhängen wegen Browser-Cache
+              - coverarturl bei lokalen Playlisten schneller aktualisieren
+  150202 0024 - Encoding für Favoriten korrigiert
+         0023 - Favoriten an alle Player der Syncgruppe verschicken
+  150201 0022 - erratenen Favoriten vom Sync-Master an verbundene Player weitergeben
+         0021 - URL der Favoriten speichern
+              - Erraten des Favoriten aus den Rückmeldungen des LMS geändert
+              - Achtung: geänderte Namen der Favoriten, nicht mehr kompatibel zu bestehendem Code
+  150131 0020 - FIX: bei 'alarm set' wurden bestehende Alarme nicht überschrieben
+              - Encoding der URL bei 'alarm set' geändert
+  150130 0019 - Fehler beim hinzufügen von Alarmen behoben
+              - synced-Reading hinzugefügt (Matthew)
+  150124 0018 - beim sync-Befehl können mehrere Player angegeben werden
+              - neue Internals mit den Namen der synchronisierten Player
+              - sync-Meldungen besser auswerten
+  150119 0017 - alarmsEnabled verwendet überall on/off
+              - shuffle song und album hinzugefügt
+              - Attribut updateReadingsOnSet hinzugefügt, wenn auf true werden die Readings bereits beim 'set' (mit einigen Ausnahmen) aktualisiert
+              - Zeichencodierung geändert für die playlist Befehle
+              - Fehlermeldung bei ISREMOTESTREAM behoben
+              - Dokumentation vervollständigt
+  150112 0016 - Code von Markus M. übernommen
+              - Befehle und Readings alarmsSnooze, alarmsTimeout, alarmsDefaultVolume, alarmsFadeIn und alarmsEnabled hinzugefügt (Dokumentation fehlt noch)
+              - allalarms enable/disable verwendet playerprefs
+              - Alarmzeit kann auch ohne Sekunden angegeben werden
+              - Lautstärke ohne Nachkommastellen darstellen
+              - Namen der neuen Readings an lowerCamelCase angepasst
+              - Internals entfernt wenn es Readings gibt
+              - Alarm-Playlisten nur noch laden wenn nötig
+              - bei set allalarms add und set alarmX wdays können statt Zahlen Kürzel für Wochentage angegeben werden
+              - 'all', 'daily' und 'none' als Wochentage hinzugefügt
+              - Anzeige korrigiert wenn kein Wochentag ausgewählt ist
+              - Modul in UTF8 konvertiert
+  150110 0015 - Alarme nach Vorschlag von Markus M. implementiert,  dynamisch anlegen und löschen
+              - Alarme, on/off zusätzlich zu enabled/disabled erlauben
+              - set P alarmX repeat, wdays, time und sound hinzugefügt
+              - bei 'sound' Liste der bekannten Elemente des Servers durchsuchen
+              - neue Alarme über set P allalarms add ... anlegen
+              - alle Alarme über set P allalarms delete löschen
+              - inaktive Alarme abfragen und anzeigen
+  150109 0014 - Befehl playlist korrigiert
+              - playlist artist korrigiert
+              - playlist year und genre hinzugefügt
+              - save und recall wieder aktiviert (inkl. Position innerhalb vom Track)
+              - Laufzeit aktueller Track anzeigen
+              - Anzahl Tracks in Playlist und aktueller Track anzeigen
+              - sayText Befehl hinzugefügt (== talk)
+              - Playlisten die mit fhem_* beginnen ignorieren
+              - '-' bei Favoriten und Playlists hinzugefügt
+              - Timer umbenannt
+              - Debug-Ausgaben für Favoriten entfernt
+  141227 0013 - 'power off' ändert 'presence' nicht mehr
+              - Coverart-Weblink nur bei Änderung modifizieren
+              - diverse Logausgaben entfernt
+  141224 0012 - bei 'playlist stop' 'power' nicht auf off setzen
+              - Amplifier aus verzögern (über Attribut 'amplifierDelayOff')
+              - Code geändert damit Events für Amplifier korrekt funktionieren
+  141221 0011 - Coverart korrigiert wenn keine URL mitgeschickt wird
+              - Link für Default-Coverart korrigiert
+              - ? nicht als Playlistenname übernehmen
+              - wenn 'power' beim Server auf on geht nicht sofort 'power' bei allen Playern auf on setzen, GetStatus abwarten
+  141213 0010 - globale Variablen nach $hash->{helper} verschoben wegen Probleme beim reload
+              - prefset server mute hinzugefügt
+  141210      - Informationen aller Player einer Sync-Group aktualisieren
+              - 'prefset power' und 'prefset server mute' Meldungen des Servers verarbeiten
+              - Coverart verzögert abrufen, auch für Player in Sync-Group, Coverart als Reading
+              - Parsen der Leerzeichen in den Statusmeldungen geändert
+              - Update Readings geändert damit UserReadings funktionieren
+              - Unterstützung für syncVolume
+              - aktuell abgespielte Favoriten und Playlist setzen (scheint noch nicht immer zu funktionieren)
+              - Speicherort der Favoriten, Playlists und SyncMaster geändert (wegen reload)
