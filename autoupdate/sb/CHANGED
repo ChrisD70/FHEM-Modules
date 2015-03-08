@@ -1,12 +1,12 @@
 ﻿letzte Änderungen:
-
+    
 97_SB_SERVER:
   150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
 98_SB_PLAYER:
   150303 0029 - zusätzliche Debug-Ausgaben für talk
-
+    
 Historie Änderungen:
-
+    
 97_SB_SERVER:
   150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
   150209 0011 - Alarmplaylisten an Player übertragen (benötigt 98_SB_PLAYER 0026 oder höher)
@@ -36,7 +36,7 @@ Historie Änderungen:
               - ID des letzten Favoriten korrigiert
               - Behandlung ö und Ü in SB_SERVER_FavoritesName2UID geändert
               - bei einem fehlenden Ping nicht sofort abschalten
-
+    
 98_SB_PLAYER:
   150303 0029 - zusätzliche Debug-Ausgaben für talk
   150301 0028 - talk überarbeitet
