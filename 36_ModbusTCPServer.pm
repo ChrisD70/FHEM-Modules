@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0012 $
+# $Id: 36_ModbusTCPServer.pm 0013 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -12,6 +12,7 @@
 # 150225 0010 check if request is already in rqueue
 # 150227 0011 added combineReads, try to recover bad frames
 # 150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
+# 150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
 # TODO:
 
 package main;
@@ -303,12 +304,14 @@ sub ModbusTCPServer_Parse($$) {#################################################
         $hash->{helper}{hd_tr_id}=$hash->{helper}{last_hd_tr_id};
         $hash->{helper}{fc}=$hash->{helper}{last_fc};
         ModbusTCPServer_Parse($hash,pack("C$n",@btmp));
+        RemoveInternalTimer( "timeout:".$name); # CD 0013
         InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1) if(!defined($hash->{helper}{badFrame}));
         $hash->{helper}{hd_tr_id}=$act_hd_tr_id;
         $hash->{helper}{fc}=$act_fc;
         $hash->{helper}{badFrame}=1;
         $hash->{helper}{state}="active";
         if($#btmp>$n) {
+            ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: trying to parse additional data: ",pack("C*",@btmp[$n..$#btmp]),3);  # CD 0013
             ModbusTCPServer_Parse($hash,pack("C*",@btmp[$n..$#btmp]));
         }
     } else {
@@ -427,6 +430,7 @@ sub ModbusTCPServer_SimpleWrite(@) {############################################
     $hash->{helper}{hd_tr_id}=$tx_hd_tr_id;
     $hash->{helper}{fc}=$tx_bd_fc;
     $hash->{helper}{state}="active";
+    RemoveInternalTimer( "timeout:".$name); # CD 0013
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1);
     ModbusTCPServer_LogFrame($hash,"SimpleWrite",$msg,5);
     ModbusTCPServer_UpdateStatistics($hash,0,1,0,bytes::length($msg));
@@ -683,7 +687,7 @@ ModbusTCPServer_Timeout($) ##################################################
   my(undef,$name) = split(':',$in);
   my $hash = $defs{$name};
 
-  Log3 $hash, 1,"ModbusTCPServer_Timeout, request: ".($hash->{helper}{lastFrame});
+  Log3 $hash, 3,"ModbusTCPServer_Timeout, request: ".($hash->{helper}{lastFrame});
 
   $hash->{STATE} = "timeout";
   $hash->{helper}{state}="idle";
