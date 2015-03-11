@@ -1,0 +1,59 @@
+last changes:
+                                                                                                 .    
+36_ModbusRTU:
+  150215 0007 added support for hostname:port (by Dieter1)
+36_ModbusTCPServer:
+  150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
+37_ModbusCoil:
+  150221 0005 fixed typo in attribute name updateIntervall
+37_ModbusRegister:
+  150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
+                                                                                                 .    
+all changes:
+                                                                                                 .    
+36_ModbusRTU:
+  150215 0007 added support for hostname:port (by Dieter1)
+  150118 0006 removed defaultUnitId and presenceLink, completed documentation
+  140508 0005 added REREADCFG to ModbusRTU_Notify, added timer if $init_done==0
+  140507 0004 fixed call to parse in read function
+  140507 0003 added 'use bytes', fixed partial data handling in read function
+  140505 0002 fix dummy on startup
+  140503 0001 initial release
+                                                                                                 .    
+36_ModbusTCPServer:
+  150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
+  150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
+  150227 0011 added combineReads, try to recover bad frames
+  150225 0010 check if request is already in rqueue
+  150222 0009 fixed typo in attribute name pollIntervall, added ModbusTCPServer_CalcNextUpdate
+  150222 0008 fixed info for bad frame message
+  150221 0007 added info to bad frame message
+  150118 0006 removed defaultUnitId, completed documentation
+  140819 0005 added statistics and support for coils
+  140508 0004 added REREADCFG to ModbusTCPServer_Notify
+  140506 0003 added 'use bytes'
+  140505 0002 use address instead of register in Parse
+  140318 0001 initial release
+                                                                                                 .    
+37_ModbusCoil:
+  150221 0005 fixed typo in attribute name updateIntervall
+  150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
+  150118 0003 completed documentation
+  141108 0002 added 0 (off) and 1 (on) for set
+  140818 0001 initial release
+                                                                                                 .    
+37_ModbusRegister:
+  150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
+  150226 0013 force timestamp if alignUpdateInterval is used
+  150222 0012 added alignUpdateInterval
+  150221 0011 fixed typo in attribute name updateIntervall
+  150215 0010 fixed bug with registerType and disableRegisterMapping (thanks Dieter1)
+  150118 0009 completed documentation
+  150107 0008 added QWORD and QWORD_BE 
+  150106 0007 added 3WORD and 3WORD_BE 
+  140507 0006 delete $hash->{helper}{addr} in modules list on redefine (modify)
+  140507 0005 fixed {helper}{nread} in ModbusRegister_Define
+  140506 0004 added _BE plcDataTypes, use readingsBulkUpdate, fixed RAW
+  140505 0003 added fc to defptr, added RAW reading
+  140504 0002 added attributes registerType and disableRegisterMapping
+  140318 0001 initial release
