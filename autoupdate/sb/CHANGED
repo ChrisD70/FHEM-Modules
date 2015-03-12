@@ -1,13 +1,15 @@
-﻿letzte Änderungen:
-                                                                                                 .    
-97_SB_SERVER:
-  150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
+﻿97_SB_SERVER:
+  150308 0013 - updateModules hinzugefügt
 98_SB_PLAYER:
-  150303 0029 - zusätzliche Debug-Ausgaben für talk
+  150312 0030 - wenn Player ausgeschaltet ist zuerst einschalten bevor play gesendet wird
+              - ttsDelay hinzugefügt
+              - ttsOptions:ttsforcegroupon implementiert
+              - ttsOptions:internalSave unterstützt auch Remote-Streams
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  150308 0013 - updateModules hinzugefügt
   150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
   150209 0011 - Alarmplaylisten an Player übertragen (benötigt 98_SB_PLAYER 0026 oder höher)
               - weitere ungültige Zeichen aus Favoriten und Playlisten ausfiltern
@@ -38,6 +40,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150312 0030 - wenn Player ausgeschaltet ist zuerst einschalten bevor play gesendet wird
+              - ttsDelay hinzugefügt
+              - ttsOptions:ttsforcegroupon implementiert
+              - ttsOptions:internalSave unterstützt auch Remote-Streams
   150303 0029 - zusätzliche Debug-Ausgaben für talk
   150301 0028 - talk überarbeitet
               - neues Attribut ttsVolume

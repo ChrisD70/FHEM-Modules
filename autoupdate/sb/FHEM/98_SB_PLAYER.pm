@@ -1,7 +1,7 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0029 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0030 CD/MM/Matthew $
 #
-#  FHEM Modue for Squeezebox Players
+#  FHEM Module for Squeezebox Players
 #
 # ##############################################################################
 #
@@ -67,30 +67,32 @@ use constant { true => 1, false => 0 };
 
 # used for $hash->{helper}{ttsstate}
 use constant TTS_IDLE                                    => 0;
-use constant TTS_POWERON                                 => 1;
-use constant TTS_SAVE                                    => 2;
-use constant TTS_UNSYNC                                  => 3;
-use constant TTS_SETVOLUME                               => 4;
-use constant TTS_LOADPLAYLIST                            => 5;
-use constant TTS_WAITFORPLAY                             => 6;
-use constant TTS_PLAYING                                 => 7;
-use constant TTS_STOP                                    => 8;
-use constant TTS_RESTORE                                 => 9;
-use constant TTS_SYNC                                    => 10;
-use constant TTS_SYNCGROUPACTIVE                         => 100;
+use constant TTS_POWERON                                 => 10;
+use constant TTS_SAVE                                    => 20;
+use constant TTS_UNSYNC                                  => 30;
+use constant TTS_SETVOLUME                               => 40;
+use constant TTS_LOADPLAYLIST                            => 50;
+use constant TTS_DELAY                                   => 55;
+use constant TTS_WAITFORPLAY                             => 60;
+use constant TTS_PLAYING                                 => 70;
+use constant TTS_STOP                                    => 80;
+use constant TTS_RESTORE                                 => 90;
+use constant TTS_SYNC                                    => 100;
+use constant TTS_SYNCGROUPACTIVE                         => 1000;
 
-my %ttsstates = (   0  =>'idle',
-                    1  =>'power on',
-                    2  =>'save state',
-                    3  =>'unsync player',
-                    4  =>'set volume',
-                    5  =>'load playlist',
-                    6  =>'wait for play',
-                    7  =>'playing',
-                    8  =>'stopped',
-                    9  =>'restore state',
-                    10 =>'sync',
-                    100=>'active');
+my %ttsstates = (   0   =>'idle',
+                    10  =>'power on',
+                    20  =>'save state',
+                    30  =>'unsync player',
+                    40  =>'set volume',
+                    50  =>'load playlist',
+                    55  =>'delay',
+                    60  =>'wait for play',
+                    70  =>'playing',
+                    80  =>'stopped',
+                    90  =>'restore state',
+                    100 =>'sync',
+                    1000=>'active');
                     
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -129,6 +131,8 @@ sub SB_PLAYER_Initialize( $ ) {
     # CD 0028
     $hash->{AttrList}  .= "ttsVolume ";
     $hash->{AttrList}  .= "ttsOptions ";
+    # CD 0030
+    $hash->{AttrList}  .= "ttsDelay ";
     # CD 0007
     $hash->{AttrList}  .= "syncVolume ";
     $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
@@ -204,6 +208,24 @@ sub SB_PLAYER_Attr( @ ) {
             delete($hash->{helper}{ttsOptions}) if(defined($hash->{helper}{ttsOptions}));
         }
     }
+    # CD 0030
+    elsif( $args[ 0 ] eq "ttsDelay" ) { 
+        if( $cmd eq "set" ) {
+            if (defined($args[1])) {
+                my @options=split(',',$args[1]);
+                $hash->{helper}{ttsDelay}{PowerIsOn}=$options[0];
+                if(defined($options[1])) {
+                    $hash->{helper}{ttsDelay}{PowerIsOff}=$options[1];
+                } else {
+                    $hash->{helper}{ttsDelay}{PowerIsOff}=$options[0];
+                }
+            } else {
+                return "invalid value for ttsDelay";
+            }
+        } else {
+            delete($hash->{helper}{ttsDelay}) if(defined($hash->{helper}{ttsDelay}));
+        }
+    }    
     return;
     # CD 0012
 }
@@ -514,7 +536,7 @@ sub SB_PLAYER_tcb_QueryCoverArt($) {    # CD 0014 Name geändert
     my $hash = $defs{$name};
 
     #Log 0,"delayed cover art query";
-    IOWrite( $hash, "$hash->{PLAYERMAC} status - 1 tags:Kc\n" );
+    IOWrite( $hash, "$hash->{PLAYERMAC} status - 1 tags:Kcu\n" );   # CD 0030 u added to tags
 
     # CD 0005 query cover art for synced players
     if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
@@ -918,9 +940,19 @@ sub SB_PLAYER_Parse( $$ ) {
                 #IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
             }
             if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST) {
-                SB_PLAYER_SetTTSState($hash,TTS_WAITFORPLAY,1,0);
-                IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
-                #IOWrite( $hash, "$hash->{PLAYERMAC} playlist save fhem_talk\n" );
+                # CD 0030 start
+                if(SB_PLAYER_GetTTSDelay($hash)>0) {
+                    RemoveInternalTimer( "TTSDelay:$name");
+                    InternalTimer( gettimeofday() + SB_PLAYER_GetTTSDelay($hash), 
+                       "SB_PLAYER_tcb_TTSDelay",
+                       "TTSDelay:$name", 
+                       0 ); 
+                    SB_PLAYER_SetTTSState($hash,TTS_DELAY,1,0);
+                } else {
+                # CD 0030 end
+                    SB_PLAYER_SetTTSState($hash,TTS_WAITFORPLAY,1,0);
+                    IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
+                }
             }
             # CD 0029 start
             if(defined($hash->{helper}{ttsOptions}{logloaddone})) {
@@ -1088,7 +1120,7 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
         } elsif( $args[ 0 ] eq "reconnect" ) {
-            IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
+            IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );         # CD 0030 u added to tags
         } else {
         }
 
@@ -1101,16 +1133,23 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0000 start - handle 'prefset power' message for synced players
             } elsif( $args[ 1 ] eq "power" ) {
                 if( $args[ 2 ] eq "1" ) {
-                        #Log 0,"$name power on";
-                        readingsBulkUpdate( $hash, "state", "on" );
-                        readingsBulkUpdate( $hash, "power", "on" );
-                        SB_PLAYER_Amplifier( $hash );
+                    #Log 0,"$name power on";
+                    readingsBulkUpdate( $hash, "state", "on" );
+                    readingsBulkUpdate( $hash, "power", "on" );
+                    SB_PLAYER_Amplifier( $hash );
+                    # CD 0030 send play only after power is on
+                    if(defined($hash->{helper}{playAfterPowerOn})) {
+                        IOWrite( $hash, "$hash->{PLAYERMAC} play ".$hash->{helper}{playAfterPowerOn}."\n" );
+                        delete($hash->{helper}{playAfterPowerOn});
+                    }
+                    # CD 0030 end
                 } elsif( $args[ 2 ] eq "0" ) {
-                        #Log 0,"$name power off";
-                        #readingsBulkUpdate( $hash, "presence", "absent" );       # CD 0013 deaktiviert, power sagt nichts über presence
-                        readingsBulkUpdate( $hash, "state", "off" );
-                        readingsBulkUpdate( $hash, "power", "off" );
-                        SB_PLAYER_Amplifier( $hash );
+                    #Log 0,"$name power off";
+                    #readingsBulkUpdate( $hash, "presence", "absent" );       # CD 0013 deaktiviert, power sagt nichts über presence
+                    readingsBulkUpdate( $hash, "state", "off" );
+                    readingsBulkUpdate( $hash, "power", "off" );
+                    SB_PLAYER_Amplifier( $hash );
+                    delete($hash->{helper}{playAfterPowerOn}) if(defined($hash->{helper}{playAfterPowerOn}));   # CD 0030
                 }
             # CD 0000 end
             # CD 0010 start prefset server mute
@@ -1134,7 +1173,7 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0016 end
             # CD 0018 start
             } elsif( $args[ 1 ] eq "syncgroupid" ) {
-                IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
+                IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );     # CD 0030 u added to tags
             # CD 0018 end
             }
         } else {
@@ -1235,11 +1274,26 @@ sub SB_PLAYER_Parse( $$ ) {
             elsif ($args[0] eq "ttsidle") {
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsidle" );
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,0);
+                # CD 0030 start
+                if(defined($hash->{helper}{ttspoweroffafterstop})) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} power 0\n" );
+                    delete($hash->{helper}{ttspoweroffafterstop});
+                }
+                # CD 0030 end
             }
             elsif ($args[0] eq "ttsadd") {
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsadd $args[1]" );
                 push(@{$hash->{helper}{ttsqueue}},$args[1]);
             }
+            # CD 0030 start
+            elsif ($args[0] eq "ttsforcegroupon") {
+                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsforcegroupon" );
+                if( $hash->{CANPOWEROFF} ne "0" ) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
+                    $hash->{helper}{ttspoweroffafterstop}=1;
+                }
+            }
+            # CD 0030 end
         }
     # CD 0022 end
     } elsif( $cmd eq "NONE" ) {
@@ -1264,6 +1318,20 @@ sub SB_PLAYER_Parse( $$ ) {
 
     return( $name );
 }
+
+# CD 0030
+# ----------------------------------------------------------------------------
+#  delay TTS
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_tcb_TTSDelay( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    SB_PLAYER_SetTTSState($hash,TTS_WAITFORPLAY,0,0);
+    IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
+}
+# CD 0030
 
 # ----------------------------------------------------------------------------
 #  called when talk is stopped, check if there are queued elements
@@ -1363,6 +1431,28 @@ sub SB_PLAYER_Get( $@ ) {
     return( undef );
 }
 
+# CD 0030 start
+# ----------------------------------------------------------------------------
+#  Calculate delay for TTS
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_GetTTSDelay( $ ) {
+    my ( $hash ) = @_;
+    my $name = $hash->{NAME};
+    
+    # todo synced players
+  
+    if(defined($hash->{helper}{ttsDelay})) {
+        if(ReadingsVal($name,"power","x") eq "on") {
+            return $hash->{helper}{ttsDelay}{PowerIsOn}
+        } else {
+            return $hash->{helper}{ttsDelay}{PowerIsOff}
+        }
+    } else {
+        return 0;
+    }
+}
+# CD 0030 end
+
 # ----------------------------------------------------------------------------
 #  Set of a module
 #  called upon set <name> cmd, arg1, arg2, ....
@@ -1431,8 +1521,14 @@ sub SB_PLAYER_Set( $@ ) {
 
     } elsif( ( $cmd eq "Play" ) || ( $cmd eq "PLAY" ) || ( $cmd eq "play" ) ) {
         my $secbuf = AttrVal( $name, "fadeinsecs", 10 );
-        IOWrite( $hash, "$hash->{PLAYERMAC} play $secbuf\n" );
-
+        # CD 0030 wait until power on
+        if(ReadingsVal($name,"power","x") eq "on") {
+            IOWrite( $hash, "$hash->{PLAYERMAC} play $secbuf\n" );
+        } else {
+            $hash->{helper}{playAfterPowerOn}=$secbuf;
+            IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
+        }
+        # CD 0030 end
     } elsif( ( $cmd eq "Pause" ) || ( $cmd eq "PAUSE" ) || ( $cmd eq "pause" ) ) {
         my $secbuf = AttrVal( $name, "fadeinsecs", 10 );
         if( @arg == 1 ) {
@@ -1674,6 +1770,7 @@ sub SB_PLAYER_Set( $@ ) {
                 foreach (@pl) {
                     if ($hash->{PLAYERMAC} ne $_) {
                         IOWrite( $hash, "$_ fhemrelay ttsactive ".$hash->{PLAYERMAC}."\n" );
+                        IOWrite( $hash, "$_ fhemrelay ttsforcegroupon\n" ) if(defined($hash->{helper}{ttsOptions}{forcegroupon}));  # CD 0030
                     }
                 }
             }
@@ -1915,7 +2012,22 @@ sub SB_PLAYER_Recall($) {
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 0\n");
         if (defined($hash->{helper}{savedPlayerState}{playlistIds})) {
             # wegen Shuffle Playlist neu erzeugen
-            IOWrite( $hash, "$hash->{PLAYERMAC} playlistcontrol cmd:load track_id:$hash->{helper}{savedPlayerState}{playlistIds} play_index:$hash->{helper}{savedPlayerState}{playlistCurrentTrack}\n" );
+            # CD 0030 start
+            IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n");
+            my @playlistIds=split(',',$hash->{helper}{savedPlayerState}{playlistIds});
+            for my $id (@playlistIds) {
+                if($id>=0) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} playlistcontrol cmd:add track_id:".$id."\n");
+                } else {
+                    if(defined($hash->{helper}{savedPlayerState}{playlistUrls}) && defined($hash->{helper}{savedPlayerState}{playlistUrls}{$id})) {
+                        IOWrite( $hash, "$hash->{PLAYERMAC} playlist add ".$hash->{helper}{savedPlayerState}{playlistUrls}{$id}."\n");
+                    } else {
+                        Log3( $hash, 2, "SB_PLAYER_Recall: $name: no url found for id ".$id);
+                    }
+                }
+            }
+            IOWrite( $hash, "$hash->{PLAYERMAC} playlist index ".$hash->{helper}{savedPlayerState}{playlistCurrentTrack}."\n");
+            # CD 0030 end
         } else {
             # auf dem Server gespeichterte Playlist fortsetzen
             if( $hash->{helper}{savedPlayerState}{playStatus} eq "playing" ) {
@@ -2051,11 +2163,12 @@ sub SB_PLAYER_Save($) {
             # CD 0029 end
         } else {
             $hash->{helper}{savedPlayerState}{playlistIds}=$hash->{helper}{playlistIds};
+            $hash->{helper}{savedPlayerState}{playlistUrls}=$hash->{helper}{playlistUrls};
             if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
                 # CD 0029 start
                 if(defined($hash->{helper}{ttsOptions}{internalsave})) {
                     Log3( $hash, 0, "SB_PLAYER_Save: $name: forcing {helper}{playlistIds}: ".$hash->{helper}{playlistIds});
-                    Log3( $hash, 0, "SB_PLAYER_Save: $name: warning - negative playlist ids cannot be restored") if ($hash->{helper}{playlistIds}=~ /-/);
+                    #Log3( $hash, 0, "SB_PLAYER_Save: $name: warning - negative playlist ids cannot be restored") if ($hash->{helper}{playlistIds}=~ /-/);
                 } else {
                     Log3( $hash, 0, "SB_PLAYER_Save: $name: multiple tracks in playlist, shuffle active, using {helper}{playlistIds} (".$hash->{helper}{playlistIds}.")");
                 }
@@ -2355,7 +2468,7 @@ sub SB_PLAYER_GetStatus( $ ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} title ?\n" );
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist url ?\n" );
         IOWrite( $hash, "$hash->{PLAYERMAC} remote ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kc\n" );
+        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );     # CD 0030 u added to tags
         #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists}));  # CD 0016 get available elements for alarms before querying the alarms # CD 0026 wird über Server verteilt
         IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
         # MM 0016 start
@@ -2888,7 +3001,10 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
     # typically the max index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
-        $refreshIds=1 if($dataptr->[ 0 ]>1);        # CD 0014
+        if($dataptr->[ 0 ]>1) {
+            $refreshIds=1;        # CD 0014
+            delete($hash->{helper}{playlistUrls}) if(defined($hash->{helper}{playlistUrls}));   # CD 0030
+        }
         shift( @{$dataptr} );
     } else {
         Log3( $hash, 5, "SB_PLAYER_ParsePlayerStatus($name): entry is " .
@@ -2957,6 +3073,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
         push @data2,$last_d;
     }
     # CD 0003 end
+    
+    my $lastId=0;   # CD 0030
     
     # loop through the results
     foreach( @data2 ) {
@@ -3130,7 +3248,17 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
                 }
                 $hash->{helper}{playlistIds}=$playlistIds;
             }
+            $lastId=$2; # CD 0030
             next;
+        # CD 0030 start
+        } elsif( $cur =~ /^(url:)(.*)/ ) {
+            if($refreshIds==1) {
+                if ($lastId<0) {
+                    $hash->{helper}{playlistUrls}{$lastId}=$2;
+                }
+            }
+            next;
+        # CD 0030 end
         # CD 0014 end
         } else {
             next;
