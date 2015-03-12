@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# ############################################################################
+# $Id: 97_SB_SERVER.pm beta 20141120 0013 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -32,7 +32,6 @@
 #  CLIPORT          the port for the CLI interface of the server
 #
 # ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0012 CD $
 # CD 0007 documentation update
 # PRESENCE statusRequest requires v7278
 # ############################################################################ 
@@ -59,7 +58,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0012';
+use constant SB_SERVER_VERSION => '0013';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -507,6 +506,7 @@ sub SB_SERVER_Set( $@ ) {
 	my $res = "Unknown argument ?, choose one of " . 
 	    "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
 	$res .= "rescan:full,playlists ";
+    $res .= "updateModules ";  # CD 0013
 
 	return( $res );
 
@@ -549,7 +549,17 @@ sub SB_SERVER_Set( $@ ) {
 	
     } elsif( $cmd eq "rescan" ) {
 	IOWrite( $hash, $cmd . " " . $a[ 0 ] . "\n" );
-	
+
+    # CD 0013 start
+    } elsif( $cmd eq "updateModules" ) {
+        if(defined($a[0]) && ($a[0] eq "1")) {
+            fhem("update force https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
+#            fhem('define at_reload_sb_modules at +00:00:03 {fhem("reload 98_SB_PLAYER");;fhem("reload 97_SB_SERVER");;fhem("set '.$name.' statusRequest")}');
+#            fhem("reload 98_SB_PLAYER");
+#            fhem("reload 97_SB_SERVER");
+#            fhem("set ".$name." statusRequest");
+        }
+    # CD 0013 end
     } else {
 	;
     }
