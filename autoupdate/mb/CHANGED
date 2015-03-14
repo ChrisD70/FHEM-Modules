@@ -1,9 +1,12 @@
-last changes:
-                                                                                                 .    
 36_ModbusRTU:
-  150215 0007 added support for hostname:port (by Dieter1)
+  150314 0008 fixed typo in attribute name pollIntervall
+              added ModbusRTU_CalcNextUpdate
+              added timeout message
+              check if request is already in rqueue
+              added combineReads
+              added support for coils
 36_ModbusTCPServer:
-  150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
+  150314 0014 fixed first entry for combined reads
 37_ModbusCoil:
   150221 0005 fixed typo in attribute name updateIntervall
 37_ModbusRegister:
@@ -12,6 +15,12 @@ last changes:
 all changes:
                                                                                                  .    
 36_ModbusRTU:
+  150314 0008 fixed typo in attribute name pollIntervall
+              added ModbusRTU_CalcNextUpdate
+              added timeout message
+              check if request is already in rqueue
+              added combineReads
+              added support for coils
   150215 0007 added support for hostname:port (by Dieter1)
   150118 0006 removed defaultUnitId and presenceLink, completed documentation
   140508 0005 added REREADCFG to ModbusRTU_Notify, added timer if $init_done==0
@@ -21,6 +30,7 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
+  150314 0014 fixed first entry for combined reads
   150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
   150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
   150227 0011 added combineReads, try to recover bad frames

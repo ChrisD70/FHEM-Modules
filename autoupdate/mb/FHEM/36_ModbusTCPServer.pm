@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0013 $
+# $Id: 36_ModbusTCPServer.pm 0014 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -13,6 +13,7 @@
 # 150227 0011 added combineReads, try to recover bad frames
 # 150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
 # 150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
+# 150314 0014 fixed first entry for combined reads
 # TODO:
 
 package main;
@@ -541,7 +542,9 @@ sub ModbusTCPServer_Poll($) {##################################################
           my $rlast;
           for my $r (@sorted)
           {
-            push(@{$hash->{helper}{combineReads}{registers}},$r) if(defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])));
+            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])))) {
+                push(@{$hash->{helper}{combineReads}{registers}},$r);
+            }
             $rlast=$r;
             if($ui != $r->[0]) {
                 if($ui != -1) {
@@ -616,7 +619,9 @@ sub ModbusTCPServer_Poll($) {##################################################
           my $rlast;
           for my $r (@sorted)
           {
-            push(@{$hash->{helper}{combineReads}{coils}},$r) if(defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])));
+            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])))) {
+                push(@{$hash->{helper}{combineReads}{coils}},$r) ;
+            }
             $rlast=$r;
             if($ui != $r->[0]) {
                 if($ui != -1) {

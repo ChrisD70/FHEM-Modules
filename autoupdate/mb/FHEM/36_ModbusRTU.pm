@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 36_ModbusRTU.pm 0006 $
+# $Id: 36_ModbusRTU.pm 0008 $
 # 140503 0001 initial release
 # 140505 0002 fix dummy on startup
 # 140507 0003 added 'use bytes', fixed partial data handling in read function
@@ -7,6 +7,12 @@
 # 140508 0005 added REREADCFG to ModbusRTU_Notify, added timer if $init_done==0
 # 150118 0006 removed defaultUnitId and presenceLink, completed documentation
 # 150215 0007 added support for hostname:port (by Dieter1)
+# 150314 0008 fixed typo in attribute name pollIntervall
+#             added ModbusRTU_CalcNextUpdate
+#             added timeout message
+#             check if request is already in rqueue
+#             added combineReads
+#             added support for coils
 # TODO:
 
 package main;
@@ -36,7 +42,7 @@ sub ModbusRTU_Timeout($);
 sub ModbusRTU_HandleWriteQueue($);
 sub ModbusRTU_HandleReadQueue($);
 sub ModbusRTU_Reconnect($);
-sub ModbusRTU_Frame($$$);
+sub ModbusRTU_LogFrame($$$$);
 sub ModbusRTU_crc_is_ok($);
 sub ModbusRTU_crc($);
 
@@ -95,9 +101,10 @@ sub ModbusRTU_Initialize($) {
   $hash->{DefFn}   = "ModbusRTU_Define";
   $hash->{UndefFn} = "ModbusRTU_Undef";
   $hash->{AttrList}= "do_not_notify:1,0 dummy:1,0 " .
-                     "pollIntervall " .
+                     "pollIntervall pollInterval " .
                      "timeout " .
                      "charformat " .
+                     "combineReads " .
                      $readingFnAttributes;
 }
 sub ModbusRTU_Define($$) {#########################################################
@@ -153,6 +160,12 @@ sub ModbusRTU_Undef($$) {#######################################################
 sub ModbusRTU_Notify(@) {##########################################################
   my ($hash,$dev) = @_;
   if (($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}}))&&($hash->{dummy}==0)){
+    my $name = $hash->{NAME};
+    if (defined($attr{$name}{pollIntervall})) {
+      $attr{$name}{pollInterval}=$attr{$name}{pollIntervall} if(!defined($attr{$name}{pollInterval}));
+      delete $attr{$name}{pollIntervall};
+    }
+    $modules{$hash->{TYPE}}{AttrList} =~ s/pollIntervall.//;
     DevIo_OpenDev($hash, 0, "ModbusRTU_DoInit");
   }
   return;
@@ -177,7 +190,7 @@ sub ModbusRTU_Attr(@) {#########################################################
   
   my $hash=$defs{$name};
   
-  if($aName eq "pollIntervall") {
+  if(($aName eq "pollIntervall") || ($aName eq "pollInterval")) {
     if ($cmd eq "set") {
       $attr{$name}{pollIntervall} = $aVal;
       RemoveInternalTimer( "poll:".$name);
@@ -229,6 +242,31 @@ sub ModbusRTU_Attr(@) {#########################################################
       }
     }
   }
+  elsif($aName eq "combineReads") {
+    if ($cmd eq "set") {
+        if(defined($aVal)) {
+            my @args=split(':',$aVal);
+            if(defined($args[0])) {
+                if(($args[0]<0)||($args[0]>118)) {
+                    return "invalid value for combineReads";
+                }
+                $hash->{helper}{combineReads}{cfg}{maxSpace}=$args[0];
+                if(defined($args[1])) {
+                    if(($args[1]<8)||($args[1]>126)) {
+                        return "invalid value for combineReads";
+                    }
+                    $hash->{helper}{combineReads}{cfg}{maxSize}=$args[1];
+                } else {
+                    $hash->{helper}{combineReads}{cfg}{maxSize}=120;
+                }
+            } else {
+                return "invalid value for combineReads";
+            }
+        }
+    } else {
+        delete($hash->{helper}{combineReads}) if(defined($hash->{helper}{combineReads}));
+    }
+  }
   elsif($aName eq "dummy"){
     if ($cmd eq "set" && $aVal != 0){
       RemoveInternalTimer( "poll:".$name);
@@ -266,9 +304,10 @@ sub ModbusRTU_Write($$) {#######################################################
   my $tx_hd_length     = bytes::length($msg);
 
   my $crc = pack 'v', ModbusRTU_crc($msg);
+  my $trId= pack 'n', unpack('x2n',$msg);
   
-  ModbusRTU_Frame($hash,"AddWQueue",$msg.$crc);
-  ModbusRTU_AddWQueue($hash, $msg.$crc);
+  ModbusRTU_LogFrame($hash,"AddWQueue",$msg.$crc,5);
+  ModbusRTU_AddWQueue($hash, $trId.$msg.$crc);
 }
 
 sub ModbusRTU_Read($) {############################################################
@@ -282,7 +321,7 @@ sub ModbusRTU_Read($) {#########################################################
   my $pdata = $hash->{helper}{PARTIAL};
   $pdata .= $buf;
 
-  ModbusRTU_Frame($hash,"Read",$pdata);
+  ModbusRTU_LogFrame($hash,"ModbusRTU_Read",$pdata,4);
 
   if(( bytes::length($pdata) >= 4 ) && ( ModbusRTU_crc_is_ok($pdata)))
   {
@@ -301,7 +340,7 @@ sub ModbusRTU_Parse($$) {#######################################################
   my ($hash, $rmsg) = @_;
   my $name = $hash->{NAME};
 
-  ModbusRTU_Frame($hash,"Received",$rmsg);
+  ModbusRTU_LogFrame($hash,"ModbusRTU_Parse",$rmsg,4);
 
   if($hash->{helper}{state} eq "idle") {
     return undef;
@@ -325,8 +364,23 @@ sub ModbusRTU_Parse($$) {#######################################################
       
     }
     if(($rx_bd_fc==READ_HOLDING_REGISTERS)||($rx_bd_fc==READ_INPUT_REGISTERS)) {
-      my $nvals=unpack("x2C", $rmsg)/2;
-      Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:".($hash->{helper}{hd_tr_id}).":$rx_bd_fc:$nvals:".join(":",unpack("x3n$nvals", $rmsg)), undef); 
+        my $nvals=unpack("x2C", $rmsg)/2;
+        my $rx_hd_tr_id=$hash->{helper}{hd_tr_id};
+        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+            my $off;
+            for my $r (@{$hash->{helper}{combineReads}{registers}})
+            {
+                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                        $off=3+($r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2])*2;
+                        Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg)), undef); 
+                    }
+                }
+            }
+            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+        } else {
+            Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x3n$nvals", $rmsg)), undef); 
+        }
     }
     if($rx_bd_fc==WRITE_SINGLE_REGISTER) {
       Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:".unpack("x2n", $rmsg).":$rx_bd_fc:1:".unpack("x4n", $rmsg), undef); 
@@ -334,8 +388,29 @@ sub ModbusRTU_Parse($$) {#######################################################
     if($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
       ;
     }
-    if(($rx_bd_fc==1)||($rx_bd_fc==2)||($rx_bd_fc==5)) {
-      Dispatch($hash, "ModbusCoil".unpack("a*", $rmsg), undef); 
+    if(($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
+        my $nvals=unpack("x2C", $rmsg);
+        my $rx_hd_tr_id=$hash->{helper}{hd_tr_id};
+        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+            $nvals*=8;
+            my $off;
+            my @coilvals=split('',unpack('x3b*',$rmsg));
+            for my $r (@{$hash->{helper}{combineReads}{coils}})
+            {
+                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                        $off=$r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2];
+                        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off], undef); 
+                    }
+                }
+            }
+            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+        } else {
+            Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x3C$nvals", $rmsg)), undef); 
+        }
+    }
+    if($rx_bd_fc==WRITE_SINGLE_COIL) {
+        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x2n", $rmsg).":$rx_bd_fc:1:".unpack("x4n", $rmsg), undef); 
     }
   }
   RemoveInternalTimer( "timeout:".$name);
@@ -367,13 +442,16 @@ sub ModbusRTU_SimpleWrite(@) {##################################################
   my $name = $hash->{NAME};
   my $len = length($msg);
   if(($hash->{USBDev})||($hash->{DIODev})||($hash->{TCPDev})) {
-    $hash->{helper}{hd_tr_id}=unpack("x2n",$msg);
+    $hash->{helper}{hd_tr_id}=unpack("n",$msg);
+    $msg=pack('n*',unpack('x2n*',$msg));
     $hash->{helper}{state}="active";
+    RemoveInternalTimer( "timeout:".$name); # CD 0008
     InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusRTU_Timeout", "timeout:".$name, 1);
-    ModbusRTU_Frame($hash,"SimpleWrite",$msg);
+    ModbusRTU_LogFrame($hash,"ModbusRTU_SimpleWrite",$msg,5);
     $hash->{USBDev}->write($msg)    if($hash->{USBDev});
     syswrite($hash->{DIODev}, $msg) if($hash->{DIODev});
     syswrite($hash->{TCPDev}, $msg) if($hash->{TCPDev});    # CD 0007
+    $hash->{helper}{lastSimpleWrite}=$msg;
 
     # Some linux installations are broken with 0.001, T01 returns no answer
     select(undef, undef, undef, 0.01);
@@ -405,14 +483,47 @@ sub ModbusRTU_DoInit($) {#######################################################
   return undef;
 }
 
+sub ModbusRTU_CalcNextUpdate(@) {##########################################################
+    my ($hash)=@_;
+    my $name = $hash->{NAME};
+
+    $hash->{helper}{lastUpdate}=$hash->{helper}{nextUpdate} if(defined($hash->{helper}{nextUpdate}));
+    $hash->{lastUpdate}=$hash->{nextUpdate};
+    if(defined($hash->{helper}{updateIntervall})) {
+        if(defined($hash->{helper}{alignUpdateInterval})) {
+            my $t=int(time());
+            my @lt = localtime($t);
+            
+            $t -= ($lt[2]*3600+$lt[1]*60+$lt[0]);
+            my $nextUpdate=$t+$hash->{helper}{alignUpdateInterval};
+            while($nextUpdate<time()) {
+                $nextUpdate+=$hash->{helper}{updateIntervall};
+            }
+            $hash->{helper}{nextUpdate}=$nextUpdate;
+        } else {
+            $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+        }
+    } else {
+        $hash->{helper}{nextUpdate}=time()+0.01;
+    }
+    $hash->{nextUpdate}=localtime($hash->{helper}{nextUpdate});
+}
+
 sub ModbusRTU_Poll($) {##################################################
   my($in ) = shift;
   my(undef,$name) = split(':',$in);
   my $hash = $defs{$name};
 
+  my @registers;
+  my @coils;
+
   if($hash->{STATE} ne "disconnected") {
     my $tn = gettimeofday();
-    my $pollIntervall = AttrVal($name,"pollIntervall",3);
+    if (defined($attr{$name}{pollIntervall})) {
+      $attr{$name}{pollInterval}=$attr{$name}{pollIntervall} if(!defined($attr{$name}{pollInterval}));
+      delete $attr{$name}{pollIntervall};
+    }
+    my $pollInterval = AttrVal($name,"pollInterval",0.5);
 
     if(!defined($hash->{RQUEUE})) {
       my @chlds=devspec2array("TYPE=ModbusRegister");
@@ -420,22 +531,187 @@ sub ModbusRTU_Poll($) {##################################################
       foreach(@chlds) {
         my $chash=$defs{$_};
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
-          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<time())) {
+          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
             my $msg=$chash->{helper}{readCmd};
             my $crc = pack 'v', ModbusRTU_crc($msg);
-
-            ModbusRTU_Frame($hash,"AddRQueue",$msg.$crc);
-            ModbusRTU_AddRQueue($hash, $msg.$crc);
-            $chash->{helper}{nextUpdate}=time()+$chash->{helper}{updateIntervall} if(defined($chash->{helper}{updateIntervall}));
+            my $trId= pack 'n', $chash->{helper}{address};
+            
+            if(!defined($hash->{helper}{combineReads})) {
+                ModbusRTU_LogFrame($hash,"AddRQueue",$msg.$crc,5);
+                ModbusRTU_AddRQueue($hash, $trId.$msg.$crc);
+            } else {
+                push(@registers,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, $chash->{helper}{nread}]);
+            }
+            ModbusRTU_CalcNextUpdate($chash);
           }
         }
       }
+
+      if(defined($hash->{helper}{combineReads})) {
+          my @sorted=sort {
+            if($a->[0] == $b->[0]) {
+                if($a->[1] == $b->[1]) {
+                    return $a->[2] <=> $b->[2]
+                } else {
+                    return $a->[1] <=> $b->[1]
+                }
+            } else {
+                return $a->[0] <=> $b->[0]
+            }} @registers;
+          #use Data::Dump 'dump';
+          #Log 0,dump @sorted;            
+          my $ui=-1;
+          my $rt=-1;
+          my $st=-1;
+          my $n=-1;
+          $hash->{helper}{seq}=65000 if(!defined($hash->{helper}{seq}));
+          delete($hash->{helper}{combineReads}{registers}) if defined($hash->{helper}{combineReads}{registers});
+          my $rlast;
+          for my $r (@sorted)
+          {
+            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])))) {
+                push(@{$hash->{helper}{combineReads}{registers}},$r);
+            }
+            $rlast=$r;
+            if($ui != $r->[0]) {
+                if($ui != -1) {
+                    ModbusRTU_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                }
+                $ui=$r->[0]; $rt=$r->[1]; $st=$r->[2]; $n=$r->[3];
+            } else {
+                if($rt != $r->[1]) {
+                    if($rt != -1) {
+                        ModbusRTU_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                    }
+                    $rt=$r->[1]; $st=$r->[2]; $n=$r->[3];
+                } else {
+                    if($st+$n<$r->[2]+$r->[3]) {
+                        if(($r->[2]+$r->[3]-$st<=$hash->{helper}{combineReads}{cfg}{maxSize}) &&
+                            ($r->[2]-($st+$n)<=$hash->{helper}{combineReads}{cfg}{maxSpace})) {
+                            $n=$r->[2]+$r->[3]-$st;
+                        } else {
+                            ModbusRTU_AddCombinedReads($hash, $ui, $rt, $st, $n);
+                            $st=$r->[2]; $n=$r->[3];
+                        }
+                    }
+                }
+            }
+            $hash->{helper}{seq}=65000 if($hash->{helper}{seq}>65500);
+          }
+          if($rt != -1) {
+            ModbusRTU_AddCombinedReads($hash, $ui, $rt, $st, $n);
+          }
+      }
+
+      @chlds=devspec2array("TYPE=ModbusCoil");
+
+      foreach(@chlds) {
+        my $chash=$defs{$_};
+        if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
+          if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
+            my $msg=$chash->{helper}{readCmd};
+            my $crc = pack 'v', ModbusRTU_crc($msg);
+            my $trId= pack 'n', $chash->{helper}{address};
+            
+            if(!defined($hash->{helper}{combineReads})) {
+                ModbusRTU_LogFrame($hash,"AddRQueue",$msg.$crc,5);
+                ModbusRTU_AddRQueue($hash, $trId.$msg.$crc);
+            } else {
+                push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1]);
+            }
+            ModbusRTU_CalcNextUpdate($chash);
+          }
+        }
+      }
+      if(defined($hash->{helper}{combineReads})) {
+          my @sorted=sort {
+            if($a->[0] == $b->[0]) {
+                if($a->[1] == $b->[1]) {
+                    return $a->[2] <=> $b->[2]
+                } else {
+                    return $a->[1] <=> $b->[1]
+                }
+            } else {
+                return $a->[0] <=> $b->[0]
+            }} @coils;
+          #Log 0,dump @sorted;            
+          my $ui=-1;
+          my $rt=-1;
+          my $st=-1;
+          my $n=-1;
+          $hash->{helper}{seqCoils}=64000 if(!defined($hash->{helper}{seqCoils}));
+          delete($hash->{helper}{combineReads}{coils}) if defined($hash->{helper}{combineReads}{coils});
+          my $rlast;
+          for my $r (@sorted)
+          {
+            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])))) {
+                push(@{$hash->{helper}{combineReads}{coils}},$r) ;
+            }
+            $rlast=$r;
+            if($ui != $r->[0]) {
+                if($ui != -1) {
+                    ModbusRTU_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                }
+                $ui=$r->[0]; $rt=$r->[1]; $st=($r->[2])-($r->[2]%8); $n=8; #$r->[3]+($r->[2]%8);
+            } else {
+                if($rt != $r->[1]) {
+                    if($rt != -1) {
+                        ModbusRTU_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                    }
+                    $rt=$r->[1]; $st=($r->[2])-($r->[2]%8); $n=8;
+                } else {
+                    if($st+$n<$r->[2]+$r->[3]) {
+                        if(($r->[2]+$r->[3]-$st<=$hash->{helper}{combineReads}{cfg}{maxSize}) &&
+                            ($r->[2]-($st+$n)<=$hash->{helper}{combineReads}{cfg}{maxSpace})) {
+                            $n=$r->[2]+$r->[3]-$st;
+                            $n+=(8-($n%8)) if($n%8>0);
+                        } else {
+                            ModbusRTU_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+                            $st=($r->[2])-($r->[2]%8); $n=8;
+                        }
+                    }
+                }
+            }
+            $hash->{helper}{seqCoils}=64000 if($hash->{helper}{seqCoils}>64500);
+          }
+          if($rt != -1) {
+            ModbusRTU_AddCombinedCoilReads($hash, $ui, $rt, $st, $n);
+          }
+      }
     }
-    if($tn+$pollIntervall<=gettimeofday()) {
-      $tn=gettimeofday()-$pollIntervall+0.05;
+    if($tn+$pollInterval<=gettimeofday()) {
+      $tn=gettimeofday()-$pollInterval+0.05;
     }
-    InternalTimer($tn+$pollIntervall, "ModbusRTU_Poll", "poll:".$name, 0);
+    InternalTimer($tn+$pollInterval, "ModbusRTU_Poll", "poll:".$name, 0);
   }
+}
+
+sub
+ModbusRTU_AddCombinedCoilReads($$$$$) ##################################################
+{
+    my ($hash, $ui, $rt, $st, $n) = @_;
+
+    my $tx=pack("CCnn", $ui, $rt, $st, $n);
+    my $crc = pack 'v', ModbusRTU_crc($tx);
+    my $trId= pack 'n', $hash->{helper}{seqCoils};
+    $hash->{helper}{combineReads}{data}{$hash->{helper}{seqCoils}}=[$ui, $rt, $st, $n];
+    $hash->{helper}{seqCoils}++;
+    ModbusRTU_LogFrame($hash,"AddRQueue",$tx.$crc,4);
+    ModbusRTU_AddRQueue($hash, $trId.$tx.$crc);
+}
+
+sub
+ModbusRTU_AddCombinedReads($$$$$) ##################################################
+{
+    my ($hash, $ui, $rt, $st, $n) = @_;
+
+    my $tx=pack("CCnn", $ui, $rt, $st, $n);
+    my $crc = pack 'v', ModbusRTU_crc($tx);
+    my $trId= pack 'n', $hash->{helper}{seq};
+    $hash->{helper}{combineReads}{data}{$hash->{helper}{seq}}=[$ui, $rt, $st, $n];
+    $hash->{helper}{seq}++;
+    ModbusRTU_LogFrame($hash,"AddRQueue",$tx.$crc,4);
+    ModbusRTU_AddRQueue($hash, $trId.$tx.$crc);
 }
 
 sub
@@ -444,6 +720,8 @@ ModbusRTU_Timeout($) ##################################################
   my($in ) = shift;
   my(undef,$name) = split(':',$in);
   my $hash = $defs{$name};
+
+  Log3 $hash, 3,"ModbusRTU_Timeout";
 
   $hash->{STATE} = "timeout";
   $hash->{helper}{state}="idle";
@@ -494,7 +772,7 @@ ModbusRTU_HandleWriteQueue($) ##################################################
         delete($hash->{WQUEUE});
         return;
       }
-      Log3 $hash, 4,"WQUEUE: @{$arr}";
+      Log3 $hash, 4,"WQUEUE: ".scalar(@{$arr});
       my $bstring = $arr->[0];
       if($bstring eq "") {
         ModbusRTU_HandleWriteQueue($hash);
@@ -533,8 +811,16 @@ ModbusRTU_AddRQueue($$) ##################################################
       InternalTimer(gettimeofday()+0.02, "ModbusRTU_HandleReadQueue", $hash, 1);
     }
   } else {
-    Log3 $hash, 5,"adding to RQUEUE - ".scalar(@{$hash->{RQUEUE}});
-    push(@{$hash->{RQUEUE}}, $bstring);
+    my $add=1;
+    for my $el (@{$hash->{RQUEUE}}) {
+        if($el eq $bstring) {
+            $add=0;
+        }
+    }
+    if ($add==1) {
+        Log3 $hash, 5,"adding to RQUEUE - ".scalar(@{$hash->{RQUEUE}});
+        push(@{$hash->{RQUEUE}}, $bstring);
+    }
   }
 }
 
@@ -563,14 +849,14 @@ ModbusRTU_HandleReadQueue($) ##################################################
   }
 } 
 
-sub ModbusRTU_Frame($$$) {
-  my ($hash,$c,$data)=@_;
+sub ModbusRTU_LogFrame($$$$) {
+  my ($hash,$c,$data,$verbose)=@_;
 
   my @dump = map {sprintf "%02X", $_ } unpack("C*", $data);
-  #$dump[0] = "[".$dump[0];
-  #$dump[5] = $dump[5]."]";
-  
-  Log3 $hash, 5,$c." ".join(" ",@dump)
+
+  $hash->{helper}{lastFrame}=$c." ".join(" ",@dump) if($c eq 'SimpleWrite');
+
+  Log3 $hash, $verbose,$c." ".join(" ",@dump);
 }
 
 # functions taken from:
@@ -653,8 +939,12 @@ sub ModbusRTU_crc_is_ok($) {
   <ul>
     <li><a href="#attrdummy">dummy</a></li><br>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
-    <li><a name="">pollIntervall</a><br>
-        Intervall in seconds for the reading cycle. Default: 0.1</li><br>
+    <li><a name="">pollInterval</a><br>
+        Interval in seconds for the reading cycle. Default: 0.1</li><br>
+    <li><a name="">combineReads</a><br>
+        Combine reads if possible. The attribute accepts two values separated by a colon. The first value
+        defines how many consecutive unused registers/coils will be included (1-118), the second defines the maximum
+        number of registers/coils per read (8-126).</li><br>
     <li><a name="">timeout</a><br>
         Timeout in seconds waiting for data from the server. Default: 3</li><br>
     <li><a name="ModbusRTUattrcharformat">charformat</a><br>
