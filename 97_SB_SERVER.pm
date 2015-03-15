@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0013 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0014 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -58,7 +58,7 @@ use Time::HiRes qw(gettimeofday);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0013';
+use constant SB_SERVER_VERSION => '0014';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -506,7 +506,7 @@ sub SB_SERVER_Set( $@ ) {
 	my $res = "Unknown argument ?, choose one of " . 
 	    "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
 	$res .= "rescan:full,playlists ";
-    $res .= "updateModules ";  # CD 0013
+    $res .= "updateModules:download,reload ";  # CD 0013
 
 	return( $res );
 
@@ -550,16 +550,17 @@ sub SB_SERVER_Set( $@ ) {
     } elsif( $cmd eq "rescan" ) {
 	IOWrite( $hash, $cmd . " " . $a[ 0 ] . "\n" );
 
-    # CD 0013 start
+    # CD 0013/14 start
     } elsif( $cmd eq "updateModules" ) {
-        if(defined($a[0]) && ($a[0] eq "1")) {
-            fhem("update force https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
-#            fhem('define at_reload_sb_modules at +00:00:03 {fhem("reload 98_SB_PLAYER");;fhem("reload 97_SB_SERVER");;fhem("set '.$name.' statusRequest")}');
-#            fhem("reload 98_SB_PLAYER");
-#            fhem("reload 97_SB_SERVER");
-#            fhem("set ".$name." statusRequest");
+        if(defined($a[0])) {
+            if($a[0] eq "download") {
+                fhem("update force https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
+            }
+            elsif($a[0] eq "reload") {
+                fhem('define at_reload_sb_modules at +00:00:01 {fhem("reload 98_SB_PLAYER");;fhem("reload 97_SB_SERVER");;fhem("set '.$name.' statusRequest")}');
+            }
         }
-    # CD 0013 end
+    # CD 0013/14 end
     } else {
 	;
     }
@@ -965,7 +966,7 @@ sub SB_SERVER_Alive( $ ) {
     my $pingstatus = "off";
     my $nexttime = gettimeofday() + AttrVal( $name, "alivetimer", 120 );
 
-    Log3( $hash, 3, "SB_SERVER_Alive($name): called" );                     # CD 0006 changed log level from 4 to 2 # CD 0009 level 2->3
+    Log3( $hash, 4, "SB_SERVER_Alive($name): called" );                     # CD 0006 changed log level from 4 to 2 # CD 0009 level 2->3 # CD 0014 level -> 4
 
     if( AttrVal( $name, "doalivecheck", "false" ) eq "false" ) {
         Log3( $hash, 5, "SB_SERVER_Alive($name): alivechecking is off" );
@@ -1008,12 +1009,12 @@ sub SB_SERVER_Alive( $ ) {
             # close our ping mechanism again
             $p->close( );
         } # CD 0007
-        Log3( $hash, 3, "SB_SERVER_Alive($name): " .
-              "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 # CD 0009 level 2->3
+        Log3( $hash, 5, "SB_SERVER_Alive($name): " .
+              "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 # CD 0009 level 2->3 # CD 0014 level -> 5
     }
 
     # set the status of the server accordingly
-    # CD 0004 added sensivity to ping
+    # CD 0004 added sensitivity to ping
 #    if( ( $rccstatus eq "on" ) || ( $pingstatus eq "on" ) ) {
     if( ( $rccstatus eq "on" ) || ( $hash->{helper}{pingCounter}<3 ) ) {
 
