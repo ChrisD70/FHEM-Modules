@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0014 $
+﻿# $Id: 37_ModbusRegister.pm 0015 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -13,6 +13,7 @@
 # 150222 0012 added alignUpdateInterval
 # 150226 0013 force timestamp if alignUpdateInterval is used
 # 150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
+# 150315 0015 added wago address conversion, added setList
 # TODO:
 
 package main;
@@ -55,6 +56,7 @@ ModbusRegister_Initialize($)
                        "disableRegisterMapping:0,1 ".
                        "registerType:Holding,Input ".
                        "stateAlias ".
+                       "setList ".
                        "$readingFnAttributes";
 }
 
@@ -74,8 +76,53 @@ ModbusRegister_Define($$)
     $a[3]=$a[2];
     $a[2]=0;
   }
-  
-  return "$a[2] $a[3] is not a valid Modbus register" if(($a[2]<0)||($a[2]>255)||($a[3]<0)||($a[3]>65535));
+
+  if($a[2] eq 'wago') {
+    my $reg=-1;
+    if($a[3]=~/^([M|Q|I]+)([W|D|F]+)(\d+)$/) {
+      if($1 eq 'I') {
+        if(($3>255) && ($3<512)) {
+          $reg=512+$3;
+        } elsif(($3>511) && ($3<1276)) {
+          $reg=24064+$3;
+        } else {
+          $reg=$3;
+        }
+        $hash->{helper}{registerType}=4;
+      }
+      if($1 eq 'Q') {
+        if(($3>255) && ($3<512)) {
+          $reg=$3;
+        } elsif(($2>511) && ($2<1276)) {
+          $reg=28160+$3;
+        } else {
+          $reg=512+$3;
+        }
+        $hash->{helper}{registerType}=3;
+      }
+      if($1 eq 'M') {
+        if($3<12288) {
+          $reg=12288+$3;
+          $hash->{helper}{registerType}=3;
+        }
+      }
+      if($2 eq 'W') {
+        $hash->{helper}{nread}=1;
+      } else {
+        $hash->{helper}{nread}=2;
+      }
+      $hash->{helper}{wagoDataType}=$2;
+    }
+    return "$a[3] is not a valid Wago address" if $reg==-1;
+    $a[2]=0;  # UnitId
+    $a[3]=$reg;
+    $hash->{helper}{wago}=1;
+    $hash->{helper}{disableRegisterMapping}=1;
+  } else {
+    return "$a[2] $a[3] is not a valid Modbus register" if(($a[2]<0)||($a[2]>255)||($a[3]<0)||($a[3]>65535));
+    delete($hash->{helper}{wago}) if defined($hash->{helper}{wago});
+    delete($hash->{helper}{wagoDataType}) if defined($hash->{helper}{wagoDataType});
+  }
 
   my $name = $a[0];
 
@@ -92,8 +139,8 @@ ModbusRegister_Define($$)
 
   $hash->{helper}{unitId}=$a[2];
   $hash->{helper}{register}=$a[3];
-  $hash->{helper}{nread}=1;
-  if(!defined($attr{$name}{disableRegisterMapping})) {
+  $hash->{helper}{nread}=1 unless defined($hash->{helper}{wago});
+  if(!defined($attr{$name}{disableRegisterMapping}) && !defined($hash->{helper}{wago})) {
     $hash->{helper}{disableRegisterMapping}=0;
   }
   if ($hash->{helper}{disableRegisterMapping}==0) {
@@ -109,7 +156,7 @@ ModbusRegister_Define($$)
       }
     }
   } else {
-    $hash->{helper}{registerType}=AttrVal($name,"registerType",3);
+    $hash->{helper}{registerType}=AttrVal($name,"registerType",3) unless defined($hash->{helper}{wago});
     $hash->{helper}{address}=$hash->{helper}{register};
   }
 
@@ -123,7 +170,7 @@ ModbusRegister_Define($$)
   #Log 0, "Def $hash->{helper}{addr} $name"; # CD 0007
   $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
 
-  if(defined($attr{$name}{plcDataType})) {
+  if(defined($attr{$name}{plcDataType}) && !defined($hash->{helper}{wago})) {
     if(($attr{$name}{plcDataType}=~/^DWORD/) || ($attr{$name}{plcDataType}=~/^DINT/) || ($attr{$name}{plcDataType}=~/^REAL/)) {
       $hash->{helper}{nread}=2;
     }
@@ -165,6 +212,7 @@ sub
 ModbusRegister_Set($@)
 {
   my ($hash, @a) = @_; 
+  my $name = $hash->{NAME};
   my $ret = undef;
   my $na = int(@a); 
   
@@ -173,7 +221,7 @@ ModbusRegister_Set($@)
   if($a[1] eq '?')
   {
 #    my $list = "value:slider,$hash->{helper}{cnv}{min},$hash->{helper}{cnv}{step},$hash->{helper}{cnv}{max}"; 
-    my $list = " "; 
+    my $list = AttrVal($name, "setList", " "); 
     return SetExtensions($hash, $list, @a); 
   }
 
@@ -188,12 +236,12 @@ ModbusRegister_Set($@)
 
   return "writing to input registers not allowed" if ($hash->{helper}{registerType}==4);
   
-  if($a[1] eq "value") {
+  if(($a[1] eq "value")||($a[1] eq AttrVal($name,"stateAlias",''))) {
     my $v=$a[2];
     my $wlen=1;
     my $msg;
-    my $plcDataType=AttrVal($hash->{NAME},"plcDataType","WORD");
-    
+    my $plcDataType=ModbusRegister_GetDataType($hash);
+
     if(defined($hash->{helper}{cnv})) {
       if($hash->{helper}{cnv}{a}==0) {
         $v=-$hash->{helper}{cnv}{b};
@@ -271,6 +319,27 @@ ModbusRegister_Fingerprint($$)
 }
 
 sub
+ModbusRegister_GetDataType($)
+{
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+  my $plcDataType=AttrVal($name,"plcDataType","WORD");
+  if(defined($hash->{helper}{wagoDataType})) {
+    if ($hash->{helper}{wagoDataType} eq 'F') {
+      $plcDataType='REAL' unless ($plcDataType=~/^REAL/);
+    }
+    if ($hash->{helper}{wagoDataType} eq 'D') {
+      $plcDataType='DWORD' unless ($plcDataType=~/^DINT/);
+    }
+    if ($hash->{helper}{wagoDataType} eq 'W') {
+      $plcDataType='WORD' unless ($plcDataType eq 'INT');
+    }
+  }
+  return $plcDataType;
+}
+
+sub
 ModbusRegister_Parse($$)
 {
   my ($hash, $msg) = @_;
@@ -299,7 +368,7 @@ ModbusRegister_Parse($$)
         
         $lh->{ModbusRegister_lastRcv} = TimeNow();
         my $v=$vals[0];
-        my $plcDataType=AttrVal($n,"plcDataType","x");
+        my $plcDataType=ModbusRegister_GetDataType($lh);
         if($plcDataType eq "INT") {
           $v-= 65536 if $v>32767;
         }
@@ -371,25 +440,37 @@ ModbusRegister_Attr(@)
   my $hash=$defs{$name};
 
   if($attrName eq "plcDataType") {
-    $hash->{helper}{nread}=1;
-    if ($cmd eq "set") {
-      $attr{$name}{plcDataType} = $attrVal;
-      if(($attrVal eq "DWORD") || ($attrVal eq "DINT") || ($attrVal eq "REAL") || ($attrVal eq "DWORD_BE") || ($attrVal eq "DINT_BE") || ($attrVal eq "REAL_BE")) {
-        $hash->{helper}{nread}=2;
+    if (!defined($hash->{helper}{wago})) {
+      $hash->{helper}{nread}=1;
+      if ($cmd eq "set") {
+        #$attr{$name}{plcDataType} = $attrVal;
+        if(($attrVal eq "DWORD") || ($attrVal eq "DINT") || ($attrVal eq "REAL") || ($attrVal eq "DWORD_BE") || ($attrVal eq "DINT_BE") || ($attrVal eq "REAL_BE")) {
+          $hash->{helper}{nread}=2;
+        }
+        # CD 0007 start
+        if(($attrVal eq "3WORD") || ($attrVal eq "3WORD_BE")) {
+          $hash->{helper}{nread}=3;
+        }
+        # CD 0007 end
+        # CD 0008 start
+        if(($attrVal eq "QWORD") || ($attrVal eq "QWORD_BE")) {
+          $hash->{helper}{nread}=4;
+        }
+        # CD 0008 end
+        ModbusRegister_SetMinMax($hash);
       }
-      # CD 0007 start
-      if(($attrVal eq "3WORD") || ($attrVal eq "3WORD_BE")) {
-        $hash->{helper}{nread}=3;
+      $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
+    } else {
+      if($hash->{helper}{wagoDataType} eq 'W') {
+        return 'invalid datatype for defined address' unless (($attrVal eq 'WORD') || ($attrVal eq 'INT'));
       }
-      # CD 0007 end
-      # CD 0008 start
-      if(($attrVal eq "QWORD") || ($attrVal eq "QWORD_BE")) {
-        $hash->{helper}{nread}=4;
+      if($hash->{helper}{wagoDataType} eq 'F') {
+        return 'invalid datatype for defined address' unless ($attrVal =~ /^REAL/);
       }
-      # CD 0008 end
-      ModbusRegister_SetMinMax($hash);
+      if($hash->{helper}{wagoDataType} eq 'D') {
+        return 'invalid datatype for defined address' unless (($attrVal =~ /^DWORD/) || ($attrVal =~ /^DINT/));
+      }
     }
-    $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
   }
   elsif($attrName eq "conversion") {
     if ($cmd eq "set") {
@@ -439,58 +520,62 @@ ModbusRegister_Attr(@)
     ModbusRegister_CalcNextUpdate($hash);
   }
   elsif($attrName eq "registerType") {
-    if ($cmd eq "set") {
-      $attr{$name}{registerType} = $attrVal;
-      if($hash->{helper}{disableRegisterMapping}==1) {
-        if($attrVal eq 'Input') {
+    if (!defined($hash->{helper}{wago})) {
+      if ($cmd eq "set") {
+        $attr{$name}{registerType} = $attrVal;
+        if($hash->{helper}{disableRegisterMapping}==1) {
+          if($attrVal eq 'Input') {
+            $hash->{helper}{registerType}=4;
+          } else {
+            $hash->{helper}{registerType}=3;
+          }
+        }
+      } else {
+        $hash->{helper}{registerType}=3 if($hash->{helper}{disableRegisterMapping}==1);
+      }
+      $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
+      delete( $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} );
+      $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
+      $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
+    }
+  }
+  elsif($attrName eq "disableRegisterMapping") {
+    if (!defined($hash->{helper}{wago})) {
+      if ($cmd eq "set") {
+        $attr{$name}{disableRegisterMapping} = $attrVal;
+        if($attrVal==1) {
+          $hash->{helper}{disableRegisterMapping}=1;
+        } else {
+          $hash->{helper}{disableRegisterMapping}=0;
+        }
+      } else {
+        $hash->{helper}{disableRegisterMapping}=0;
+      }
+      if ($hash->{helper}{disableRegisterMapping}==0) {
+        if(($hash->{helper}{register}>30000)&&($hash->{helper}{register}<40000)) {
+          $hash->{helper}{registerType}=4;
+          $hash->{helper}{address}=$hash->{helper}{register}-30001;
+        } else {
+          $hash->{helper}{registerType}=3;
+          if(($hash->{helper}{register}>40000)&&($hash->{helper}{register}<50000)) {
+            $hash->{helper}{address}=$hash->{helper}{register}-40001;
+          } else {
+            $hash->{helper}{address}=$hash->{helper}{register};
+          }
+        }
+      } else {
+        if(AttrVal($name,"registerType",'Holding') eq 'Input') {
           $hash->{helper}{registerType}=4;
         } else {
           $hash->{helper}{registerType}=3;
         }
+        $hash->{helper}{address}=$hash->{helper}{register};
       }
-    } else {
-      $hash->{helper}{registerType}=3 if($hash->{helper}{disableRegisterMapping}==1);
+      $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
+      delete( $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} );
+      $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
+      $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
     }
-    $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
-    delete( $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} );
-    $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
-    $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
-  }
-  elsif($attrName eq "disableRegisterMapping") {
-    if ($cmd eq "set") {
-      $attr{$name}{disableRegisterMapping} = $attrVal;
-      if($attrVal==1) {
-        $hash->{helper}{disableRegisterMapping}=1;
-      } else {
-        $hash->{helper}{disableRegisterMapping}=0;
-      }
-    } else {
-      $hash->{helper}{disableRegisterMapping}=0;
-    }
-    if ($hash->{helper}{disableRegisterMapping}==0) {
-      if(($hash->{helper}{register}>30000)&&($hash->{helper}{register}<40000)) {
-        $hash->{helper}{registerType}=4;
-        $hash->{helper}{address}=$hash->{helper}{register}-30001;
-      } else {
-        $hash->{helper}{registerType}=3;
-        if(($hash->{helper}{register}>40000)&&($hash->{helper}{register}<50000)) {
-          $hash->{helper}{address}=$hash->{helper}{register}-40001;
-        } else {
-          $hash->{helper}{address}=$hash->{helper}{register};
-        }
-      }
-    } else {
-      if(AttrVal($name,"registerType",'Holding') eq 'Input') {
-        $hash->{helper}{registerType}=4;
-      } else {
-        $hash->{helper}{registerType}=3;
-      }
-      $hash->{helper}{address}=$hash->{helper}{register};
-    }
-    $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
-    delete( $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} );
-    $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
-    $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
   }
   return undef;
 }
@@ -543,7 +628,8 @@ ModbusRegister_SetMinMax($)
   my $vmin=0.0;
   my $vmax=65535.0;
   
-  my $plcDataType=AttrVal($hash->{NAME},"plcDataType","WORD");
+  my $plcDataType=ModbusRegister_GetDataType($hash);
+
   if($plcDataType eq "WORD") {
     $vmin=0;
     $vmax=65535;
