@@ -8,9 +8,10 @@
 36_ModbusTCPServer:
   150314 0014 fixed first entry for combined reads
 37_ModbusCoil:
-  150221 0005 fixed typo in attribute name updateIntervall
+  150315 0006 added wago address conversion
 37_ModbusRegister:
-  150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
+  150315 0015 added wago address conversion
+              added setList
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -46,6 +47,7 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  150315 0006 added wago address conversion
   150221 0005 fixed typo in attribute name updateIntervall
   150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
   150118 0003 completed documentation
@@ -53,6 +55,8 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  150315 0015 added wago address conversion
+              added setList
   150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
   150226 0013 force timestamp if alignUpdateInterval is used
   150222 0012 added alignUpdateInterval
