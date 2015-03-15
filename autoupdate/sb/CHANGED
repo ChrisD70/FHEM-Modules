@@ -1,5 +1,6 @@
 ﻿97_SB_SERVER:
-  150308 0013 - updateModules hinzugefügt
+  150308 0014 - updateModules geändert, download und reload hinzugefügt
+              - Loglevel angepasst
 98_SB_PLAYER:
   150312 0030 - wenn Player ausgeschaltet ist zuerst einschalten bevor play gesendet wird
               - ttsDelay hinzugefügt
@@ -9,6 +10,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  150315 0014 - updateModules geändert, download und reload hinzugefügt
+              - Loglevel angepasst
   150308 0013 - updateModules hinzugefügt
   150301 0012 - fhemrelay nicht mehr an LMS schicken sondern direkt an Dispatch übergeben
   150209 0011 - Alarmplaylisten an Player übertragen (benötigt 98_SB_PLAYER 0026 oder höher)
