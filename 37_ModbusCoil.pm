@@ -1,9 +1,10 @@
-﻿# $Id: 37_ModbusCoil.pm 0005 $
+﻿# $Id: 37_ModbusCoil.pm 0006 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
 # 150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
 # 150221 0005 fixed typo in attribute name updateIntervall
+# 150315 0006 added wago address conversion
 # TODO:
 
 package main;
@@ -52,7 +53,7 @@ ModbusCoil_Define($$)
   my @a = split("[ \t][ \t]*", $def);
 
   if((@a != 3 )&&(@a != 4)) {
-    my $msg = "wrong syntax: define <name> ModbusCoil [<unitId>] <addr>";
+    my $msg = "wrong syntax: define <name> ModbusCoil [<unitId>|wago] <addr>";
     Log3 undef, 2, $msg;
     return $msg;
   }
@@ -62,8 +63,48 @@ ModbusCoil_Define($$)
     $a[2]=0;
   }
   
-  return "$a[2] $a[3] is not a valid Modbus coil" if(($a[2]<0)||($a[2]>255)||($a[3]<0)||($a[3]>65535));
-
+  if($a[2] eq 'wago') {
+    my $coil=-1;
+    if($a[3]=~/^([M|Q|I]+)X(\d+)\.(\d+)$/) {
+      if($3<16) {
+        if($1 eq 'I') {
+          if(($2>31) && ($2<128)) {
+            $coil=32256+$2*16+$3;
+          } elsif(($2>255) && ($2<512)) {
+            $coil=4096+$2*16+$3;
+          } else {
+            $coil=$2*16+$3;
+          }
+          $hash->{helper}{registerType}=2;
+        }
+        if($1 eq 'Q') {
+          if(($2>31) && ($2<128)) {
+            $coil=36352+$2*16+$3;
+          } elsif(($2>255) && ($2<512)) {
+            $coil=$2*16+$3;
+          } else {
+            $coil=512+$2*16+$3;
+          }
+          $hash->{helper}{registerType}=1;
+        }
+        if($1 eq 'M') {
+          if($2<1280) {
+            $coil=12288+$2*16+$3;
+            $hash->{helper}{registerType}=1;
+          }
+        }
+      }
+    }
+    return "$a[3] is not a valid Wago address" if $coil==-1;
+    $a[2]=0;  # UnitId
+    $a[3]=$coil;
+    $hash->{helper}{wago}=1;
+    $hash->{helper}{disableRegisterMapping}=1;
+  } else {
+    return "$a[2] $a[3] is not a valid Modbus coil" if(($a[2]<0)||($a[2]>255)||($a[3]<0)||($a[3]>65535));
+    delete($hash->{helper}{wago}) if defined($hash->{helper}{wago});
+  }
+  
   my $name = $a[0];
 
   if(defined($attr{$name}{IODev})) {
@@ -80,7 +121,7 @@ ModbusCoil_Define($$)
   $hash->{helper}{unitId}=$a[2];
   $hash->{helper}{register}=$a[3];
   $hash->{helper}{nread}=8;
-  if(!defined($attr{$name}{disableRegisterMapping})) {
+  if(!defined($attr{$name}{disableRegisterMapping})&&!defined($hash->{helper}{wago})) {
     $hash->{helper}{disableRegisterMapping}=0;
   }
   if ($hash->{helper}{disableRegisterMapping}==0) {
@@ -96,7 +137,7 @@ ModbusCoil_Define($$)
       }
     }
   } else {
-    $hash->{helper}{registerType}=AttrVal($name,"source",1);
+    $hash->{helper}{registerType}=AttrVal($name,"source",1) if !defined($hash->{helper}{wago});
     $hash->{helper}{address}=$hash->{helper}{register};
   }
 
@@ -243,58 +284,62 @@ ModbusCoil_Attr(@)
     $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
   }
   elsif($attrName eq "source") {
-    if ($cmd eq "set") {
-      $attr{$name}{source} = $attrVal;
-      if($hash->{helper}{disableRegisterMapping}==1) {
-        if($attrVal eq 'Input') {
+    if (!defined($hash->{helper}{wago})) {
+      if ($cmd eq "set") {
+        #$attr{$name}{source} = $attrVal;
+        if(($hash->{helper}{disableRegisterMapping}==1)) {
+          if($attrVal eq 'Input') {
+            $hash->{helper}{registerType}=2;
+          } else {
+            $hash->{helper}{registerType}=1;
+          }
+        }
+      } else {
+        $hash->{helper}{registerType}=1 if($hash->{helper}{disableRegisterMapping}==1);
+      }
+      $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
+      delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
+      $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
+      $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
+    }
+  }
+  elsif($attrName eq "disableRegisterMapping") {
+    if (!defined($hash->{helper}{wago})) {
+      if ($cmd eq "set") {
+        #$attr{$name}{disableRegisterMapping} = $attrVal;
+        if($attrVal==1) {
+          $hash->{helper}{disableRegisterMapping}=1;
+        } else {
+          $hash->{helper}{disableRegisterMapping}=0;
+        }
+      } else {
+        $hash->{helper}{disableRegisterMapping}=0;
+      }
+      if ($hash->{helper}{disableRegisterMapping}==0) {
+        if(($hash->{helper}{register}>10000)&&($hash->{helper}{register}<20000)) {
+          $hash->{helper}{registerType}=1;
+          $hash->{helper}{address}=$hash->{helper}{register}-10001;
+        } else {
+          $hash->{helper}{registerType}=1;
+          if(($hash->{helper}{register}>0)&&($hash->{helper}{register}<10000)) {
+            $hash->{helper}{address}=$hash->{helper}{register}-1;
+          } else {
+            $hash->{helper}{address}=$hash->{helper}{register};
+          }
+        }
+      } else {
+        if(AttrVal($name,"source",'') eq 'Input') {
           $hash->{helper}{registerType}=2;
         } else {
           $hash->{helper}{registerType}=1;
         }
+        $hash->{helper}{address}=$hash->{helper}{register};
       }
-    } else {
-      $hash->{helper}{registerType}=1 if($hash->{helper}{disableRegisterMapping}==1);
+      $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
+      delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
+      $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
+      $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
     }
-    $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
-    delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
-    $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
-    $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
-  }
-  elsif($attrName eq "disableRegisterMapping") {
-    if ($cmd eq "set") {
-      $attr{$name}{disableRegisterMapping} = $attrVal;
-      if($attrVal==1) {
-        $hash->{helper}{disableRegisterMapping}=1;
-      } else {
-        $hash->{helper}{disableRegisterMapping}=0;
-      }
-    } else {
-      $hash->{helper}{disableRegisterMapping}=0;
-    }
-    if ($hash->{helper}{disableRegisterMapping}==0) {
-      if(($hash->{helper}{register}>10000)&&($hash->{helper}{register}<20000)) {
-        $hash->{helper}{registerType}=1;
-        $hash->{helper}{address}=$hash->{helper}{register}-10001;
-      } else {
-        $hash->{helper}{registerType}=1;
-        if(($hash->{helper}{register}>0)&&($hash->{helper}{register}<10000)) {
-          $hash->{helper}{address}=$hash->{helper}{register}-1;
-        } else {
-          $hash->{helper}{address}=$hash->{helper}{register};
-        }
-      }
-    } else {
-      if(AttrVal($name,"source",'') eq 'Input') {
-        $hash->{helper}{registerType}=2;
-      } else {
-        $hash->{helper}{registerType}=1;
-      }
-      $hash->{helper}{address}=$hash->{helper}{register};
-    }
-    $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
-    delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
-    $hash->{helper}{addr} = "$hash->{helper}{registerType} $hash->{helper}{unitId} $hash->{helper}{address}";
-    $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
   }
   return undef;
 }
