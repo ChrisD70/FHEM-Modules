@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0030 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm beta 20141120 0031 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -200,6 +200,7 @@ sub SB_PLAYER_Attr( @ ) {
                     $hash->{helper}{ttsOptions}{nosaverestore}=1 if($opt=~ m/nosaverestore/);
                     $hash->{helper}{ttsOptions}{forcegroupon}=1 if($opt=~ m/forcegroupon/);
                     $hash->{helper}{ttsOptions}{internalsave}=1 if($opt=~ m/internalsave/);         # CD 0029
+                    $hash->{helper}{ttsOptions}{ignorevolumelimit}=1 if($opt=~ m/ignorevolumelimit/);   # CD 0031
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -1119,6 +1120,17 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "state", "off" );
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
+            # CD 0031 wenn Player während TTS verschwindet Zustand zurücksetzen
+            if(($hash->{helper}{ttsstate}>TTS_IDLE)&&($hash->{helper}{ttsstate}<TTS_RESTORE)) {
+                $hash->{helper}{savedPlayerState}{power}="off" if(defined($hash->{helper}{savedPlayerState}));
+                SB_PLAYER_SetTTSState($hash,TTS_STOP,1,0);
+                RemoveInternalTimer( "TTSRestore:$name");
+                InternalTimer( gettimeofday() + 0.01, 
+                   "SB_PLAYER_tcb_TTSRestore",
+                   "TTSRestore:$name", 
+                   0 ); 
+            }
+            # CD 0031 end
         } elsif( $args[ 0 ] eq "reconnect" ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );         # CD 0030 u added to tags
         } else {
@@ -1150,6 +1162,17 @@ sub SB_PLAYER_Parse( $$ ) {
                     readingsBulkUpdate( $hash, "power", "off" );
                     SB_PLAYER_Amplifier( $hash );
                     delete($hash->{helper}{playAfterPowerOn}) if(defined($hash->{helper}{playAfterPowerOn}));   # CD 0030
+                    # CD 0031 wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
+                    if(($hash->{helper}{ttsstate}>TTS_IDLE)&&($hash->{helper}{ttsstate}<TTS_RESTORE)) {
+                        $hash->{helper}{savedPlayerState}{power}="off" if(defined($hash->{helper}{savedPlayerState}));
+                        SB_PLAYER_SetTTSState($hash,TTS_STOP,1,0);
+                        RemoveInternalTimer( "TTSRestore:$name");
+                        InternalTimer( gettimeofday() + 0.01, 
+                           "SB_PLAYER_tcb_TTSRestore",
+                           "TTSRestore:$name", 
+                           0 ); 
+                    }
+                    # CD 0031 end
                 }
             # CD 0000 end
             # CD 0010 start prefset server mute
@@ -1258,6 +1281,16 @@ sub SB_PLAYER_Parse( $$ ) {
                 $hash->{helper}{ttsMaster}=$args[1];
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsactive ".$hash->{helper}{ttsMaster} );
                 SB_PLAYER_SetTTSState($hash,TTS_SYNCGROUPACTIVE,1,0);
+                # CD 0031 Lautstärke setzen
+                if(!defined($hash->{SYNCVOLUME}) || ($hash->{SYNCVOLUME}==0)) {
+                    if(defined($hash->{helper}{ttsVolume})) {
+                        $hash->{helper}{ttsRestoreVolumeAfterStop}=ReadingsVal($name,"volumeStraight","?");
+                        my $vol=$hash->{helper}{ttsVolume};
+                        $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit}));
+                        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
+                    }
+                }
+                # CD 0031 end
             }
             elsif ($args[0] eq "ttsstopped") {
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsstopped" );
@@ -1280,6 +1313,12 @@ sub SB_PLAYER_Parse( $$ ) {
                     delete($hash->{helper}{ttspoweroffafterstop});
                 }
                 # CD 0030 end
+                # CD 0031 Lautstärke zurücksetzen
+                if(defined($hash->{helper}{ttsRestoreVolumeAfterStop})) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".($hash->{helper}{ttsRestoreVolumeAfterStop})."\n" );
+                    delete($hash->{helper}{ttsRestoreVolumeAfterStop});
+                }
+                # CD 0031 end
             }
             elsif ($args[0] eq "ttsadd") {
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsadd $args[1]" );
@@ -1736,7 +1775,9 @@ sub SB_PLAYER_Set( $@ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
             if(defined($hash->{helper}{ttsVolume})) {
                 SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0);
-                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".($hash->{helper}{ttsVolume})."\n" );
+                my $vol=$hash->{helper}{ttsVolume};
+                $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
+                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
                 SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume});
             }
             SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
