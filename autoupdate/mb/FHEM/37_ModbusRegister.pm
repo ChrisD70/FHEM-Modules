@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0015 $
+﻿# $Id: 37_ModbusRegister.pm 0016 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -14,6 +14,7 @@
 # 150226 0013 force timestamp if alignUpdateInterval is used
 # 150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
 # 150315 0015 added wago address conversion, added setList
+# 150316 0016 fix for eventMap 0:off 1:on, fixed SetExtensions
 # TODO:
 
 package main;
@@ -232,11 +233,15 @@ ModbusRegister_Set($@)
   }
   return "no set value specified" if($na<3);
   #Log 0,"$a[1] $a[2] $na";
-  return "invalid value for set" if(($na>3)||!ModbusRegister_is_float($a[2])||($a[2]<$hash->{helper}{cnv}{min})||($a[2]>$hash->{helper}{cnv}{max}));
 
   return "writing to input registers not allowed" if ($hash->{helper}{registerType}==4);
+
+  # CD 0016 fix for eventMap 0:off 1:on
+  $a[1]=~s/^1-/on-/;
+  $a[2]=~s/^0-/off-/;
   
   if(($a[1] eq "value")||($a[1] eq AttrVal($name,"stateAlias",''))) {
+    return "invalid value for set" if(($na>3)||!ModbusRegister_is_float($a[2])||($a[2]<$hash->{helper}{cnv}{min})||($a[2]>$hash->{helper}{cnv}{max}));
     my $v=$a[2];
     my $wlen=1;
     my $msg;
@@ -294,6 +299,9 @@ ModbusRegister_Set($@)
     }
   
     IOWrite($hash,$msg);
+  } else {
+    my $list = "off on "; 
+    return SetExtensions($hash, $list, @a); 
   }
   return undef;
 }

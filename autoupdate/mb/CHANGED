@@ -10,8 +10,8 @@
 37_ModbusCoil:
   150315 0006 added wago address conversion
 37_ModbusRegister:
-  150315 0015 added wago address conversion
-              added setList
+  150316 0016 fix for eventMap 0:off 1:on
+              fixed SetExtensions
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -55,6 +55,8 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  150316 0016 fix for eventMap 0:off 1:on
+              fixed SetExtensions
   150315 0015 added wago address conversion
               added setList
   150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
