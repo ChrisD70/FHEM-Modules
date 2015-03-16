@@ -2,10 +2,10 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150312 0030 - wenn Player ausgeschaltet ist zuerst einschalten bevor play gesendet wird
-              - ttsDelay hinzugefügt
-              - ttsOptions:ttsforcegroupon implementiert
-              - ttsOptions:internalSave unterstützt auch Remote-Streams
+  150315 0031 - wenn Player während TTS verschwindet Zustand zurücksetzen
+              - wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
+              - ttsVolume auf volumeLimit begrenzen außer ignorevolumelimit ist in ttsOptions gesetzt
+              - ttsVolume bei synchronisierten Playern setzen
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -43,6 +43,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150315 0031 - wenn Player während TTS verschwindet Zustand zurücksetzen
+              - wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
+              - ttsVolume auf volumeLimit begrenzen außer ignorevolumelimit ist in ttsOptions gesetzt
+              - ttsVolume bei synchronisierten Playern setzen
   150312 0030 - wenn Player ausgeschaltet ist zuerst einschalten bevor play gesendet wird
               - ttsDelay hinzugefügt
               - ttsOptions:ttsforcegroupon implementiert
