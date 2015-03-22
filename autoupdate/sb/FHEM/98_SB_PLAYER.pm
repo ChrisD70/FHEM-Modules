@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm beta 20141120 0031 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8247 beta 0032 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -67,6 +67,8 @@ use constant { true => 1, false => 0 };
 
 # used for $hash->{helper}{ttsstate}
 use constant TTS_IDLE                                    => 0;
+use constant TTS_TEXT2SPEECH_BUSY                        => 4;
+use constant TTS_TEXT2SPEECH_ACTIVE                      => 6;
 use constant TTS_POWERON                                 => 10;
 use constant TTS_SAVE                                    => 20;
 use constant TTS_UNSYNC                                  => 30;
@@ -81,6 +83,8 @@ use constant TTS_SYNC                                    => 100;
 use constant TTS_SYNCGROUPACTIVE                         => 1000;
 
 my %ttsstates = (   0   =>'idle',
+                    4   =>'Text2Speech busy, waiting',
+                    6   =>'Text2Speech active',
                     10  =>'power on',
                     20  =>'save state',
                     30  =>'unsync player',
@@ -115,6 +119,9 @@ sub SB_PLAYER_Initialize( $ ) {
 
     # CD 0007
     $hash->{AttrFn}  = "SB_PLAYER_Attr";
+
+    # CD 0032
+    $hash->{NotifyFn}  = "SB_PLAYER_Notify";
     
     # the attributes we have. Space separated list of attribute values in 
     # the form name:default1,default2
@@ -133,6 +140,8 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "ttsOptions ";
     # CD 0030
     $hash->{AttrList}  .= "ttsDelay ";
+    # CD 0032
+    $hash->{AttrList}  .= "ttsPrefix "; # DJAlex 665
     # CD 0007
     $hash->{AttrList}  .= "syncVolume ";
     $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
@@ -1492,6 +1501,41 @@ sub SB_PLAYER_GetTTSDelay( $ ) {
 }
 # CD 0030 end
 
+# CD 0032 start
+# ----------------------------------------------------------------------------
+#  the Notify function
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_Notify( $$ ) {
+    my ( $hash, $dev_hash ) = @_;
+    my $name = $hash->{NAME}; # own name / hash
+    my $devName = $dev_hash->{NAME}; # Device that created the events
+
+    if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
+    }
+
+    if(defined($hash->{helper}{text2speech}{name}) && ($hash->{helper}{text2speech}{name} eq $devName)) {
+        if($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_ACTIVE) {
+            foreach my $line (@{$dev_hash->{CHANGED}}) {
+                my @args=split(' ',$line);
+                if ($args[0] eq $name) {
+                    Log 0,$hash->{helper}{text2speech}{pathPrefix}.'/'.$args[2];
+                    SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);
+                }
+            }
+        } elsif ($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_BUSY) {
+            # versuchen Text2Speech zu belegen
+            if(defined($dev_hash->{helper}{SB_PLAYER}) || (defined($dev_hash->{helper}{Text2Speech}) && @{$dev_hash->{helper}{Text2Speech}} > 0)) {
+                # zu spät, weiter warten
+            } else {
+                $dev_hash->{helper}{SB_PLAYER}=$name;
+                SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
+                fhem("set $devName tts ".($hash->{helper}{text2speech}{text}));
+            }
+        }
+    }
+}
+# CD 0032 end
+
 # ----------------------------------------------------------------------------
 #  Set of a module
 #  called upon set <name> cmd, arg1, arg2, ....
@@ -1727,25 +1771,77 @@ sub SB_PLAYER_Set( $@ ) {
              ( $cmd eq "TALK" ) || 
              ( $cmd eq "talk" ) ||
              ( lc($cmd) eq "saytext" ) ) {  # CD 0014 hinzugefügt
-             
+
+        $hash->{helper}{ttsstate}=TTS_IDLE if(!defined($hash->{helper}{ttsstate}));
+
+        # CD 0032 - Text2Speech verwenden ?
+        my $useText2Speech=0;
+        my $errMsg;
+        if(AttrVal( $name, "ttslink", "none" )=~m/^Text2Speech/) {
+            my @extTTS=split(":",AttrVal( $name, "ttslink", "none" ));
+            # Device überhaupt verwendbar ?
+            if(defined($extTTS[1]) && defined($defs{$extTTS[1]})) {
+                my $ttshash=$defs{$extTTS[1]};
+                if(defined($ttshash->{TYPE}) && ($ttshash->{TYPE} eq 'Text2SpeechSB')) {
+                    if(defined($ttshash->{ALSADEVICE}) && ($ttshash->{ALSADEVICE} eq 'SB_PLAYER')) {
+                        if(AttrVal($extTTS[1], "TTS_UseMP3Wrap", 0) eq "1") {
+                            if (AttrVal($hash->{NAME}, "TTS_Ressource", "Google") eq "Google") {
+                                $useText2Speech=1;
+                                $hash->{helper}{text2speech}{name}=$extTTS[1];
+                                $hash->{helper}{text2speech}{pathPrefix}=join(':',@extTTS[2..$#extTTS]) if defined($extTTS[2]);
+                                # Zustand Text2Speech ?
+                                if(defined($ttshash->{helper}{SB_PLAYER}) || (defined($ttshash->{helper}{Text2Speech}) && @{$ttshash->{helper}{Text2Speech}} > 0)) {
+                                    # Text2Speech besetzt, warten
+                                    SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_BUSY,0,0);
+                                    $hash->{helper}{text2speech}{text}=join( " ", @arg );
+                                    return;
+                                } else {
+                                    # Text2Speech belegen
+                                    $ttshash->{helper}{SB_PLAYER}=$name;
+                                    SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
+                                    fhem("set $extTTS[1] tts ".join( " ", @arg ));
+                                    return;
+                                }
+                            } else {
+                                $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_Ressource must be set to Google";
+                            }
+                        } else {
+                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_UseMP3Wrap must be set to 1";
+                        }
+                    } else {
+                        $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported ALSADEVICE";
+                    }
+                } else {
+                    $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": unsupported Text2Speech device";
+                }
+            } else {
+                $errMsg = "SB_PLAYER_Set: invalid Text2Speech device";
+            }
+        }
+        if(defined($errMsg)) {
+            Log3( $hash, 1, $errMsg );
+            return( $errMsg );
+        }
+
         # CD 0028 start - komplett überarbeitet
         # prepare text
         my $ttstext=join( " ", @arg );
-		$ttstext =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
-		$ttstext =~ s/\s+/ /g;
-		$ttstext =~ s/^\s|\s$//g;
+        $ttstext = AttrVal( $name, "ttsPrefix", "" )." ".$ttstext;  # CD 0032
+        $ttstext =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
+        $ttstext =~ s/\s+/ /g;
+        $ttstext =~ s/^\s|\s$//g;
 
         my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
                         "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
         my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
         $ttstext =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
 
-		if (length($ttstext)==0) {
+        if (length($ttstext)==0) {
             my $msg = "SB_PLAYER_Set: no text passed for synthesis.";
             Log3( $hash, 3, $msg );
             return( $msg );
-		}
-		$ttstext .= "." unless ($ttstext =~ m/^.+[.,?!:;]$/);
+        }
+        $ttstext .= "." unless ($ttstext =~ m/^.+[.,?!:;]$/);
         my @textlines;
         my $tl='';
         if (length($ttstext)>0) {
@@ -1761,8 +1857,6 @@ sub SB_PLAYER_Set( $@ ) {
             }
         }
         push(@textlines,$tl) if($tl ne '');
-
-        $hash->{helper}{ttsstate}=TTS_IDLE if(!defined($hash->{helper}{ttsstate}));
 
         if($hash->{helper}{ttsstate}==TTS_IDLE) {
             # talk ist nicht aktiv
@@ -2842,7 +2936,11 @@ sub SB_PLAYER_IsValidMAC( $ ) {
     my $dd = "$d$d";
 
     if( $instr =~ /($dd([:-])$dd(\2$dd){4})/og ) {
+      if( $instr =~ /^(00[:-]){5}(00)$/) {  # CD 0032 00:00:00:00:00:00 is not a valid MAC
+        return( 0 );
+      } else {
         return( 1 );
+      }
     } else {
         return( 0 );
     }

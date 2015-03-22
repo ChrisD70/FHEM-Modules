@@ -2,14 +2,13 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150315 0031 - wenn Player während TTS verschwindet Zustand zurücksetzen
-              - wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
-              - ttsVolume auf volumeLimit begrenzen außer ignorevolumelimit ist in ttsOptions gesetzt
-              - ttsVolume bei synchronisierten Playern setzen
+  150321 0032 - 00:00:00:00:00:00 nicht als gültige MAC akzeptieren
+              - Attribut ttsPrefix hinzugefügt
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  150319 0014 - in contrib eingecheckt (8246)
   150315 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
   150308 0013 - updateModules hinzugefügt
@@ -43,6 +42,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150322 0032 - 00:00:00:00:00:00 nicht als gültige MAC akzeptieren
+              - Attribut ttsPrefix hinzugefügt
+  150319 0031 - in contrib eingecheckt (8247)
   150315 0031 - wenn Player während TTS verschwindet Zustand zurücksetzen
               - wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
               - ttsVolume auf volumeLimit begrenzen außer ignorevolumelimit ist in ttsOptions gesetzt
