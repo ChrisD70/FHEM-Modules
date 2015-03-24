@@ -1,10 +1,11 @@
-﻿# $Id: 37_ModbusCoil.pm 0006 $
+﻿# $Id: 37_ModbusCoil.pm 0007 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
 # 150215 0004 fixed bug with source and disableRegisterMapping (thanks Dieter1)
 # 150221 0005 fixed typo in attribute name updateIntervall
 # 150315 0006 added wago address conversion
+# 150324 0007 added writeMode Impulse
 # TODO:
 
 package main;
@@ -43,6 +44,7 @@ ModbusCoil_Initialize($)
                        "updateInterval updateIntervall ".
                        "disableRegisterMapping:0,1 ".
                        "source:Coil,Input ".
+                       "writeMode ".
                        "$readingFnAttributes";
 }
 
@@ -64,38 +66,10 @@ ModbusCoil_Define($$)
   }
   
   if($a[2] eq 'wago') {
-    my $coil=-1;
-    if($a[3]=~/^([M|Q|I]+)X(\d+)\.(\d+)$/) {
-      if($3<16) {
-        if($1 eq 'I') {
-          if(($2>31) && ($2<128)) {
-            $coil=32256+$2*16+$3;
-          } elsif(($2>255) && ($2<512)) {
-            $coil=4096+$2*16+$3;
-          } else {
-            $coil=$2*16+$3;
-          }
-          $hash->{helper}{registerType}=2;
-        }
-        if($1 eq 'Q') {
-          if(($2>31) && ($2<128)) {
-            $coil=36352+$2*16+$3;
-          } elsif(($2>255) && ($2<512)) {
-            $coil=$2*16+$3;
-          } else {
-            $coil=512+$2*16+$3;
-          }
-          $hash->{helper}{registerType}=1;
-        }
-        if($1 eq 'M') {
-          if($2<1280) {
-            $coil=12288+$2*16+$3;
-            $hash->{helper}{registerType}=1;
-          }
-        }
-      }
-    }
-    return "$a[3] is not a valid Wago address" if $coil==-1;
+    my ($type,$coil)=ModbusCoil_ParseWagoAddress($hash,$a[3]);
+    return "$a[3] is not a valid Wago address" if(($type==-1)||($coil==-1));
+
+    $hash->{helper}{registerType}=$type;
     $a[2]=0;  # UnitId
     $a[3]=$coil;
     $hash->{helper}{wago}=1;
@@ -121,25 +95,13 @@ ModbusCoil_Define($$)
   $hash->{helper}{unitId}=$a[2];
   $hash->{helper}{register}=$a[3];
   $hash->{helper}{nread}=8;
-  if(!defined($attr{$name}{disableRegisterMapping})&&!defined($hash->{helper}{wago})) {
-    $hash->{helper}{disableRegisterMapping}=0;
-  }
-  if ($hash->{helper}{disableRegisterMapping}==0) {
-    if(($hash->{helper}{register}>10000)&&($hash->{helper}{register}<20000)) {
-      $hash->{helper}{registerType}=2;
-      $hash->{helper}{address}=$hash->{helper}{register}-10001;
-    } else {
-      $hash->{helper}{registerType}=1;
-      if(($hash->{helper}{register}>0)&&($hash->{helper}{register}<10000)) {
-        $hash->{helper}{address}=$hash->{helper}{register}-1;
-      } else {
-        $hash->{helper}{address}=$hash->{helper}{register};
-      }
+  if (!defined($hash->{helper}{wago})) {
+    if(!defined($attr{$name}{disableRegisterMapping})) {
+      $hash->{helper}{disableRegisterMapping}=0;
     }
-  } else {
-    $hash->{helper}{registerType}=AttrVal($name,"source",1) if !defined($hash->{helper}{wago});
-    $hash->{helper}{address}=$hash->{helper}{register};
   }
+  
+  ($hash->{helper}{registerType},$hash->{helper}{address})=ModbusCoil_GetAddress($hash,$hash->{helper}{register});
 
   if(defined($hash->{helper}{addr})&&defined($modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name})) {
     Log3 $name, 5, "Removing $hash->{helper}{addr} $name";
@@ -159,6 +121,47 @@ ModbusCoil_Define($$)
 
 #####################################
 sub
+ModbusCoil_ParseWagoAddress($$)
+{
+  my ($hash, $arg) = @_;
+
+  my $coil=-1;
+  my $type=-1;
+  if($arg=~/^([M|Q|I]+)X(\d+)\.(\d+)$/) {
+    if($3<16) {
+      if($1 eq 'I') {
+        if(($2>31) && ($2<128)) {
+          $coil=32256+$2*16+$3;
+        } elsif(($2>255) && ($2<512)) {
+          $coil=4096+$2*16+$3;
+        } else {
+          $coil=$2*16+$3;
+        }
+        $type=2;
+      }
+      if($1 eq 'Q') {
+        if(($2>31) && ($2<128)) {
+          $coil=36352+$2*16+$3;
+        } elsif(($2>255) && ($2<512)) {
+          $coil=$2*16+$3;
+        } else {
+          $coil=512+$2*16+$3;
+        }
+        $type=1;
+      }
+      if($1 eq 'M') {
+        if($2<1280) {
+          $coil=12288+$2*16+$3;
+          $type=1;
+        }
+      }
+    }
+  }
+  return ($type, $coil);
+}
+
+#####################################
+sub
 ModbusCoil_Undef($$)
 {
   my ($hash, $arg) = @_;
@@ -167,6 +170,7 @@ ModbusCoil_Undef($$)
 
   Log3 $name, 5, "Undef $addr $name";
   delete( $modules{ModbusCoil}{defptr}{$addr}{$name} );
+  delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if(defined($hash->{helper}{writeMode}));
 
   return undef;
 }
@@ -178,6 +182,7 @@ ModbusCoil_Set($@)
   my ($hash, @a) = @_; 
   my $ret = undef;
   my $na = int(@a); 
+  my $name = $hash->{NAME};
   
   return "no set value specified" if($na==0);
 
@@ -188,20 +193,46 @@ ModbusCoil_Set($@)
   }
 
   return "no set value specified" if($na<2);
-  return "writing to inputs not allowed" if ($hash->{helper}{registerType}==2);
+  return "writing to inputs not allowed" if (($hash->{helper}{registerType}==2)&&(!defined($hash->{helper}{writeMode})));
 
   if (($a[1] eq "on") || ($a[1] eq "off") || ($a[1] eq "1") || ($a[1] eq "0")) {
     my $v=0;
     $v=255 if (($a[1] eq "on")||($a[1] eq "1"));
 
     my $msg;
-    $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v),0;
-    IOWrite($hash,$msg);
+    if(!defined($hash->{helper}{writeMode})) {
+      $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v),0;
+      IOWrite($hash,$msg);
+    } else {
+      if($hash->{helper}{writeMode}{type} eq 'IM') {
+        if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
+          RemoveInternalTimer( "ModbusCoil_ResetImpulse:$name");
+          InternalTimer( gettimeofday() + 0.5, 
+           "ModbusCoil_tcb_ResetImpulse",
+           "ModbusCoil_ResetImpulse:$name", 
+           0 );
+          $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255),0;
+          IOWrite($hash,$msg);
+        }
+      }
+    }
   } else {
     my $list = "off on "; 
     return SetExtensions($hash, $list, @a); 
   }
   return undef;
+}
+
+#####################################
+sub
+ModbusCoil_tcb_ResetImpulse( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+    my $msg;
+
+    $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0),0;
+    IOWrite($hash,$msg);
 }
   
 #####################################
@@ -249,12 +280,16 @@ ModbusCoil_Parse($$)
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
         next if($nvals!=ceil($lh->{helper}{nread}/8));
-        $lh->{ModbusCoil_lastRcv} = TimeNow();
-        my $v="off";
-        $v="on" if(($vals[0]&1)==1);
-        readingsBeginUpdate($lh);
-        readingsBulkUpdate($lh,"state",$v);
-        readingsEndUpdate($lh,1);
+        if(($fc==WRITE_SINGLE_COIL)&&defined($lh->{helper}{writeMode})) {
+          # Rückmeldung ignorieren
+        } else {
+          $lh->{ModbusCoil_lastRcv} = TimeNow();
+          my $v="off";
+          $v="on" if(($vals[0]&1)==1);
+          readingsBeginUpdate($lh);
+          readingsBulkUpdate($lh,"state",$v);
+          readingsEndUpdate($lh,1);
+        }
         push(@list, $n); 
       }
     }
@@ -315,25 +350,16 @@ ModbusCoil_Attr(@)
       } else {
         $hash->{helper}{disableRegisterMapping}=0;
       }
-      if ($hash->{helper}{disableRegisterMapping}==0) {
-        if(($hash->{helper}{register}>10000)&&($hash->{helper}{register}<20000)) {
-          $hash->{helper}{registerType}=1;
-          $hash->{helper}{address}=$hash->{helper}{register}-10001;
-        } else {
-          $hash->{helper}{registerType}=1;
-          if(($hash->{helper}{register}>0)&&($hash->{helper}{register}<10000)) {
-            $hash->{helper}{address}=$hash->{helper}{register}-1;
-          } else {
-            $hash->{helper}{address}=$hash->{helper}{register};
-          }
-        }
-      } else {
-        if(AttrVal($name,"source",'') eq 'Input') {
-          $hash->{helper}{registerType}=2;
-        } else {
-          $hash->{helper}{registerType}=1;
-        }
-        $hash->{helper}{address}=$hash->{helper}{register};
+      ($hash->{helper}{registerType},$hash->{helper}{address})=ModbusCoil_GetAddress($hash,$hash->{helper}{register});
+      if((defined($hash->{helper}{writeMode})) && (!defined($hash->{helper}{wago}))) {
+        my ($type,$coil)=ModbusCoil_GetAddress($hash,$hash->{helper}{writeMode}{register});
+        
+        $hash->{helper}{writeMode}{registerType}=$type;
+        $hash->{helper}{writeMode}{address}=$coil;
+        
+        delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
+        $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
+        $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
       }
       $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
       delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
@@ -341,7 +367,70 @@ ModbusCoil_Attr(@)
       $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
     }
   }
+  elsif($attrName eq "writeMode") {
+    if ($cmd eq "set") {
+      my @args=split(":",$attrVal);
+      if($args[0] eq 'Impulse') {
+        my ($type,$coil);
+        if (defined($hash->{helper}{wago})) {
+          ($type,$coil)=ModbusCoil_ParseWagoAddress($hash,$args[1]);
+          return "$args[1] is not a valid Wago address" if(($type==-1)||($coil==-1));
+        } else {
+          ($type,$coil)=ModbusCoil_GetAddress($hash,$args[1]);
+          $type=1;
+        }
+        return "writing to input $args[1] is not allowed" if($type==2);
+
+        $hash->{helper}{writeMode}{register}=$args[1];
+        $hash->{helper}{writeMode}{registerType}=$type;
+        $hash->{helper}{writeMode}{address}=$coil;
+        
+        delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
+        $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
+        $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
+        $hash->{helper}{writeMode}{type}='IM';
+      }
+      else {
+        return "unknown writeMode $args[0]";
+      }
+    } else {
+      delete($hash->{helper}{writeMode}) if defined($hash->{helper}{writeMode});
+      delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode});
+    }
+  }
   return undef;
+}
+
+##########################################################
+sub ModbusCoil_GetAddress(@)
+{
+  my ($hash, $arg) = @_;
+  my $name = $hash->{NAME};
+
+  my $address=-1;
+  my $type=-1;
+
+  if ($hash->{helper}{disableRegisterMapping}==0) {
+    if(($arg>10000)&&($arg<20000)) {
+      $type=1;
+      $address=$arg-10001;
+    } else {
+      $type=1;
+      if(($arg>0)&&($arg<10000)) {
+        $address=$arg-1;
+      } else {
+        $address=$arg;
+      }
+    }
+  } else {
+    if(AttrVal($name,"source",'') eq 'Input') {
+      $type=2;
+    } else {
+      $type=1;
+    }
+    $address=$arg;
+  }
+  return($type,$address);
 }
 
 sub ModbusCoil_Notify(@) {##########################################################
