@@ -8,7 +8,7 @@
 36_ModbusTCPServer:
   150314 0014 fixed first entry for combined reads
 37_ModbusCoil:
-  150324 0007 added writeMode Impulse
+  150324 0008 do not trigger on set, use set_on and set_off
 37_ModbusRegister:
   150316 0016 fix for eventMap 0:off 1:on
               fixed SetExtensions
@@ -47,6 +47,7 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  150324 0008 do not trigger on set, use set_on and set_off
   150324 0007 added writeMode Impulse
   150315 0006 added wago address conversion
   150221 0005 fixed typo in attribute name updateIntervall
