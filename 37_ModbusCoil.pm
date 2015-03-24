@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0007 $
+﻿# $Id: 37_ModbusCoil.pm 0008 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -6,6 +6,7 @@
 # 150221 0005 fixed typo in attribute name updateIntervall
 # 150315 0006 added wago address conversion
 # 150324 0007 added writeMode Impulse
+# 150324 0008 do not trigger on set, use set_on and set_off
 # TODO:
 
 package main;
@@ -200,9 +201,9 @@ ModbusCoil_Set($@)
     $v=255 if (($a[1] eq "on")||($a[1] eq "1"));
 
     my $msg;
+    
     if(!defined($hash->{helper}{writeMode})) {
       $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v),0;
-      IOWrite($hash,$msg);
     } else {
       if($hash->{helper}{writeMode}{type} eq 'IM') {
         if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
@@ -212,15 +213,22 @@ ModbusCoil_Set($@)
            "ModbusCoil_ResetImpulse:$name", 
            0 );
           $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255),0;
-          IOWrite($hash,$msg);
         }
+      }
+    }
+    if(defined($msg)) {
+      IOWrite($hash,$msg);
+      if($v==0) {
+        readingsSingleUpdate( $hash, "state", "set_off", 1 );
+      } else {
+        readingsSingleUpdate( $hash, "state", "set_on", 1 );
       }
     }
   } else {
     my $list = "off on "; 
     return SetExtensions($hash, $list, @a); 
   }
-  return undef;
+  return ("",1);  # do not trigger
 }
 
 #####################################
@@ -262,14 +270,13 @@ ModbusCoil_Parse($$)
   my $name = $hash->{NAME};
 
   my (undef,$unitid,$addr,$fc,$nvals,@vals) = split(":",$msg);
-
-  Log3 $name, 5,"ModbusCoil_Parse: $fc $unitid $addr $nvals $vals[0]";
+  #Log3 $name, 5,"ModbusCoil_Parse: $fc $unitid $addr $nvals $vals[0]";
 
   my @list;
   my $raddr;
   if($fc==WRITE_SINGLE_COIL) {
     $raddr = "1 $unitid $addr";
-	$vals[0]=1 if ($vals[0]==65280);
+    $vals[0]=1 if ($vals[0]==65280);
   } else {
     $raddr = "$fc $unitid $addr";
   }
