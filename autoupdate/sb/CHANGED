@@ -2,8 +2,9 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150321 0032 - 00:00:00:00:00:00 nicht als gültige MAC akzeptieren
-              - Attribut ttsPrefix hinzugefügt
+  150327 0033 - Attribut ttsMP3FileDir hinzugefügt
+              - mp3s in talk integriert, z.B. set meinPlayer talk |gong.mp3| Test |gong.mp3|
+              - Anbindung an Text2Speech (Spezialversion von Text2Speech erforderlich)
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -42,6 +43,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150327 0033 - Attribut ttsMP3FileDir hinzugefügt
+              - mp3s in talk integriert, z.B. set meinPlayer talk |gong.mp3| Test |gong.mp3|
+              - Anbindung an Text2Speech (Spezialversion von Text2Speech erforderlich)
   150322 0032 - 00:00:00:00:00:00 nicht als gültige MAC akzeptieren
               - Attribut ttsPrefix hinzugefügt
   150319 0031 - in contrib eingecheckt (8247)

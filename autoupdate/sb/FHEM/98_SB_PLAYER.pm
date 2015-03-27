@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8247 beta 0032 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8247 beta 0033 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -81,6 +81,8 @@ use constant TTS_STOP                                    => 80;
 use constant TTS_RESTORE                                 => 90;
 use constant TTS_SYNC                                    => 100;
 use constant TTS_SYNCGROUPACTIVE                         => 1000;
+use constant TTS_EXT_TEXT2SPEECH_BUSY                    => 2004;
+use constant TTS_EXT_TEXT2SPEECH_ACTIVE                  => 2006;
 
 my %ttsstates = (   0   =>'idle',
                     4   =>'Text2Speech busy, waiting',
@@ -96,7 +98,9 @@ my %ttsstates = (   0   =>'idle',
                     80  =>'stopped',
                     90  =>'restore state',
                     100 =>'sync',
-                    1000=>'active');
+                    1000=>'active',
+                    2004=>'Text2Speech busy, waiting',
+                    2006=>'Text2Speech active');
                     
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -142,6 +146,8 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "ttsDelay ";
     # CD 0032
     $hash->{AttrList}  .= "ttsPrefix "; # DJAlex 665
+    # CD 0033
+    $hash->{AttrList}  .= "ttsMP3FileDir ";
     # CD 0007
     $hash->{AttrList}  .= "syncVolume ";
     $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
@@ -586,11 +592,18 @@ sub SB_PLAYER_tcb_TTSRestore( $ ) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
-    if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
-        SB_PLAYER_SetTTSState($hash,TTS_RESTORE,0,0);
-        SB_PLAYER_Recall( $hash );
+    # CD 0033 start
+    if(defined($hash->{helper}{ttsqueue})) {
+        SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
+        SB_PLAYER_LoadTalk($hash);
     } else {
-        SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+    # CD 0033 end
+        if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
+            SB_PLAYER_SetTTSState($hash,TTS_RESTORE,0,0);
+            SB_PLAYER_Recall( $hash );
+        } else {
+            SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+        }
     }
 }
 # CD 0028 end
@@ -837,6 +850,10 @@ sub SB_PLAYER_Parse( $$ ) {
 #           }
         } elsif( $args[ 0 ] eq "cant_open" ) {
             #TODO: needs to be handled
+            # CD 0033 TTS abbrechen bei Fehler
+            if($hash->{helper}{ttsstate}==TTS_WAITFORPLAY) {
+                SB_PLAYER_TTSStopped($hash);
+            }
         } elsif( $args[ 0 ] eq "open" ) {
             readingsBulkUpdate( $hash, "currentMedia", "$args[1]" );
             SB_PLAYER_Amplifier( $hash );
@@ -1385,16 +1402,13 @@ sub SB_PLAYER_tcb_TTSDelay( $ ) {
 #  called when talk is stopped, check if there are queued elements
 # ----------------------------------------------------------------------------
 sub SB_PLAYER_TTSStopped($) {
+    # readingsBulkUpdate muss aktiv sein
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
     if(defined($hash->{helper}{ttsqueue})) {
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
-        for (@{$hash->{helper}{ttsqueue}}) {
-            IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $_ . "\n" );                    
-        }
         SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,1,0);
-        delete($hash->{helper}{ttsqueue});
+        SB_PLAYER_LoadTalk($hash);  # CD 0033
     } else {
         SB_PLAYER_SetTTSState($hash,TTS_STOP,1,0);
         RemoveInternalTimer( "TTSRestore:$name");
@@ -1501,7 +1515,23 @@ sub SB_PLAYER_GetTTSDelay( $ ) {
 }
 # CD 0030 end
 
-# CD 0032 start
+# CD 0033 start
+# ----------------------------------------------------------------------------
+#  called after Text2Speech has finished, start talk
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_tcb_StartT2STalk( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    if($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_ACTIVE) {
+        # talk ist nicht aktiv
+        SB_PLAYER_PrepareTalk($hash);
+    }
+    SB_PLAYER_LoadTalk($hash);
+}
+# CD 0033 end
+
 # ----------------------------------------------------------------------------
 #  the Notify function
 # ----------------------------------------------------------------------------
@@ -1513,28 +1543,44 @@ sub SB_PLAYER_Notify( $$ ) {
     if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
     }
 
+    # CD 0033 start
     if(defined($hash->{helper}{text2speech}{name}) && ($hash->{helper}{text2speech}{name} eq $devName)) {
-        if($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_ACTIVE) {
+        $hash->{helper}{ttsExtstate}=TTS_IDLE if(!defined($hash->{helper}{ttsExtstate}));
+    
+        if(($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_ACTIVE)||($hash->{helper}{ttsExtstate}==TTS_EXT_TEXT2SPEECH_ACTIVE)) {
             foreach my $line (@{$dev_hash->{CHANGED}}) {
                 my @args=split(' ',$line);
                 if ($args[0] eq $name) {
-                    Log 0,$hash->{helper}{text2speech}{pathPrefix}.'/'.$args[2];
-                    SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);
+                    if($args[1] eq "ttsadd") {
+                        push(@{$hash->{helper}{ttsqueue}},$hash->{helper}{text2speech}{pathPrefix}.$args[2]);
+                    }
+                    elsif($args[1] eq 'ttsdone') {
+                        RemoveInternalTimer( "StartTalk:$name");
+                        InternalTimer( gettimeofday() + 0.01, 
+                           "SB_PLAYER_tcb_StartT2STalk",
+                           "StartTalk:$name", 
+                           0 );
+                    }
                 }
             }
-        } elsif ($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_BUSY) {
+        } elsif (($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_BUSY)||($hash->{helper}{ttsExtstate}==TTS_EXT_TEXT2SPEECH_BUSY)) {
             # versuchen Text2Speech zu belegen
             if(defined($dev_hash->{helper}{SB_PLAYER}) || (defined($dev_hash->{helper}{Text2Speech}) && @{$dev_hash->{helper}{Text2Speech}} > 0)) {
                 # zu spät, weiter warten
             } else {
                 $dev_hash->{helper}{SB_PLAYER}=$name;
-                SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
+                if($hash->{helper}{ttsstate}==TTS_TEXT2SPEECH_BUSY) {
+                    SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
+                } else {
+                    $hash->{helper}{ttsExtstate}=TTS_EXT_TEXT2SPEECH_ACTIVE;
+                }
                 fhem("set $devName tts ".($hash->{helper}{text2speech}{text}));
+                delete($hash->{helper}{text2speech}{text});
             }
         }
     }
+    # CD 0033 end
 }
-# CD 0032 end
 
 # ----------------------------------------------------------------------------
 #  Set of a module
@@ -1773,8 +1819,10 @@ sub SB_PLAYER_Set( $@ ) {
              ( lc($cmd) eq "saytext" ) ) {  # CD 0014 hinzugefügt
 
         $hash->{helper}{ttsstate}=TTS_IDLE if(!defined($hash->{helper}{ttsstate}));
+        $hash->{helper}{ttsExtstate}=TTS_IDLE if(!defined($hash->{helper}{ttsExtstate}));
 
         # CD 0032 - Text2Speech verwenden ?
+        # CD 0033 - überarbeitet
         my $useText2Speech=0;
         my $errMsg;
         if(AttrVal( $name, "ttslink", "none" )=~m/^Text2Speech/) {
@@ -1784,29 +1832,37 @@ sub SB_PLAYER_Set( $@ ) {
                 my $ttshash=$defs{$extTTS[1]};
                 if(defined($ttshash->{TYPE}) && ($ttshash->{TYPE} eq 'Text2SpeechSB')) {
                     if(defined($ttshash->{ALSADEVICE}) && ($ttshash->{ALSADEVICE} eq 'SB_PLAYER')) {
-                        if(AttrVal($extTTS[1], "TTS_UseMP3Wrap", 0) eq "1") {
-                            if (AttrVal($hash->{NAME}, "TTS_Ressource", "Google") eq "Google") {
-                                $useText2Speech=1;
-                                $hash->{helper}{text2speech}{name}=$extTTS[1];
-                                $hash->{helper}{text2speech}{pathPrefix}=join(':',@extTTS[2..$#extTTS]) if defined($extTTS[2]);
-                                # Zustand Text2Speech ?
-                                if(defined($ttshash->{helper}{SB_PLAYER}) || (defined($ttshash->{helper}{Text2Speech}) && @{$ttshash->{helper}{Text2Speech}} > 0)) {
-                                    # Text2Speech besetzt, warten
+                        if (AttrVal($hash->{NAME}, "TTS_Ressource", "Google") eq "Google") {
+                            $useText2Speech=1;
+                            $hash->{helper}{text2speech}{name}=$extTTS[1];
+                            $hash->{helper}{text2speech}{pathPrefix}=join(':',@extTTS[2..$#extTTS]) if defined($extTTS[2]);
+                            # Zustand Text2Speech ?
+                            if(defined($ttshash->{helper}{SB_PLAYER}) || (defined($ttshash->{helper}{Text2Speech}) && @{$ttshash->{helper}{Text2Speech}} > 0)) {
+                                # Text2Speech besetzt, warten
+                                if($hash->{helper}{ttsstate}==TTS_IDLE) {
                                     SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_BUSY,0,0);
-                                    $hash->{helper}{text2speech}{text}=join( " ", @arg );
-                                    return;
                                 } else {
-                                    # Text2Speech belegen
-                                    $ttshash->{helper}{SB_PLAYER}=$name;
-                                    SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
-                                    fhem("set $extTTS[1] tts ".join( " ", @arg ));
-                                    return;
+                                    $hash->{helper}{ttsExtstate}=TTS_EXT_TEXT2SPEECH_BUSY if($hash->{helper}{ttsExtstate}==TTS_IDLE);
                                 }
+                                if(defined($hash->{helper}{text2speech}{text})) {
+                                    $hash->{helper}{text2speech}{text}.=" " . join( " ", @arg );
+                                } else {
+                                    $hash->{helper}{text2speech}{text}=join( " ", @arg );
+                                }
+                                return;
                             } else {
-                                $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_Ressource must be set to Google";
+                                # Text2Speech belegen
+                                $ttshash->{helper}{SB_PLAYER}=$name;
+                                if($hash->{helper}{ttsstate}==TTS_IDLE) {
+                                    SB_PLAYER_SetTTSState($hash,TTS_TEXT2SPEECH_ACTIVE,0,0);
+                                } else {
+                                    $hash->{helper}{ttsExtstate}=TTS_EXT_TEXT2SPEECH_ACTIVE;
+                                }
+                                fhem("set $extTTS[1] tts ".join( " ", @arg ));
+                                return;
                             }
                         } else {
-                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_UseMP3Wrap must be set to 1";
+                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_Ressource must be set to Google";
                         }
                     } else {
                         $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported ALSADEVICE";
@@ -1827,14 +1883,10 @@ sub SB_PLAYER_Set( $@ ) {
         # prepare text
         my $ttstext=join( " ", @arg );
         $ttstext = AttrVal( $name, "ttsPrefix", "" )." ".$ttstext;  # CD 0032
-        $ttstext =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
-        $ttstext =~ s/\s+/ /g;
-        $ttstext =~ s/^\s|\s$//g;
 
         my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
                         "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
         my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
-        $ttstext =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
 
         if (length($ttstext)==0) {
             my $msg = "SB_PLAYER_Set: no text passed for synthesis.";
@@ -1844,15 +1896,33 @@ sub SB_PLAYER_Set( $@ ) {
         $ttstext .= "." unless ($ttstext =~ m/^.+[.,?!:;]$/);
         my @textlines;
         my $tl='';
+        # CD 0033 Unterstützung für Dateien und URLs hinzugefügt, teilweise aus 00_SONOS übernommen
+        my $targetSpeakMP3FileDir = AttrVal( $name, "ttsMP3FileDir", "" );  # CD 0033
         if (length($ttstext)>0) {
             my @words=split(' ',$ttstext);
             for my $w (@words) {
-                if((length($tl)+length($w)+1)<100) {
-                    $tl.=' ' if(length($tl)>0);
-                    $tl.=$w;
+                # CD 0033 Datei ?, teilweise aus 00_SONOS übernommen
+                if ($w =~ m/\|(.*)\|/) {
+                    push(@textlines,$tl) if($tl ne '');
+                    $tl='';
+                
+                    my $filename = $1;
+                    $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
+                    $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
+                    push(@textlines, '|'.$filename.'|');            
                 } else {
-                    push(@textlines,$tl);
-                    $tl=$w;
+                    $w =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
+                    $w =~ s/\s+/ /g;
+                    $w =~ s/^\s|\s$//g;
+                    $w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
+                # CD 0032 end
+                    if((length($tl)+length($w)+1)<100) {
+                        $tl.=' ' if(length($tl)>0);
+                        $tl.=$w;
+                    } else {
+                        push(@textlines,$tl);
+                        $tl=$w;
+                    }
                 }
             }
         }
@@ -1860,60 +1930,25 @@ sub SB_PLAYER_Set( $@ ) {
 
         if($hash->{helper}{ttsstate}==TTS_IDLE) {
             # talk ist nicht aktiv
-            if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
-                SB_PLAYER_SetTTSState($hash,TTS_SAVE,0,0);
-                SB_PLAYER_Save( $hash ) if(!defined($hash->{helper}{saveLocked}));
-            }
-            $hash->{helper}{saveLocked}=1;
-            IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 0\n" );
-            IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
-            if(defined($hash->{helper}{ttsVolume})) {
-                SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0);
-                my $vol=$hash->{helper}{ttsVolume};
-                $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
-                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
-                SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume});
-            }
-            SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
+            SB_PLAYER_PrepareTalk($hash);
         } else {
         
         }
-        for (@textlines) {
-            my $outstr = $_;
-            $outstr =~ s/\s/+/g;
-            $outstr = uri_escape( $outstr );
-            $outstr = AttrVal( $name, "ttslink", "none" )  
-                . "&tl=" . AttrVal( $name, "ttslanguage", "de" )
-                . "&q=". $outstr; 
-            if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST) {
-                # ich bin Master und talk ist nicht aktiv
-                IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $outstr . "\n" );
+        for my $outstr (@textlines) {
+            if ($outstr =~ m/\|(.*)\|/) {               # CD 0033
+                push(@{$hash->{helper}{ttsqueue}},$1);  # CD 0033
             } else {
-                if($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) {
-                    # talk ist aktiv und ein anderer Player ist Master
-                    IOWrite( $hash, $hash->{helper}{ttsMaster}." fhemrelay ttsadd ".$outstr."\n" );
-                } else {
-                    # talk ist aktiv und ich bin Master
-                    push(@{$hash->{helper}{ttsqueue}},$outstr);
-                }
+                $outstr =~ s/\s/+/g;
+                $outstr = uri_escape( $outstr );
+                $outstr = AttrVal( $name, "ttslink", "none" )  
+                    . "&tl=" . AttrVal( $name, "ttslanguage", "de" )
+                    . "&q=". $outstr;
+                push(@{$hash->{helper}{ttsqueue}},$outstr);
             }
         }
-        if($hash->{helper}{ttsstate}!=TTS_SYNCGROUPACTIVE) {
-            # andere Player in Gruppe informieren
-            if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
-                my @pl=split(",",$hash->{SYNCGROUP}.",".$hash->{SYNCMASTER});
-                foreach (@pl) {
-                    if ($hash->{PLAYERMAC} ne $_) {
-                        IOWrite( $hash, "$_ fhemrelay ttsactive ".$hash->{PLAYERMAC}."\n" );
-                        IOWrite( $hash, "$_ fhemrelay ttsforcegroupon\n" ) if(defined($hash->{helper}{ttsOptions}{forcegroupon}));  # CD 0030
-                    }
-                }
-            }
-            #if(($hash->{helper}{ttsstate}==TTS_STOP)||(ReadingsVal( "$name", "playStatus", "x" ) ne "playing")) {
-            #    IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
-            #    SB_PLAYER_SetTTSState($hash,TTS_WAITFORPLAY,0,0);
-            #}
-        }
+        
+        SB_PLAYER_LoadTalk($hash);  # CD 0033
+
         # CD 0028 end
     } elsif( ( $cmd eq "playlist" ) || 
              ( $cmd eq "PLAYLIST" ) || 
@@ -2127,6 +2162,77 @@ sub SB_PLAYER_Set( $@ ) {
     
 }
 
+# CD 0033 hinzugefügt
+# ----------------------------------------------------------------------------
+#  add talk segments to playlist
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_LoadTalk($) {
+    # gespeicherte Elemente in Playlist einfügen
+    my ( $hash ) = @_;
+    my $name = $hash->{NAME};
+
+    if(defined($hash->{helper}{ttsqueue})) {
+        if(($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST)||($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE)) {
+            IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" ) if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST);
+            for (@{$hash->{helper}{ttsqueue}}) {
+                if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST) {
+                    # ich bin Master und talk ist nicht aktiv
+                    IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $_ . "\n" );
+                } else {
+                    # talk ist aktiv und ein anderer Player ist Master
+                    IOWrite( $hash, $hash->{helper}{ttsMaster}." fhemrelay ttsadd ".$_."\n" );
+                }
+            }
+            delete($hash->{helper}{ttsqueue});
+
+            if($hash->{helper}{ttsstate}!=TTS_SYNCGROUPACTIVE) {
+                # andere Player in Gruppe informieren
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    my @pl=split(",",$hash->{SYNCGROUP}.",".$hash->{SYNCMASTER});
+                    foreach (@pl) {
+                        if ($hash->{PLAYERMAC} ne $_) {
+                            IOWrite( $hash, "$_ fhemrelay ttsactive ".$hash->{PLAYERMAC}."\n" );
+                            IOWrite( $hash, "$_ fhemrelay ttsforcegroupon\n" ) if(defined($hash->{helper}{ttsOptions}{forcegroupon}));  # CD 0030
+                        }
+                    }
+                }
+            }
+        } else {
+            # talk ist aktiv und ich bin Master
+            # warten bis stop
+        }
+    }
+}
+
+# CD 0033 hinzugefügt
+# ----------------------------------------------------------------------------
+#  prepare player for talk
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_PrepareTalk($) {
+    # kein readingsBulkUpdate
+    # aktuellen Stand abspeichern, playlist löschen, Lautstärke setzen
+    
+    my ( $hash ) = @_;
+    my $name = $hash->{NAME};
+
+    # talk ist nicht aktiv
+    if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
+        SB_PLAYER_SetTTSState($hash,TTS_SAVE,0,0);
+        SB_PLAYER_Save( $hash ) if(!defined($hash->{helper}{saveLocked}));
+    }
+    $hash->{helper}{saveLocked}=1;
+    IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 0\n" );
+    IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
+    if(defined($hash->{helper}{ttsVolume})) {
+        SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0);
+        my $vol=$hash->{helper}{ttsVolume};
+        $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
+        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
+        SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume});
+    }
+    SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
+}
+
 # CD 0014 start
 # ----------------------------------------------------------------------------
 #  recall player state
@@ -2302,7 +2408,7 @@ sub SB_PLAYER_Save($) {
             if(($hash->{helper}{ttsstate}!=TTS_IDLE) && defined($hash->{helper}{ttsOptions}{debugsaverestore})) {
                 # CD 0029 start
                 if(defined($hash->{helper}{ttsOptions}{internalsave})) {
-                    Log3( $hash, 0, "SB_PLAYER_Save: $name: forcing {helper}{playlistIds}: ".$hash->{helper}{playlistIds});
+                    Log3( $hash, 0, "SB_PLAYER_Save: $name: forcing {helper}{playlistIds}: ".$hash->{helper}{playlistIds}) if(defined($hash->{helper}{playlistIds}));  # CD 0033 if added
                     #Log3( $hash, 0, "SB_PLAYER_Save: $name: warning - negative playlist ids cannot be restored") if ($hash->{helper}{playlistIds}=~ /-/);
                 } else {
                     Log3( $hash, 0, "SB_PLAYER_Save: $name: multiple tracks in playlist, shuffle active, using {helper}{playlistIds} (".$hash->{helper}{playlistIds}.")");
@@ -3451,7 +3557,7 @@ sub SB_PLAYER_EstimateElapsedTime( $ ) {
 
     my $d=ReadingsVal($name,"duration",0);
     # nur wenn duration>0
-    if($d>0) {
+    if(($d ne '?')&&($d>0)) {   # CD 0033 check for '?'
         # wenn {helper}{elapsedTime} bekannt ist als Basis verwenden
         if((defined($hash->{helper}{elapsedTime}))&&($hash->{helper}{elapsedTime}{VAL}>0)) {
             $hash->{helper}{elapsedTime}{VAL}=$hash->{helper}{elapsedTime}{VAL}+(gettimeofday()-$hash->{helper}{elapsedTime}{TS});
