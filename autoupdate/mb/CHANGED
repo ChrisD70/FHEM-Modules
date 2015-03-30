@@ -6,7 +6,7 @@
               added combineReads
               added support for coils
 36_ModbusTCPServer:
-  150314 0014 fixed first entry for combined reads
+  150330 0015 fixed errors in log, do not buffer writes if disconnected
 37_ModbusCoil:
   150324 0008 do not trigger on set, use set_on and set_off
 37_ModbusRegister:
@@ -31,6 +31,7 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
+  150330 0015 fixed errors in log, do not buffer writes if disconnected
   150314 0014 fixed first entry for combined reads
   150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
   150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
