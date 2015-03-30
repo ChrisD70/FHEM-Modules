@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0014 $
+# $Id: 36_ModbusTCPServer.pm 0015 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -14,6 +14,7 @@
 # 150307 0012 fixed combined reads for multiple unitids, added combineReads for coils, remove duplicate reads
 # 150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
 # 150314 0014 fixed first entry for combined reads
+# 150330 0015 fixed errors in log, do not buffer writes if disconnected
 # TODO:
 
 package main;
@@ -132,7 +133,8 @@ sub ModbusTCPServer_Define($$) {################################################
   $hash->{helper}{statistics}{bytesIn}=0;
   $hash->{helper}{statistics}{bytesOut}=0;
   $hash->{statistics} =$hash->{helper}{statistics}{pktIn} ." / " . $hash->{helper}{statistics}{pktOut} ." / " . $hash->{helper}{statistics}{bytesIn} ." / " . $hash->{helper}{statistics}{bytesOut};
-  
+  $hash->{helper}{state}='?';   # CD 0015
+
   my $ret;
   
   if ($init_done){
@@ -263,7 +265,7 @@ sub ModbusTCPServer_Write($$) {#################################################
                             $tx_hd_length);
 
   ModbusTCPServer_LogFrame($hash,"AddWQueue",$f_mbap.$msg,5);
-  ModbusTCPServer_AddWQueue($hash, $f_mbap.$msg);
+  ModbusTCPServer_AddWQueue($hash, $f_mbap.$msg) if(ReadingsVal($hash->{NAME},"state","?") eq 'opened');
 }
 
 sub ModbusTCPServer_Read($) {############################################################
@@ -446,7 +448,8 @@ sub ModbusTCPServer_DoInit($) {#################################################
 
   my $tn = gettimeofday();
   my $pollInterval = AttrVal($name,"pollInterval",0.5);
-
+  
+  delete($hash->{WQUEUE}) if(defined($hash->{WQUEUE}));     # CD 0015
   $hash->{helper}{state}="idle";
   RemoveInternalTimer( "poll:".$name);
   InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
