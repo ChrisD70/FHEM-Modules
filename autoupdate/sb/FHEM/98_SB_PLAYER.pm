@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8247 beta 0033 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8247 beta 0034 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1321,7 +1321,12 @@ sub SB_PLAYER_Parse( $$ ) {
             elsif ($args[0] eq "ttsstopped") {
                 Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsstopped" );
                 if($hash->{helper}{ttsstate}==TTS_PLAYING) {
-                    SB_PLAYER_TTSStopped($hash);
+                        # CD 0034 delay ttsstopped 
+                        RemoveInternalTimer( "TTSStopped:$name");
+                        InternalTimer( gettimeofday() + 0.01, 
+                           "SB_PLAYER_tcb_TTSStopped",
+                           "TTSRestore:$name", 
+                           0 );
                 }
             }
             elsif ($args[0] eq "ttsplaying") {
@@ -1397,6 +1402,27 @@ sub SB_PLAYER_tcb_TTSDelay( $ ) {
     IOWrite( $hash, "$hash->{PLAYERMAC} play\n" );
 }
 # CD 0030
+
+# CD 0034
+# ----------------------------------------------------------------------------
+#  delay ttsstopped
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_tcb_TTSStopped( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    readingsBeginUpdate( $hash );
+
+    SB_PLAYER_TTSStopped($hash);
+
+    if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
+        readingsEndUpdate( $hash, 0 );
+    } else {
+        readingsEndUpdate( $hash, 1 );
+    }
+}
+# CD 0034 end
 
 # ----------------------------------------------------------------------------
 #  called when talk is stopped, check if there are queued elements
@@ -2491,7 +2517,14 @@ sub SB_PLAYER_Alarm( $$@ ) {
                 }
             }
             # CD 0015 end
-            $cmdstr .= " playlist:" . uri_escape(decode('utf-8',$url));   # CD 0015 uri_escape und join hinzugefügt # CD 0020 decode hinzugefügt
+            # CD 0034 überprüfen ob gültige url, wenn nicht, versuchen file:// anzuhängen
+            if($url !~ /:\/\//) {
+                $url='/' . $url if ($url =~ /^[a-zA-Z]:\\/); # für Windows
+                $url=~ s/\\/\//g;
+                $url='file://' . $url;                
+            }
+            # CD 0034 end
+            $cmdstr .= " url:" . uri_escape(decode('utf-8',$url));   # CD 0015 uri_escape und join hinzugefügt # CD 0020 decode hinzugefügt    #  CD 0034 playlist: in url: geändert
         }
         $cmdstr .= " time:$secs\n";
 
@@ -2537,8 +2570,15 @@ sub SB_PLAYER_Alarm( $$@ ) {
                         }
                     }
                 }
-                $cmdstr .= " playlist:" . uri_escape(decode('utf-8',$url));         # CD 0017 decode hinzugefügt
-                IOWrite( $hash, $cmdstr );                                          # CD 0017 reaktiviert
+                # CD 0034 überprüfen ob gültige url, wenn nicht, versuchen file:// anzuhängen
+                if($url !~ /:\/\//) {
+                    $url='/' . $url if ($url =~ /^[a-zA-Z]:\\/); # für Windows
+                    $url=~ s/\\/\//g;
+                    $url='file://' . $url;                
+                }
+                # CD 0034 end
+                $cmdstr .= "url:" . uri_escape(decode('utf-8',$url));          # CD 0017 decode hinzugefügt # CD 0034 playlist: in url: geändert
+                IOWrite( $hash, $cmdstr . "\n" );                              # CD 0017 reaktiviert        # CD 0034 \n hinzugefügt
             } else {
                 my $msg = "SB_PLAYER_Set: alarm, no value for sound.";
                 Log3( $hash, 3, $msg );
@@ -3191,10 +3231,15 @@ sub SB_PLAYER_CoverArt( $ ) {
     } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
         # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
         if($hash->{ARTWORKURL} ne "?") {
-            $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
-                "imageproxy?u=" . $hash->{ARTWORKURL} . 
-                "&h=" . AttrVal( $name, "coverartheight", 50 ) . 
-                "&w=". AttrVal( $name, "coverartwidth", 50 );
+            # CD 0034 Abfrage für Spotify und LMS < 7.8, ungetest, #674, KernSani
+            if ($hash->{ARTWORKURL} =~ /spotifyimage%2Fspotify/) {
+                $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . $hash->{ARTWORKURL};
+            } else {
+                $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
+                    "imageproxy?u=" . $hash->{ARTWORKURL} . 
+                    "&h=" . AttrVal( $name, "coverartheight", 50 ) . 
+                    "&w=". AttrVal( $name, "coverartwidth", 50 );
+            }
         } else {
             $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
                 $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) . 

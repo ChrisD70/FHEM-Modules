@@ -2,9 +2,9 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150327 0033 - Attribut ttsMP3FileDir hinzugefügt
-              - mp3s in talk integriert, z.B. set meinPlayer talk |gong.mp3| Test |gong.mp3|
-              - Anbindung an Text2Speech (Spezialversion von Text2Speech erforderlich)
+  150403 0034 - Alarme: playlist url korrigert
+              - Cover für Spotify geändert
+              - talk stop vom Master verzögern wegen ReadingsUpdate
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -43,6 +43,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150403 0034 - Alarme: playlist url korrigert
+              - Cover für Spotify geändert
+              - talk stop vom Master verzögern wegen ReadingsUpdate
   150327 0033 - Attribut ttsMP3FileDir hinzugefügt
               - mp3s in talk integriert, z.B. set meinPlayer talk |gong.mp3| Test |gong.mp3|
               - Anbindung an Text2Speech (Spezialversion von Text2Speech erforderlich)
