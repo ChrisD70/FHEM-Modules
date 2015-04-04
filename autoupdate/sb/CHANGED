@@ -2,9 +2,7 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150403 0034 - Alarme: playlist url korrigert
-              - Cover für Spotify geändert
-              - talk stop vom Master verzögern wegen ReadingsUpdate
+  150404 0035 - Cover für Spotify geändert (KernSani)
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -43,6 +41,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150404 0035 - Cover für Spotify geändert (KernSani)
   150403 0034 - Alarme: playlist url korrigert
               - Cover für Spotify geändert
               - talk stop vom Master verzögern wegen ReadingsUpdate

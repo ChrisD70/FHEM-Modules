@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8247 beta 0034 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8247 beta 0035 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3232,8 +3232,12 @@ sub SB_PLAYER_CoverArt( $ ) {
         # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
         if($hash->{ARTWORKURL} ne "?") {
             # CD 0034 Abfrage für Spotify und LMS < 7.8, ungetest, #674, KernSani
+            # CD 0035 Code von KernSani übernommen, #676
             if ($hash->{ARTWORKURL} =~ /spotifyimage%2Fspotify/) {
-                $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . $hash->{ARTWORKURL};
+				my $cover = "cover.jpg";
+				my $coverArtWithSize = "cover_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 )."_o.jpg";
+				$hash->{ARTWORKURL} =~ s/$cover/$coverArtWithSize/g;
+                $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . uri_unescape($hash->{ARTWORKURL});
             } else {
                 $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" . 
                     "imageproxy?u=" . $hash->{ARTWORKURL} . 
