@@ -10,8 +10,8 @@
 37_ModbusCoil:
   150324 0008 do not trigger on set, use set_on and set_off
 37_ModbusRegister:
-  150316 0016 fix for eventMap 0:off 1:on
-              fixed SetExtensions
+  150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
+              fixed min/max calculation after plcDataType change
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -58,6 +58,8 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
+              fixed min/max calculation after plcDataType change
   150316 0016 fix for eventMap 0:off 1:on
               fixed SetExtensions
   150315 0015 added wago address conversion

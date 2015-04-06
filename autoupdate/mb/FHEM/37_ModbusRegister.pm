@@ -15,6 +15,7 @@
 # 150304 0014 fixed lastUpdate and WRITE_SINGLE_REGISTER
 # 150315 0015 added wago address conversion, added setList
 # 150316 0016 fix for eventMap 0:off 1:on, fixed SetExtensions
+# 150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE 
 # TODO:
 
 package main;
@@ -51,13 +52,14 @@ ModbusRegister_Initialize($)
   $hash->{ParseFn}   = "ModbusRegister_Parse";
   $hash->{AttrFn}    = "ModbusRegister_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,QWORD,QWORD_BE ".
+                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,3WORD_S,3WORD_S_BE,QWORD,QWORD_BE ".
                        "conversion ".
                        "updateInterval updateIntervall alignUpdateInterval ".
                        "disableRegisterMapping:0,1 ".
                        "registerType:Holding,Input ".
                        "stateAlias ".
                        "setList ".
+                       "negativeRepresentation:2sComplement,flagged ".
                        "$readingFnAttributes";
 }
 
@@ -191,6 +193,10 @@ ModbusRegister_Define($$)
   $hash->{helper}{nextUpdate}=time();
   
   ModbusRegister_SetMinMax($hash);
+  
+  if ($init_done){
+    $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
+  }
   return undef;
 }
 
@@ -248,24 +254,48 @@ ModbusRegister_Set($@)
     my $plcDataType=ModbusRegister_GetDataType($hash);
 
     if(defined($hash->{helper}{cnv})) {
+      my $nr = AttrVal($name, "negativeRepresentation", "2sComplement"); 
       if($hash->{helper}{cnv}{a}==0) {
         $v=-$hash->{helper}{cnv}{b};
       } else {
         $v=$v/$hash->{helper}{cnv}{a}-$hash->{helper}{cnv}{b};
       }
       if($plcDataType eq "INT") {
-        $v+= 65536 if $v<0;
+        if($v<0) {
+          if($nr eq "2sComplement") {
+            $v+=65536;
+          }
+          elsif ($nr eq "flagged") {
+            $v=-$v+32768;
+          }
+        }
       }
       if($plcDataType=~ /^DWORD/) {
         $wlen=2;
       }
       if($plcDataType=~ /^3WORD/) {
+        if(($v<0) && ($plcDataType=~ /_S_/)) {
+          if($nr eq "2sComplement") {
+            $v+=281474976710656.0;
+          }
+          elsif ($nr eq "flagged") {
+            $v=-$v+140737488355328.0;
+          }
+        }
         $wlen=3;
       }
       if($plcDataType=~ /^QWORD/) {
         $wlen=4;
       }
       if($plcDataType=~ /^DINT/){
+        if($v<0) {
+          if($nr eq "2sComplement") {
+            $v+=4294967296;
+          }
+          elsif ($nr eq "flagged") {
+            $v=-$v+2147483648;
+          }
+        }
         $v+= 4294967296 if $v<0;
         $wlen=2;
       }
@@ -283,7 +313,7 @@ ModbusRegister_Set($@)
     # CD 0008 start
     } elsif($wlen==3) {
       if($plcDataType=~ /_BE$/) {
-      $msg=pack("CCnnCnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 3, 6, ($v/4294967296.0)%65536, ($v/65536.0)%65536, $v%65536);
+        $msg=pack("CCnnCnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 3, 6, ($v/4294967296.0)%65536, ($v/65536.0)%65536, $v%65536);
       } else {
         $msg=pack("CCnnCnnn", $hash->{helper}{unitId}, 16, $hash->{helper}{address}, 3, 6, $v%65536, ($v/65536.0)%65536, ($v/4294967296.0)%65536);
       }
@@ -377,8 +407,17 @@ ModbusRegister_Parse($$)
         $lh->{ModbusRegister_lastRcv} = TimeNow();
         my $v=$vals[0];
         my $plcDataType=ModbusRegister_GetDataType($lh);
+        my $nr = AttrVal($n, "negativeRepresentation", "2sComplement"); 
+
         if($plcDataType eq "INT") {
-          $v-= 65536 if $v>32767;
+          if ($v>32767) {
+            if($nr eq "2sComplement") {
+              $v-=65536;
+            }
+            elsif ($nr eq "flagged") {
+              $v=-$v+32768;
+            }
+          }
         }
         if($plcDataType eq "DWORD"){
           $v=($vals[1]<<16)+$vals[0];
@@ -386,14 +425,25 @@ ModbusRegister_Parse($$)
         if($plcDataType eq "DWORD_BE"){
           $v=($vals[0]<<16)+$vals[1];
         }
-        # CD 0007 start
-        if($plcDataType eq "3WORD"){
-          $v=(4294967296.0*$vals[2])+($vals[1]<<16)+$vals[0];
+        # CD 0017 start
+        if($plcDataType=~ /^3WORD/) {
+          if($plcDataType=~ /_BE$/) {
+            $v=(4294967296.0*$vals[0])+($vals[1]<<16)+$vals[2];
+          } else {
+            $v=(4294967296.0*$vals[2])+($vals[1]<<16)+$vals[0];
+          }
+          if($plcDataType=~ /_S_/) {
+            if($v>140737488355327.0) {
+              if($nr eq "2sComplement") {
+                $v-=281474976710656.0;
+              }
+              elsif ($nr eq "flagged") {
+                $v=-$v+140737488355328.0;
+              }
+            }
+          }
         }
-        if($plcDataType eq "3WORD_BE"){
-          $v=(4294967296.0*$vals[0])+($vals[1]<<16)+$vals[2];
-        }
-        # CD 0007 end
+        # CD 0017 end
         # CD 0008 start
         if($plcDataType eq "QWORD"){
           $v=(281474976710656.0*$vals[3])+(4294967296.0*$vals[2])+($vals[1]<<16)+$vals[0];
@@ -404,12 +454,22 @@ ModbusRegister_Parse($$)
         # CD 0008 end
         if($plcDataType eq "DINT"){
           $v=($vals[1]<<16)+$vals[0];
-          $v-= 4294967296 if $v>2147483647;
         }
         if($plcDataType eq "DINT_BE"){
           $v=($vals[0]<<16)+$vals[1];
-          $v-= 4294967296 if $v>2147483647;
         }
+        # CD 0017 start
+        if($plcDataType=~ /^DINT/) {
+          if($v>2147483647) {
+            if($nr eq "2sComplement") {
+              $v-=4294967296;
+            }
+            elsif ($nr eq "flagged") {
+              $v=-$v+2147483648;
+            }
+          }
+        }
+        # CD 0017 end
         if($plcDataType eq "REAL"){
           $v=unpack "f", pack "L", ($vals[1]<<16)+$vals[0];
         }
@@ -456,7 +516,7 @@ ModbusRegister_Attr(@)
           $hash->{helper}{nread}=2;
         }
         # CD 0007 start
-        if(($attrVal eq "3WORD") || ($attrVal eq "3WORD_BE")) {
+        if($attrVal =~ /^3WORD/) {
           $hash->{helper}{nread}=3;
         }
         # CD 0007 end
@@ -465,6 +525,7 @@ ModbusRegister_Attr(@)
           $hash->{helper}{nread}=4;
         }
         # CD 0008 end
+        $attr{$name}{plcDataType}=$attrVal;
         ModbusRegister_SetMinMax($hash);
       }
       $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
@@ -637,7 +698,6 @@ ModbusRegister_SetMinMax($)
   my $vmax=65535.0;
   
   my $plcDataType=ModbusRegister_GetDataType($hash);
-
   if($plcDataType eq "WORD") {
     $vmin=0;
     $vmax=65535;
@@ -652,8 +712,13 @@ ModbusRegister_SetMinMax($)
   }
   # CD 0007 start
   if($plcDataType=~ /^3WORD/) {
-    $vmin=0;
-    $vmax=2**48-1;
+    if($plcDataType=~ /_S_/) {
+      $vmin=-2**47;
+      $vmax=2**47-1;
+    } else {
+      $vmin=0;
+      $vmax=2**48-1;
+    }
   }
   # CD 0007 end
   # CD 0008 start
