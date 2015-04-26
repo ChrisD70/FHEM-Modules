@@ -1,2 +1,4 @@
 ﻿36_StuderXcom232i:
   150416 0001 - initial release
+  150417 0002 ignore StuderXcom232i_Write calls until init_done
+  150426 0003 added set XXX test
