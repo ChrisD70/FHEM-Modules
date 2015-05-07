@@ -3,6 +3,7 @@
 # 150415 0001 initial release
 # 150417 0002 ignore StuderXcom232i_Write calls until init_done
 # 150426 0003 added set XXX test
+# 150507 0004 removed set XXX test, activated dispatch
 # TODO:
 
 package main;
@@ -176,13 +177,11 @@ sub StuderXcom232i_Set($@) {####################################################
   if( $cmd eq "?" ) {
     # this one should give us a drop down list
     my $res = "Unknown argument ?, choose one of " . 
-              "read test ";
+              "read ";
 
     return( $res );
   } elsif( $cmd eq "read" ) {
     StuderXcom232i_Write($hash,"101:".READ_PROPERTY.":1:".$a[0].":1:FLOAT:");
-  } elsif( $cmd eq "test" ) {
-    StuderXcom232i_AddRQueue($hash, "Test");
   }
 
   return( undef );
@@ -251,7 +250,7 @@ sub StuderXcom232i_Read($) {####################################################
           if(StuderXcom232i_checksum_is_ok($frame_data)) {
             # unpack frame_data
             my ($flags,$service_id,$object_type,$object_id,$property_id,$value)=unpack "CCvVva*",(substr $frame_data,0,$data_length);
-            #Dispatch($hash, "StuderXT:$src_addr:$service_id:$object_type:$object_id:$property_id:".join(":",unpack("C*", $value)), undef);
+            Dispatch($hash, "StuderXT:$src_addr:$service_id:$object_type:$object_id:$property_id:".join(":",unpack("C*", $value)), undef);
             readingsSingleUpdate( $hash, "received", (unpack "H*",$pdata) , 1 );
             $hash->{helper}{state}="idle";
           } else {

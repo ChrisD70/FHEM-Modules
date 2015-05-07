@@ -2,3 +2,7 @@
   150416 0001 - initial release
   150417 0002 ignore StuderXcom232i_Write calls until init_done
   150426 0003 added set XXX test
+  150507 0004 removed set XXX test, activated dispatch
+
+37_StuderXT:
+  150417 0001 initial release
