@@ -2,7 +2,7 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150404 0035 - Cover für Spotify geändert (KernSani)
+  150507 0036 - save/recall erweitert
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -41,6 +41,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150507 0036 - save/recall erweitert
+  150407 0035 - in contrib eingecheckt (8397)
   150404 0035 - Cover für Spotify geändert (KernSani)
   150403 0034 - Alarme: playlist url korrigert
               - Cover für Spotify geändert
