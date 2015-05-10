@@ -6,3 +6,4 @@
 
 37_StuderXT:
   150417 0001 initial release
+  150510 0002 added warning if config file can not be found

@@ -1,5 +1,6 @@
 ﻿# $Id: 37_StuderXT.pm 0001 $
 # 150417 0001 initial release
+# 150510 0002 added warning if config file can not be found
 # TODO:
 
 package main;
@@ -49,7 +50,12 @@ StuderXT_Define($$)
   }
 
   unless (-e $a[3]) {
-    return "config file not found";
+    Log3 $a[0], 1, "StuderXT_Define: $a[0]: config file $a[3] not found";
+    unless (-e "$attr{global}{modpath}/FHEM/".$a[3]) {
+      Log3 $a[0], 1, "StuderXT_Define: $a[0]: config file $attr{global}{modpath}/FHEM/$a[3] not found";
+      return "config file not found";
+    }
+    $a[3]="$attr{global}{modpath}/FHEM/".$a[3];
   }
   
   $hash->{CONFIGFILE}=$a[3];
