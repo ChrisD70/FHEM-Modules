@@ -4,6 +4,7 @@
 # 150417 0002 ignore StuderXcom232i_Write calls until init_done
 # 150426 0003 added set XXX test
 # 150507 0004 removed set XXX test, activated dispatch
+# 150515 0005 fixed writing FLOATs 
 # TODO:
 
 package main;
@@ -199,7 +200,7 @@ sub StuderXcom232i_Write($$) {##################################################
   if ($service_id == WRITE_PROPERTY) {
     if (defined($format) && defined($property_data)) {
       $frame_data.=pack "C",$property_data if($format eq 'BOOL');
-      $frame_data.=pack "<f",$property_data if($format eq 'FLOAT');
+      $frame_data.=pack "f<",$property_data if($format eq 'FLOAT');
       $frame_data.=pack "v",$property_data if($format eq 'ENUM');
       $frame_data.=pack "V",$property_data if($format eq 'INT32');
     }

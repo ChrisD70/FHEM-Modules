@@ -1,6 +1,7 @@
 ﻿# $Id: 37_StuderXT.pm 0001 $
 # 150417 0001 initial release
 # 150510 0002 added warning if config file can not be found
+# 150515 0003 added write support, autostart readcycle
 # TODO:
 
 package main;
@@ -50,9 +51,8 @@ StuderXT_Define($$)
   }
 
   unless (-e $a[3]) {
-    Log3 $a[0], 1, "StuderXT_Define: $a[0]: config file $a[3] not found";
     unless (-e "$attr{global}{modpath}/FHEM/".$a[3]) {
-      Log3 $a[0], 1, "StuderXT_Define: $a[0]: config file $attr{global}{modpath}/FHEM/$a[3] not found";
+      Log3 $a[0], 1, "StuderXT_Define: $a[0]: config file $a[3] not found";
       return "config file not found";
     }
     $a[3]="$attr{global}{modpath}/FHEM/".$a[3];
@@ -82,7 +82,8 @@ StuderXT_Define($$)
   }
 
   StuderXT_ReadConfig($hash);
-  
+  StuderXT_ReadCycle($hash) if ($init_done>0);
+
   return undef;
 }
 
@@ -160,6 +161,7 @@ StuderXT_Undef($$)
   my $addr = $hash->{helper}{addr};
 
   Log3 $name, 5, "Undef $addr $name";
+  RemoveInternalTimer( "ReadCycle:$name");
   delete( $modules{StuderXT}{defptr}{$addr}{$name} );
 
   return undef;
@@ -178,11 +180,60 @@ StuderXT_Set($@)
 
   if($a[1] eq '?')
   {
-    my $list = "doReadCycle"; 
+    my $list = "writeToFlash:on,off gridFeeding:on,off charger:on,off chargeCurrent gridFeedingCurrent"; 
     return $list; 
   }
-  if($a[1] eq 'doReadCycle') {
-    StuderXT_ReadCycle($hash);
+
+  if( @a != 3 ) {
+      my $msg = "StuderXT_Set: no arguments for $a[1] given.";
+      Log3( $hash, 3, $msg );
+      return( $msg );
+  }
+
+#  my ($dst_addr,$service_id,$object_type,$object_id,$property_id,$format,$property_data)=split(":",$msg);
+  
+  if($a[1] eq 'writeToFlash') {
+    if($a[2] eq 'on') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1550','5','BOOL','1'));
+    } elsif ($a[2] eq 'off') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1550','5','BOOL','0'));
+    }
+  }
+
+  if($a[1] eq 'gridFeeding') {
+    if($a[2] eq 'on') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1127','5','BOOL','1'));
+    } elsif ($a[2] eq 'off') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1127','5','BOOL','0'));
+    }
+  }
+
+  if($a[1] eq 'charger') {
+    if($a[2] eq 'on') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1125','5','BOOL','1'));
+    } elsif ($a[2] eq 'off') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1125','5','BOOL','0'));
+    }
+  }
+
+  if($a[1] eq 'chargeCurrent') {
+    if(StuderXT_is_float($a[2])) {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1138','5','FLOAT',$a[2]));
+    } else {
+      my $msg = "StuderXT_Set: invalid value $a[1] given.";
+      Log3( $hash, 3, $msg );
+      return( $msg );
+    }
+  }
+
+  if($a[1] eq 'gridFeedingCurrent') {
+    if(StuderXT_is_float($a[2])) {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1523','5','FLOAT',$a[2]));
+    } else {
+      my $msg = "StuderXT_Set: invalid value $a[1] given.";
+      Log3( $hash, 3, $msg );
+      return( $msg );
+    }
   }
 }
 
@@ -267,6 +318,7 @@ sub StuderXT_Notify(@) {########################################################
   my $devName = $dev->{NAME}; # Device that created the events
 
   if ($devName eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
+    StuderXT_ReadCycle($hash);
   }
 
   # event from IODev
