@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0036 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8397 beta 0037 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -160,6 +160,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "syncVolume ";
     $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
+    $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= $readingFnAttributes;
     
     # CD 0036 aus 37_sonosBookmarker
@@ -253,7 +254,26 @@ sub SB_PLAYER_Attr( @ ) {
         } else {
             delete($hash->{helper}{ttsDelay}) if(defined($hash->{helper}{ttsDelay}));
         }
-    }    
+    }
+    # CD 0037
+    elsif( $args[ 0 ] eq "statusRequestInterval" ) {
+      RemoveInternalTimer( $hash );
+      if( $cmd eq "set" ) {
+        if (defined($args[1])) {
+          InternalTimer( gettimeofday() + $args[1], 
+                         "SB_PLAYER_GetStatus", 
+                         $hash, 
+                         0 ) if $args[1]>0;
+        } else {
+            return "missing value for statusRequestInterval";
+        }
+      } else {
+        InternalTimer( gettimeofday() + 5, 
+                       "SB_PLAYER_GetStatus", 
+                       $hash, 
+                       0 );
+      }
+    }
     return;
     # CD 0012
 }
@@ -2898,10 +2918,13 @@ sub SB_PLAYER_GetStatus( $ ) {
 
     # do and update of the status
     RemoveInternalTimer( $hash );   # CD 0014
-    InternalTimer( gettimeofday() + 300, 
+
+    my $iv=AttrVal($name, "statusRequestInterval", 300);  # CD 0037
+
+    InternalTimer( gettimeofday() + $iv, 
                    "SB_PLAYER_GetStatus", 
                    $hash, 
-                   0 );
+                   0 ) if $iv>0;
 
     Log3( $hash, 5, "SB_PLAYER_GetStatus: leaving" );
 
@@ -3967,6 +3990,16 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>unsync</b> -  Unsync the player from multiroom group</li>
      <li><b>playlists</b> -  Empty the current playlist and start the selected playlist. Playlists are selectable through a dropdown list</li>
      <li><b>cliraw &lt;command&gt;</b> -  Sends the &lt;command&gt; to the LMS CLI for selected player</li>
+     <li><b>save [name]</b> -  Saves the current player state</li>
+     <li><b>recall [name] [options] </b> -  Recalls a saved player state, options:</li>
+    <ul>
+      <li>del - delete saved state after restore</li>
+      <li>delonly - delete saved state without restoring</li>
+      <li>off - ignore saved power setting, turn player off after restore</li>
+      <li>on - ignore saved power setting, turn player on after restore</li>
+      <li>play - ignore saved play state, start playing after restore</li>
+      <li>stop - ignore saved play state, stop player after restore</li>
+    </ul>
    </ul>
   <br>Show<br>
    <ul>
@@ -4015,6 +4048,18 @@ set sbradio alarm2 set 4 17:18:00</code>
       Sets the delay in seconds before turning the amplifier off after the player has stopped or been turned off.</li><br>
     <li>updateReadingsOnSet<br>
       If set to true most readings are immediately updated when a set command is executed without waiting for the reply from the server.</li><br>
+    <li>statusRequestInterval<br>
+      Defines the interval in seconds for the automatic status request. Default: 300</li><br>
+    <li>ttsDelay<br>
+      Delay in seconds before starting text to speech playback. If two values, separated by comma, are given, the first is used if
+      the player is on, the second if the player is off.</li><br>
+    <li>ttsMP3FileDir<br>
+      The directory which should be used as a default for text-embedded MP3-Files.</li><br>
+    <li>ttsPrefix<br>
+      Text prepended to every text to speech output</li><br>
+    <li>ttsVolume<br>
+      Volume for text to speech, if not set the current volume will be used. If the attribute <code>ttsoptions</code> contains <code>ignorevolumelimit</code>
+      the defined volume limit will be ignoerd for text to speech</li><br>
   </ul>
 </ul>
 =end html

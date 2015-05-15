@@ -2,7 +2,7 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150507 0036 - save/recall erweitert
+  150515 0037 - Attribut statusRequestInterval hinzugefügt
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -41,6 +41,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150515 0037 - Attribut statusRequestInterval hinzugefügt
   150507 0036 - save/recall erweitert
   150407 0035 - in contrib eingecheckt (8397)
   150404 0035 - Cover für Spotify geändert (KernSani)
