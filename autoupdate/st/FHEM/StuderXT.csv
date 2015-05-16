@@ -3,7 +3,7 @@
 0;3001;batteryTemperature;°C;FLOAT;R;300;;;;;;;;;
 0;3002;batteryTempComp;;FLOAT;R;-1;;;;;;;;;
 0;3003;batteryDynComp;;FLOAT;R;-1;;;;;;;;;
-1;3004;batteryChargeCurrentSetpoint;A;FLOAT;R;-1;;;;;;;;;
+1;3004;batteryChargeCurrentSetpoint;A;FLOAT;R;60;;;;;;;;;
 1;3005;batteryChargeCurrent;A;FLOAT;R;5;;;;;;;;;
 0;3006;batteryVoltageRipple;V;FLOAT;R;-1;;;;;;;;;
 1;3007;batteryCharge;%;FLOAT;R;60;;;;;;;;;

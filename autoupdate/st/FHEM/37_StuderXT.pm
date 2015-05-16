@@ -1,7 +1,8 @@
-﻿# $Id: 37_StuderXT.pm 0001 $
+﻿# $Id: 37_StuderXT.pm 0004 $
 # 150417 0001 initial release
 # 150510 0002 added warning if config file can not be found
 # 150515 0003 added write support, autostart readcycle
+# 150516 0004 write times for grid feeding
 # TODO:
 
 package main;
@@ -202,6 +203,8 @@ StuderXT_Set($@)
 
   if($a[1] eq 'gridFeeding') {
     if($a[2] eq 'on') {
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1525','5','INT32',1));
+      IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1526','5','INT32',23*60+59));
       IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1127','5','BOOL','1'));
     } elsif ($a[2] eq 'off') {
       IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1127','5','BOOL','0'));
@@ -219,6 +222,7 @@ StuderXT_Set($@)
   if($a[1] eq 'chargeCurrent') {
     if(StuderXT_is_float($a[2])) {
       IOWrite($hash,join(':',$hash->{helper}{addr},'2','2','1138','5','FLOAT',$a[2]));
+      IOWrite($hash,join(':',$hash->{helper}{addr},'1','1','3004','1','FLOAT',''));
     } else {
       my $msg = "StuderXT_Set: invalid value $a[1] given.";
       Log3( $hash, 3, $msg );

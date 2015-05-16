@@ -9,3 +9,4 @@
   150417 0001 initial release
   150510 0002 added warning if config file can not be found
   150515 0003 added write support, autostart readcycle
+  150516 0004 write times for grid feeding
