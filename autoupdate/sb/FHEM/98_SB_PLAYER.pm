@@ -593,7 +593,7 @@ sub SB_PLAYER_tcb_QueryCoverArt($) {    # CD 0014 Name geändert
         if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {    # CD 0018 none hinzugefügt
             my @pl=split(",",$hash->{SYNCGROUP});
             foreach (@pl) {
-                IOWrite( $hash, "$_ status - 1 tags:Kc\n" );
+                IOWrite( $hash, "$_ status - 1 tags:Kcu\n" );   # CD 0039 u hinzugefügt
             }
         }
     }
@@ -1418,7 +1418,7 @@ sub SB_PLAYER_Parse( $$ ) {
     # CD 0018 sync Meldungen auswerten, alle anderen Player abfragen
     } elsif( $cmd eq "sync" ) {
         foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
-            IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kc\n" );
+            IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kcu\n" );   # CD 0039 u hinzugefügt
         }
     # CD 0018
     # CD 0022 fhemrelay ist keine Meldung des LMS sondern eine Info die von einem anderen Player über 98_SB_PLAYER kommt
