@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0038 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8397 beta 0039 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -753,6 +753,7 @@ sub SB_PLAYER_Parse( $$ ) {
         } 
 
     } elsif( $cmd eq "mode" ) {
+        my $updateSyncedPlayers=0;  # CD 0039
         # alittle more complex to fulfill FHEM Development guidelines
         Log3( $hash, 5, "SB_PLAYER_Parse($name): mode:$cmd args:$args[0]" ); 
         if( $args[ 0 ] eq "play" ) {
@@ -779,6 +780,7 @@ sub SB_PLAYER_Parse( $$ ) {
                 IOWrite( $hash, $hash->{helper}{ttsMaster} . " fhemrelay ttsplaying\n" );
             }
             # CD 0028 end
+            $updateSyncedPlayers=1;     # CD 0039 gesyncte Player aktualisieren
         } elsif( $args[ 0 ] eq "stop" ) {
             # CD 0028 start
             if($hash->{helper}{ttsstate}==TTS_PLAYING) {
@@ -799,12 +801,29 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0028 end
             readingsBulkUpdate( $hash, "playStatus", "stopped" );
             SB_PLAYER_Amplifier( $hash );
+            $updateSyncedPlayers=1;     # CD 0039 gesyncte Player aktualisieren
         } elsif( $args[ 0 ] eq "pause" ) {
             readingsBulkUpdate( $hash, "playStatus", "paused" );
             SB_PLAYER_Amplifier( $hash );
+            $updateSyncedPlayers=1;     # CD 0039 gesyncte Player aktualisieren
         } else {
             readingsBulkUpdate( $hash, "playStatus", $args[ 0 ] );
         }
+        
+        # CD 0039 gesyncte Player aktualisieren
+        if($updateSyncedPlayers==1) {
+            if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    my @pl=split(",",$hash->{SYNCGROUP});
+                    foreach (@pl) {
+                        if ($hash->{PLAYERMAC} ne $_) {
+                            IOWrite( $hash, "$_ mode ?\n" );
+                        }
+                    }
+                }
+            }
+        }
+        # CD 0039 end
 
     } elsif( $cmd eq "newmetadata" ) {
         # the song has changed, but we are easy and just ask the player
@@ -906,6 +925,16 @@ sub SB_PLAYER_Parse( $$ ) {
             } else {
                 readingsBulkUpdate( $hash, "repeat", "?" );
             }
+            # CD 0039 Änderung am Master, gesyncte Player aktualisieren
+            if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    my @pl=split(",",$hash->{SYNCGROUP});
+                    foreach (@pl) {
+                        IOWrite( $hash, "$_ playlist repeat ?\n" );
+                    }
+                }
+            }
+            # CD 0039 end
         } elsif( $args[ 0 ] eq "shuffle" ) {
             if( $args[ 1 ] eq "0" ) {
                 readingsBulkUpdate( $hash, "shuffle", "off" );
@@ -916,6 +945,16 @@ sub SB_PLAYER_Parse( $$ ) {
             } else {
                 readingsBulkUpdate( $hash, "shuffle", "?" );
             }
+            # CD 0039 Änderung am Master, gesyncte Player aktualisieren
+            if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    my @pl=split(",",$hash->{SYNCGROUP});
+                    foreach (@pl) {
+                        IOWrite( $hash, "$_ playlist shuffle ?\n" );
+                    }
+                }
+            }
+            # CD 0039 end
             SB_PLAYER_GetStatus( $hash );       # CD 0014
         } elsif( $args[ 0 ] eq "name" ) {
             # CD 0014 start
@@ -1271,6 +1310,49 @@ sub SB_PLAYER_Parse( $$ ) {
             } elsif( $args[ 1 ] eq "syncgroupid" ) {
                 IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );     # CD 0030 u added to tags
             # CD 0018 end
+            # CD 0039 für gesyncte Player bei Änderung am Slave erhält der Master eine prefset Meldung, an alle Slaves weitergeben
+            } elsif( $args[ 1 ] eq "repeat" ) {
+                if( $args[ 2 ] eq "0" ) {
+                    readingsBulkUpdate( $hash, "repeat", "off" );
+                } elsif( $args[ 2 ] eq "1") {
+                    readingsBulkUpdate( $hash, "repeat", "one" );
+                } elsif( $args[ 2 ] eq "2") {
+                    readingsBulkUpdate( $hash, "repeat", "all" );
+                } else {
+                    readingsBulkUpdate( $hash, "repeat", "?" );
+                }
+                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                    if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                        my @pl=split(",",$hash->{SYNCGROUP});
+                        if(@pl>1) {
+                            foreach (@pl) {
+                                IOWrite( $hash, "$_ playlist repeat ?\n" );
+                            }
+                        }
+                    }
+                }
+            } elsif( $args[ 1 ] eq "shuffle" ) {
+                if( $args[ 2 ] eq "0" ) {
+                    readingsBulkUpdate( $hash, "shuffle", "off" );
+                } elsif( $args[ 2 ] eq "1") {
+                    readingsBulkUpdate( $hash, "shuffle", "song" );
+                } elsif( $args[ 2 ] eq "2") {
+                    readingsBulkUpdate( $hash, "shuffle", "album" );
+                } else {
+                    readingsBulkUpdate( $hash, "shuffle", "?" );
+                }
+                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                    if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                        my @pl=split(",",$hash->{SYNCGROUP});
+                        if(@pl>1) {
+                            foreach (@pl) {
+                                IOWrite( $hash, "$_ playlist shuffle ?\n" );
+                            }
+                        }
+                    }
+                }
+                SB_PLAYER_GetStatus( $hash );
+            # CD 0039 end
             }
         } else {
             readingsBulkUpdate( $hash, "lastunkowncmd", 
