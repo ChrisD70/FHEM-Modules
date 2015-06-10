@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0039 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8397 beta 0040 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -716,13 +716,20 @@ sub SB_PLAYER_Parse( $$ ) {
             if ($args[ 1 ] eq "?") {
                 # it is a request
             } else {
-                SB_PLAYER_UpdateVolumeReadings( $hash, $args[ 1 ], true );
-                # CD 0007 start
-                if((defined($hash->{helper}{setSyncVolume}) && ($hash->{helper}{setSyncVolume} != $args[ 1 ]))|| (!defined($hash->{helper}{setSyncVolume}))) {
-                    SB_PLAYER_SetSyncedVolume($hash,$args[ 1 ]);
+                # CD 0040 start
+                if( ( index( $args[ 1 ], "+" ) != -1 ) || ( index( $args[ 1 ], "-" ) != -1 ) ) {
+                    # that was a relative value. We do nothing and fire an update
+                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                } else {
+                # CD 0040 end
+                    SB_PLAYER_UpdateVolumeReadings( $hash, $args[ 1 ], true );
+                    # CD 0007 start
+                    if((defined($hash->{helper}{setSyncVolume}) && ($hash->{helper}{setSyncVolume} != $args[ 1 ]))|| (!defined($hash->{helper}{setSyncVolume}))) {
+                        SB_PLAYER_SetSyncedVolume($hash,$args[ 1 ]);
+                    }
+                    delete $hash->{helper}{setSyncVolume};
+                    # CD 0007 end
                 }
-                delete $hash->{helper}{setSyncVolume};
-                # CD 0007 end
             }
         }
 
@@ -1859,9 +1866,10 @@ sub SB_PLAYER_Set( $@ ) {
     }
 
     # CD 0038 Befehle ignorieren wenn Player nicht vorhanden ist
-    if(ReadingsVal($name,"presence","x") ne "present") {
-        return "$name: player is not available";
-    }
+    # CD 0040 wieder deaktiviert
+    # if(ReadingsVal($name,"presence","x") ne "present") {
+        # return "$name: player is not available";
+    # }
     # CD 0038 end
     
     my $updateReadingsOnSet=AttrVal($name, "updateReadingsOnSet", false);           # CD 0017
