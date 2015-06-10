@@ -2,7 +2,8 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150606 0039 - Statusupdates für synchronisierte Player korrigiert
+  150610 0040 - Befehle annehmen auch wenn Player 'absent' ist 
+              - Rückmeldung relative Lautstärkeänderungen korrigiert
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -41,6 +42,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150610 0040 - Befehle annehmen auch wenn Player 'absent' ist 
+              - Rückmeldung relative Lautstärkeänderungen korrigiert
   150606 0039 - Statusupdates für synchronisierte Player korrigiert
   150605 0038 - Timeouts für TTS hinzugefügt
               - mit TTS warten bis Player eingeschaltet ist
@@ -50,6 +53,7 @@ Historie Änderungen:
               - 'playlist genre:xxx album:yyy artist:zzz' reaktiviert
               - bei sync nach FHEM-Gerätenamen suchen wenn Playername nicht gefunden wird
               - asSlave bei sync hinzugefügt
+              - Befehle abweisen wenn Player 'absent' ist 
               - Dokumentation ergänzt
   150515 0037 - Attribut statusRequestInterval hinzugefügt
   150507 0036 - save/recall erweitert
