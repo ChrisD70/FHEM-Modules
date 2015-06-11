@@ -2,8 +2,7 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150610 0040 - Befehle annehmen auch wenn Player 'absent' ist 
-              - Rückmeldung relative Lautstärkeänderungen korrigiert
+  150611 0041 - 'state' aktualisieren wenn 'power' ändert
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -42,6 +41,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150611 0041 - 'state' aktualisieren wenn 'power' ändert
   150610 0040 - Befehle annehmen auch wenn Player 'absent' ist 
               - Rückmeldung relative Lautstärkeänderungen korrigiert
   150606 0039 - Statusupdates für synchronisierte Player korrigiert
