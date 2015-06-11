@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0040 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8397 beta 0041 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3775,9 +3775,11 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
         } elsif( $cur =~ /^(power:)([0-9\.]*)/ ) {
             if( $2 eq "1" ) {
+                readingsBulkUpdate( $hash, "state", "on" ); # CD 0041 hinzugefügt
                 readingsBulkUpdate( $hash, "power", "on" );
                 SB_PLAYER_Amplifier( $hash );
             } else {
+                readingsBulkUpdate( $hash, "state", "off" ); # CD 0041 hinzugefügt
                 readingsBulkUpdate( $hash, "power", "off" );
                 SB_PLAYER_Amplifier( $hash );
             }
