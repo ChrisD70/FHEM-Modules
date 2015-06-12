@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0041 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8397 beta 0042 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -569,6 +569,9 @@ sub SB_PLAYER_Define( $$ ) {
     $hash->{helper}{ttsstate}=TTS_IDLE;  # CD 0028
     
     SB_PLAYER_LoadPlayerStates($hash) if($SB_PLAYER_hasDataDumper==1);   # CD 0036
+    
+    $hash->{helper}{playerStatusOK}=0;          # CD 0042
+    $hash->{helper}{playerStatusOKCounter}=0;   # CD 0042
     
     # do and update of the status
     InternalTimer( gettimeofday() + 10, 
@@ -1264,8 +1267,12 @@ sub SB_PLAYER_Parse( $$ ) {
                     SB_PLAYER_Amplifier( $hash );
                     # CD 0038 start
                     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
-                        SB_PLAYER_PrepareTalk($hash);
-                        SB_PLAYER_LoadTalk($hash);
+                        # CD 0042 readingsBulkUpdate abwarten
+                        RemoveInternalTimer( "TTSStartAfterPowerOn:$name");
+                        InternalTimer( gettimeofday() + 0.01, 
+                           "SB_PLAYER_tcb_TTSStartAfterPowerOn",
+                           "TTSStartAfterPowerOn:$name", 
+                           0 );
                     }
                     # CD 0038 end
                     # CD 0030 send play only after power is on
@@ -1600,6 +1607,28 @@ sub SB_PLAYER_tcb_TTSStopped( $ ) {
     }
 }
 # CD 0034 end
+
+# CD 0042
+# ----------------------------------------------------------------------------
+#  start tts after power on, wait if startup is not complete
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_tcb_TTSStartAfterPowerOn( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    if(($hash->{helper}{playerStatusOK}==1)||($hash->{helper}{playerStatusOKCounter}>10)) {
+        SB_PLAYER_PrepareTalk($hash);
+        SB_PLAYER_LoadTalk($hash);
+    } else {
+        InternalTimer( gettimeofday() + 1, 
+           "SB_PLAYER_tcb_TTSStartAfterPowerOn",
+           "TTSStartAfterPowerOn:$name", 
+           0 );
+        $hash->{helper}{playerStatusOKCounter}++;
+    }
+}
+# CD 0042 end
 
 # ----------------------------------------------------------------------------
 #  called when talk is stopped, check if there are queued elements
@@ -2185,13 +2214,22 @@ sub SB_PLAYER_Set( $@ ) {
             # CD 0038 Player zuerst einschalten
             if(ReadingsVal($name,"power","x") ne "on") {
                 SB_PLAYER_SetTTSState($hash,TTS_WAITFORPOWERON,0,0);
-                IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
                 RemoveInternalTimer( "TimeoutTTSWaitForPowerOn:$name");
-                InternalTimer( gettimeofday() + 5.00, 
-                   "SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn",
-                   "TimeoutTTSWaitForPowerOn:$name", 
-                   0 );
-                $hash->{helper}{ttsPowerWasOff}=1;
+                if($hash->{helper}{playerStatusOK}==1) {    # CD 0042
+                    IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
+                    InternalTimer( gettimeofday() + 5.00, 
+                       "SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn",
+                       "TimeoutTTSWaitForPowerOn:$name", 
+                       0 );
+                    $hash->{helper}{ttsPowerWasOff}=1;
+                # CD 0042 start
+                } else {
+                    InternalTimer( gettimeofday() + 10.00, 
+                       "SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn",
+                       "TimeoutTTSWaitForPowerOn:$name", 
+                       0 );
+                }
+                # CD 0042 end
             } else {
             # CD 0038 end
                 SB_PLAYER_PrepareTalk($hash);
@@ -3661,7 +3699,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     my $cur = "";
     my $playlistIds = "";           # CD 0014
     my $refreshIds=0;               # CD 0014
-    
+
     # typically the start index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
         shift( @{$dataptr} );
@@ -3778,7 +3816,22 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
                 readingsBulkUpdate( $hash, "state", "on" ); # CD 0041 hinzugefügt
                 readingsBulkUpdate( $hash, "power", "on" );
                 SB_PLAYER_Amplifier( $hash );
+                # CD 0042 start
+                if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
+                    RemoveInternalTimer( "TTSStartAfterPowerOn:$name");
+                    InternalTimer( gettimeofday() + 0.01, 
+                       "SB_PLAYER_tcb_TTSStartAfterPowerOn",
+                       "TTSStartAfterPowerOn:$name", 
+                       0 );
+                }
+                # CD 0042 end
             } else {
+                # CD 0042 start
+                if(($hash->{helper}{playerStatusOK}==0) && ($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON)) {
+                    $hash->{helper}{ttsPowerWasOff}=1;
+                    IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
+                }
+                # CD 0042 end
                 readingsBulkUpdate( $hash, "state", "off" ); # CD 0041 hinzugefügt
                 readingsBulkUpdate( $hash, "power", "off" );
                 SB_PLAYER_Amplifier( $hash );
@@ -3939,6 +3992,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
         }
     }
+    $hash->{helper}{playerStatusOK}=1;  # CD 0042
+    
     # Matthew 0019 start
     if( $hash->{SYNCED} ne "yes") {
         readingsBulkUpdate( $hash, "synced", "none" );
