@@ -2,7 +2,8 @@
   150308 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
 98_SB_PLAYER:
-  150611 0041 - 'state' aktualisieren wenn 'power' ändert
+  150612 0042 - Fehlermeldungen bei TTS nach 'power 1' korrigiert
+              - mit TTS warten bis Status des Players vorliegt
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -41,6 +42,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150612 0042 - Fehlermeldungen bei TTS nach 'power 1' korrigiert
+              - mit TTS warten bis Status des Players vorliegt
   150611 0041 - 'state' aktualisieren wenn 'power' ändert
   150610 0040 - Befehle annehmen auch wenn Player 'absent' ist 
               - Rückmeldung relative Lautstärkeänderungen korrigiert
