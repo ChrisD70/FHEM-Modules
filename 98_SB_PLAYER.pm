@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8397 beta 0042 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8773 beta 0043 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -11,7 +11,7 @@
 #
 #  Written by bugster_de
 #
-#  Contributions from: Siggi85, Oliv06, ChrisD, Markus M., Matthew, KernSani
+#  Contributions from: Siggi85, Oliv06, ChrisD, Markus M., Matthew, KernSani, Heppel
 #
 # ##############################################################################
 #
@@ -203,6 +203,25 @@ sub SB_PLAYER_Attr( @ ) {
            "DelayAmplifier:$name", 
            0 );
     }
+    # CD 0043 start
+    elsif( $args[ 0 ] eq "amplifierDelayOff" ) {
+      $hash->{helper}{amplifierDelayOffStop}=0;
+      $hash->{helper}{amplifierDelayOffPower}=0;
+      $hash->{helper}{amplifierDelayOffPause}=0;
+      if( $cmd eq "set" ) {
+        if (defined($args[1])) {
+          my @delays=split(',',$args[1]);
+          $hash->{helper}{amplifierDelayOffStop}=$delays[0]+0 if defined($delays[0]);
+          $hash->{helper}{amplifierDelayOffPower}=$delays[0]+0 if defined($delays[0]);
+          $hash->{helper}{amplifierDelayOffPause}=$delays[1]+0 if defined($delays[1]);
+        } else {
+            return "missing value for amplifierDelayOff";
+        }
+      } else {
+      
+      }
+    }
+    # CD 0043 end
     # CD 0028
     elsif( $args[ 0 ] eq "ttsVolume" ) {
         if( $cmd eq "set" ) {
@@ -572,6 +591,10 @@ sub SB_PLAYER_Define( $$ ) {
     
     $hash->{helper}{playerStatusOK}=0;          # CD 0042
     $hash->{helper}{playerStatusOKCounter}=0;   # CD 0042
+
+    $hash->{helper}{amplifierDelayOffStop}=0;   # CD 0043
+    $hash->{helper}{amplifierDelayOffPower}=0;  # CD 0043
+    $hash->{helper}{amplifierDelayOffPause}=0;  # CD 0043
     
     # do and update of the status
     InternalTimer( gettimeofday() + 10, 
@@ -1786,7 +1809,7 @@ sub SB_PLAYER_Notify( $$ ) {
     }
 
     # CD 0036 start
-    if( grep(m/^SAVE$/, @{$dev_hash->{CHANGED}}) ) {
+    if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
         SB_PLAYER_SavePlayerStates($hash) if($SB_PLAYER_hasDataDumper==1);
     }
     # CD 0036 end
@@ -3237,6 +3260,15 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                            0 );
         } elsif( $args[ 0 ] eq "IP" ) {
             $hash->{SBSERVER} = $args[ 1 ];
+            # CD 0043 bei Änderung von Adresse oder Port COVERART aktualisieren
+            readingsBeginUpdate( $hash );
+            SB_PLAYER_CoverArt( $hash );
+            if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
+                readingsEndUpdate( $hash, 0 );
+            } else {
+                readingsEndUpdate( $hash, 1 );
+            }
+            # CD 0043 end
         } else {
             # unkown broadcast message
         }
@@ -3552,6 +3584,7 @@ sub SB_PLAYER_Amplifier( $ ) {
     }
 
     my $setvalue = "off";
+    my $delayAmp=0.01;  # CD 0043
     
     Log3( $hash, 4, "SB_PLAYER_Amplifier($name): called" );
 
@@ -3561,10 +3594,16 @@ sub SB_PLAYER_Amplifier( $ ) {
         Log3( $hash, 5, "SB_PLAYER_Amplifier($name): with mode play " . 
               "and status:$thestatus" );
 
-        if( ( $thestatus eq "playing" ) || ( $thestatus eq "paused" ) ) {
+        if( ( $thestatus eq "playing" ) || (( $thestatus eq "paused" ) && ($hash->{helper}{amplifierDelayOffPause}==0)) ) { # CD 0043 DelayOffPause abfragen
             $setvalue = "on";
+        # CD 0043 start
+        } elsif(( $thestatus eq "paused" ) && ($hash->{helper}{amplifierDelayOffPause}>0)) {
+            $setvalue = "off";
+            $delayAmp=$hash->{helper}{amplifierDelayOffPause};
+        # CD 0043 end
         } elsif( $thestatus eq "stopped" ) {
             $setvalue = "off";
+            $delayAmp=$hash->{helper}{amplifierDelayOffStop}; # CD 0043
         } else { 
             $setvalue = "off";
         }
@@ -3578,6 +3617,7 @@ sub SB_PLAYER_Amplifier( $ ) {
             $setvalue = "on";
         } else {
             $setvalue = "off";
+            $delayAmp=$hash->{helper}{amplifierDelayOffPower}; # CD 0043
         }
     } else {
         Log3( $hash, 1, "SB_PLAYER_Amplifier($name): ATTR amplifier " .
@@ -3592,15 +3632,21 @@ sub SB_PLAYER_Amplifier( $ ) {
 
     if ( $actualState ne $setvalue) {
         # CD 0012 start - Abschalten über Attribut verzögern, generell verzögern damit set-Event funktioniert
-        my $delayAmp=($setvalue eq "off")?AttrVal( $name, "amplifierDelayOff", 0 ):0.1;
+        # my $delayAmp=($setvalue eq "off")?AttrVal( $name, "amplifierDelayOff", 0 ):0.1; # CD 0043 deaktiviert, wird oben behandelt
         $delayAmp=0.01 if($delayAmp==0);
         if (!defined($hash->{helper}{AMPLIFIERDELAYOFF})) {
-            Log3( $hash, 5, 'SB_PLAYER_Amplifier($name): delaying amplifier on/off' );
-            RemoveInternalTimer( "DelayAmplifier:$name");
-            InternalTimer( gettimeofday() + $delayAmp, 
-               "SB_PLAYER_tcb_DelayAmplifier",  # CD 0014 Name geändert
-               "DelayAmplifier:$name", 
-               0 );
+            # CD 0043 Timer nicht neu starten wenn Zustand sich nicht geändert hat
+            if ((!defined($hash->{helper}{AMPLIFIERACTIVETIMER})) || ($hash->{helper}{AMPLIFIERACTIVETIMER} ne ($actualState.$setvalue))) {
+                Log3( $hash, 5, "SB_PLAYER_Amplifier($name): delaying amplifier on/off by $delayAmp" );
+                RemoveInternalTimer( "DelayAmplifier:$name");
+                InternalTimer( gettimeofday() + $delayAmp, 
+                    "SB_PLAYER_tcb_DelayAmplifier",  # CD 0014 Name geändert
+                    "DelayAmplifier:$name", 
+                    0 );
+                $hash->{helper}{AMPLIFIERACTIVETIMER}=$actualState.$setvalue; # CD 0043
+            } else {
+                Log3( $hash, 5, "SB_PLAYER_Amplifier($name): delay already active" );
+            }
             return;
         }
         # CD 0012 end
@@ -3613,6 +3659,7 @@ sub SB_PLAYER_Amplifier( $ ) {
               "state change" );
     }
     delete($hash->{helper}{AMPLIFIERDELAYOFF}) if (defined($hash->{helper}{AMPLIFIERDELAYOFF}));
+    delete($hash->{helper}{AMPLIFIERACTIVETIMER}) if (defined($hash->{helper}{AMPLIFIERACTIVETIMER}));  # CD 0043
 
     return;
 }
@@ -4229,20 +4276,20 @@ sub SB_PLAYER_LoadPlayerStates($)
   <a name="SBplayerdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_PLAYER &lt;player_mac_adress&gt; [&lt;ampl&gt;] [&lt;coverart&gt;]</code>
+    <code>define &lt;name&gt; SB_PLAYER &lt;player_mac_address&gt; [&lt;ampl&gt;] [&lt;coverart&gt;]</code>
     <br><br>
-    This module allows you to control Squeezebox Media Players connected with a defined Logitech Media Server. An SB_SERVER device is needed to work.<br>
-   Normally you don't need to define your SB_PLAYERS because autocreate will do that if enabled.<br><br>
+    This module controls Squeezebox Media Players connected to a defined Logitech Media Server. A SB_SERVER device is required.<br>
+    Usually SB_PLAYER devices are created automatically by autocreate.<br><br>
 
    <ul>
-      <li><code>&lt;player_mac_adress&gt;</code>: Mac adress of the player found in the LMS.  </li>
-   </ul><br>   
+      <li><code>&lt;player_mac_address&gt;</code>: Mac address of player as seen by LMS.</li>
+   </ul><br>
    <b>Optional</b><br><br>
    <ul>
-      <li><code>&lt;[ampl]&gt;</code>: You can define an FHEM Device to command when an on or off event is received. With the attribute
-      <a href="#SBplayeramplifier">amplifier</a> you can specify whether to command the selected FHEM Device on on|off or play|stop.</li>
-      <li><code>&lt;[coverart]&gt;</code>: You can define an FHEM weblink. The player will update the weblink with the current coverart.
-      Useful for putting coverarts in the floorplan.</li>
+      <li><code>&lt;[ampl]&gt;</code>: A FHEM device to switch when on or off events are received. The attribute
+      <a href="#SBplayeramplifier">amplifier</a> specifies the commands to send to the device. (on|off or play|stop).</li>
+      <li><code>&lt;[coverart]&gt;</code>: A FHEM weblink to be updated with the current coverart.
+      This may be used to show coverart in a floorplan.</li>
    </ul><br><br>
   </ul>
    
@@ -4251,36 +4298,35 @@ sub SB_PLAYER_LoadPlayerStates($)
   <ul>
     <code>set &lt;name&gt; &lt;command&gt; [&lt;parameter&gt;]</code>
     <br><br>
-    This module supports the following commands:<br>
    
     SB_Player related commands:<br><br>
    <ul>
-      <li><b>play</b> -  starts the playback (might only work if previously paused).</li>
-     <li><b>pause [&lt;0|1&gt;]</b> -  toggles between play and pause. With parameter 0 it unpauses and with 1 it pauses the player, it doesn't matter which state it had before</li>
-     <li><b>stop</b> -  stops the playback</li>
-     <li><b>next|channelUp</b> -  jumps to the next track</li>
-     <li><b>prev|channelDown</b> -  jumps to the previous track or the beginning of the current track.</li>
-     <li><b>mute</b> -  toggles between muted and unmuted</li>
-     <li><b>volume &lt;n&gt;</b> -  sets the volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100</li>
+      <li><b>play</b> -  start playback (might not work unless previously paused).</li>
+     <li><b>pause [&lt;0|1&gt;]</b> -  toggle between play and pause states. &ldquo;pause 1&rdquo; and &ldquo;pause 0&rdquo; respectively pause and resume play unconditionally.</li>
+     <li><b>stop</b> -  stop playback</li>
+     <li><b>next|channelUp</b> -  next track</li>
+     <li><b>prev|channelDown</b> -  previous track or the beginning of the current track.</li>
+     <li><b>mute</b> -  toggle mute.</li>
+     <li><b>volume &lt;n&gt;</b> -  set volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  same as volume</li>
      <li><b>volumeDown &lt;n&gt;</b> -  volume down</li>
      <li><b>volumeUp &lt;n&gt;</b> -  volume up</li>
-     <li><b>on</b> -  sets the player on if possible. Otherwise it does play</li>
-     <li><b>off</b> -  sets the player off if possible. Otherwise it does stop</li>
-     <li><b>shuffle on|off|song|album</b> -  Enables/Disables shuffle mode</li>
-     <li><b>repeat one|all|off</b> -  Sets the repeat mode</li>
-     <li><b>sleep &lt;n&gt;</b> -  Sets the player off in &lt;n&gt; seconds and fade the player volume down</li>   
-     <li><b>favorites &lt;favorit&gt;</b> -  Empties the current playlist and starts the selected playlist. Favorites are selectable through a dropdown list</li>   
-     <li><b>talk|sayText &lt;text&gt;</b> -  Saves the current playlist, speaks the selected text with google TTS and resumes saved playlist</li>
-     <li><b>playlist track|album|artist|genre|year &lt;x&gt;</b> -  Empties the current playlist and starts the track, album or artist &lt;x&gt;</li>
-     <li><b>playlist genre:&lt;genre&gt; artist:&lt;artist&gt; album:&lt;album&gt;</b> -  Empties the current playlist and starts the track which will match the search. You can use * as wildcard for everything.</li>
+     <li><b>on</b> -  turn player on if possible. Issue play command otherwise.</li>
+     <li><b>off</b> -  turn player off if possible. Issue stop command otherwise.</li>
+     <li><b>shuffle on|off|song|album</b> -  Enable/Disable shuffle mode.</li>
+     <li><b>repeat one|all|off</b> -  Set repeat mode.</li>
+     <li><b>sleep &lt;n&gt;</b> -  Set player off in &lt;n&gt; seconds, fading player volume down.</li>   
+     <li><b>favorites &lt;favorite&gt;</b> -  Empty curent playlist and start &lt;favorite&gt;. The frontend may make favorites selectable by a dropdown list.</li>   
+     <li><b>talk|sayText &lt;text&gt;</b> -  Save the playlist, speak &lt;text&gt; using Google TTS and resume saved playlist.</li>
+     <li><b>playlist track|album|artist|genre|year &lt;x&gt;</b> -  Empty current playlist and play given argument.</li>
+     <li><b>playlist genre:&lt;genre&gt; artist:&lt;artist&gt; album:&lt;album&gt;</b> -  Empty current playlist and play all tracks matchimg the parameters. A * acts as a wildcard for everything.</li>
      <br>Example:<br>
      <code>set myplayer playlist genre:* artist:Whigfield album:*</code><br><br>
-     <li><b>playlist play &lt;filename|playlistname&gt;</b> -  Empties the current playlist and starts the track or playlist</li>
-     <li><b>playlist add &lt;filename|playlistname&gt;</b> -  Adds the specified file or playlist at the end of the current playlist</li>
-     <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   Inserts the specified file or playlist after the current song
-     in the current playlist.</li>
-     <li><b>statusRequest</b> -  Update of all readings</li>
+     <li><b>playlist play &lt;filename|playlistname&gt;</b> -  Empty current playlist and start the track or playlist.</li>
+     <li><b>playlist add &lt;filename|playlistname&gt;</b> -  Add the specified file or playlist at the end of the current playlist.</li>
+     <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   Insert specified file or playlist after the current track into
+     the current playlist.</li>
+     <li><b>statusRequest</b> -  Update all readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> -  Syncs with other players for multiroom function. Other players are selectable
      through a dropdown list. The shown player is the master. Options:</li>
     <ul>
@@ -4293,8 +4339,8 @@ sub SB_PLAYER_LoadPlayerStates($)
      <code>set playerA sync playerB new</code>&nbsp;&nbsp;&nbsp;&nbsp;creates a new group with playerA and B, playerA is master<br>
      <code>set playerA sync playerB asSlave</code>&nbsp;&nbsp;&nbsp;&nbsp;adds playerA to playerB's group<br><br>
      <li><b>unsync</b> -  Unsyncs the player from multiroom group</li>
-     <li><b>playlists</b> -  Empties the current playlist and starts the selected playlist. Playlists are selectable through a dropdown list</li>
-     <li><b>cliraw &lt;command&gt;</b> -  Sends the &lt;command&gt; to the LMS CLI for selected player</li>
+     <li><b>playlists</b> -  Empty current playlist and start selected playlist.</li>
+     <li><b>cliraw &lt;command&gt;</b> - Tell LMS to execute &lt;command&gt; using it's command line interface.</li>
      <li><b>save [name]</b> -  Saves the current player state</li>
      <li><b>recall [name] [options] </b> -  Recalls a saved player state, options:</li>
     <ul>
@@ -4305,11 +4351,11 @@ sub SB_PLAYER_LoadPlayerStates($)
       <li>play - ignore saved play state, start playing after restore</li>
       <li>stop - ignore saved play state, stop player after restore</li>
     </ul>
-    <li><b>show &lt;line1&gt; &lt;line2&gt; &lt;duration&gt;</b> - displays text on the player</li>
+    <li><b>show &lt;line1&gt; &lt;line2&gt; &lt;duration&gt;</b> - show text on player</li>
    <ul>
-     <li>line1 -  Text for first line</li>
-     <li>line2 -  Text for second line</li>
-     <li>duration -  Duration for apperance in seconds</li>
+     <li>line1 - First line</li>
+     <li>line2 - Second line</li>
+     <li>duration -  Duration of display in seconds</li>
    </ul>
    </ul>
   <br>Alarms<br>
@@ -4340,7 +4386,7 @@ set sbradio alarm2 set 4 17:18:00</code>
   <b>Attributes</b>
   <ul>
     <li>IODev<br>
-      The name of the SB_SERVER device to which this player is connected.</li><br>
+      Name of the SB_SERVER device controlling this player.</li><br>
     <li>donotnotify<br>
       Disables all events from the device. Must be explicitly set to <code>false</code> to enable events.</li><br>
     <li>volumeLimit<br>
