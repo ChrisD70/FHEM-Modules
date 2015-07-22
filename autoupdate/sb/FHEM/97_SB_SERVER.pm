@@ -1,11 +1,17 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0014 CD $
+# $Id: 97_SB_SERVER.pm beta 20141120 0015 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
 # ############################################################################
 #
 #  used to interact with Squeezebox server
+#
+# ############################################################################
+#
+#  Written by bugster_de
+#
+#  Contributions from: Siggi85, Oliv06, ChrisD
 #
 # ############################################################################
 #
@@ -446,9 +452,7 @@ sub SB_SERVER_Ready( $ ) {
             return undef;
         }
     }
-
 }
-
 
 # ----------------------------------------------------------------------------
 #  Get functions 
@@ -473,14 +477,21 @@ sub SB_SERVER_Get( $@ ) {
 sub SB_SERVER_Attr( @ ) {
     my $cmd = shift( @_ );
     my $name = shift( @_ );
+    my $hash = $defs{$name};
     my @args = @_;
 
     Log( 4, "SB_SERVER_Attr($name): called with @args" );
 
     if( $cmd eq "set" ) {
-	if( $args[ 0 ] eq "alivetimer" ) {
+        if( $args[ 0 ] eq "alivetimer" ) {
 
-	}
+        }
+        # CD 0015 bei Änderung des Ports diesen an Clients schicken
+        if( $args[ 0 ] eq "httpport" ) {
+            SB_SERVER_Broadcast( $hash, "SERVER", 
+                     "IP " . $hash->{IP} . ":" .
+                     $args[ 1 ] );
+        }
     }
 }
 

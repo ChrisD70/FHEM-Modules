@@ -1,13 +1,15 @@
 ﻿97_SB_SERVER:
-  150308 0014 - updateModules geändert, download und reload hinzugefügt
-              - Loglevel angepasst
+  150722 0015 - httpport bei Änderung an Clients übertragen
 98_SB_PLAYER:
-  150612 0042 - Fehlermeldungen bei TTS nach 'power 1' korrigiert
-              - mit TTS warten bis Status des Players vorliegt
+  150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
+              - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
+              - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
+              - Heppel: Dokumentation überarbeitet und ergänzt
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  150722 0015 - httpport bei Änderung an Clients übertragen
   150319 0014 - in contrib eingecheckt (8246)
   150315 0014 - updateModules geändert, download und reload hinzugefügt
               - Loglevel angepasst
@@ -42,6 +44,11 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
+              - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
+              - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
+              - Heppel: Dokumentation überarbeitet und ergänzt
+  150618      - in contrib eingecheckt (8773)
   150612 0042 - Fehlermeldungen bei TTS nach 'power 1' korrigiert
               - mit TTS warten bis Status des Players vorliegt
   150611 0041 - 'state' aktualisieren wenn 'power' ändert
