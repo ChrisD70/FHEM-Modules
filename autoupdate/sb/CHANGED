@@ -4,6 +4,7 @@
   150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
               - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
               - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
+              - interne Zustände bei shutdown abspeichern
               - Heppel: Dokumentation überarbeitet und ergänzt
                                                                                                  .    
 Historie Änderungen:
@@ -47,6 +48,7 @@ Historie Änderungen:
   150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
               - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
               - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
+              - interne Zustände bei shutdown abspeichern
               - Heppel: Dokumentation überarbeitet und ergänzt
   150618      - in contrib eingecheckt (8773)
   150612 0042 - Fehlermeldungen bei TTS nach 'power 1' korrigiert
