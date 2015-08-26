@@ -1,11 +1,12 @@
 ﻿97_SB_SERVER:
   150722 0015 - httpport bei Änderung an Clients übertragen
 98_SB_PLAYER:
-  150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
-              - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
-              - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
-              - interne Zustände bei shutdown abspeichern
+  150826 0045 - get alarmPlaylists hinzugefügt
+              - VoiceRSS hinzugefügt
+              - URL für Google TTS geändert
+              - Platzhalter für Sprache und Text in ttslink hinzugefügt
               - Heppel: Dokumentation überarbeitet und ergänzt
+         0044 - bei modify nicht erneut initialisieren
                                                                                                  .    
 Historie Änderungen:
                                                                                                  .    
@@ -45,6 +46,12 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  150826 0045 - get alarmPlaylists hinzugefügt
+              - VoiceRSS hinzugefügt
+              - URL für Google TTS geändert
+              - Platzhalter für Sprache und Text in ttslink hinzugefügt
+              - Heppel: Dokumentation überarbeitet und ergänzt
+         0044 - bei modify nicht erneut initialisieren
   150722 0043 - amplifierDelayOff erweitert, Verstärker auch bei Pause abschalten wenn 2. Zeit (durch , getrennt) gesetzt ist
               - FIX: teilweise wurde der Verstärker zu spät ausgeschaltet
               - bei Änderung des Attributes httpport beim Server Coverart-URL neu erstellen
