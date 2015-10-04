@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8773 beta 0045 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8773 beta 0046 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1192,12 +1192,16 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "alarm" ) {
         if( $args[ 0 ] eq "sound" ) {
             # fired when an alarm goes off
+            DoTrigger($name,"alarmSound ".SB_PLAYER_FindAlarmId($hash, $args[ 1 ]));  # CD 0046
         } elsif( $args[ 0 ] eq "end" ) {
             # fired when an alarm ends
+            DoTrigger($name,"alarmEnd ".SB_PLAYER_FindAlarmId($hash, $args[ 1 ]));  # CD 0046
         } elsif( $args[ 0 ] eq "snooze" ) {
             # fired when an alarm is snoozed by the user
+            DoTrigger($name,"alarmSnooze ".SB_PLAYER_FindAlarmId($hash, $args[ 1 ]));  # CD 0046
         } elsif( $args[ 0 ] eq "snooze_end" ) {
             # fired when an alarm comes back from snooze
+            DoTrigger($name,"alarmSnoozeEnd ".SB_PLAYER_FindAlarmId($hash, $args[ 1 ]));  # CD 0046
         } elsif( $args[ 0 ] eq "add" ) {
             # fired when an alarm has been added. 
             # this setup goes wrong, when an alarm is defined manually
@@ -3562,7 +3566,24 @@ sub SB_PLAYER_ParseAlarms( $@ ) {
     }
 }
 
+# CD 0046 start
+# ----------------------------------------------------------------------------
+#  search for LMS alarm id, return FHEM alarm number
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_FindAlarmId( $$ ) {
+    my ( $hash, $id ) = @_;
+    my $name = $hash->{NAME};
 
+    my $n=0;
+    for (my $i=0;$i<=$hash->{helper}{ALARMSCOUNT};$i++) {
+        if (ReadingsVal($name,"alarm".$i."_id","xxxx") eq $id) {
+            $n=$i;
+            last;
+        }
+    }
+    return $n;
+}
+# CD 0046
 
 # ----------------------------------------------------------------------------
 #  used for checking, if the string contains a valid MAC adress
