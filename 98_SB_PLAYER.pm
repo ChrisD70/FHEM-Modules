@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8773 beta 0046 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8773 beta 0047 CD/MM/Matthew $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -588,6 +588,13 @@ sub SB_PLAYER_Define( $$ ) {
         $hash->{READINGS}{state}{TIME} = $tn; 
     }
 
+    # mrbreil 0047 start
+    if( !defined( $hash->{READINGS}{currentTrackPosition}{VAL} ) ) {
+        $hash->{READINGS}{currentTrackPosition}{VAL} = 0;
+        $hash->{READINGS}{currentTrackPosition}{TIME} = $tn;
+    }
+    # mrbreil 0047 end
+
     $hash->{helper}{ttsstate}=TTS_IDLE;  # CD 0028
 
     if (!defined($hash->{OLDDEF})) {    # CD 0044
@@ -651,6 +658,23 @@ sub SB_PLAYER_QueryElapsedTime($) {
 }
 # CD 0014 end
 
+# CD 0047 start
+sub SB_PLAYER_tcb_QueryElapsedTime( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    SB_PLAYER_QueryElapsedTime($hash);
+    RemoveInternalTimer( "QueryElapsedTime:$name");
+    if (ReadingsVal($name,"playStatus","x") eq "playing") {
+      InternalTimer( gettimeofday() + 5, 
+         "SB_PLAYER_tcb_QueryElapsedTime", 
+         "QueryElapsedTime:$name", 
+         0 );
+    }
+}
+# CD 0047 end
+    
 # CD 0028 start
 sub SB_PLAYER_tcb_TTSRestore( $ ) {
     my($in ) = shift;
@@ -792,7 +816,7 @@ sub SB_PLAYER_Parse( $$ ) {
 
     } elsif( $cmd eq "mode" ) {
         my $updateSyncedPlayers=0;  # CD 0039
-        # alittle more complex to fulfill FHEM Development guidelines
+        # a little more complex to fulfill FHEM Development guidelines
         Log3( $hash, 5, "SB_PLAYER_Parse($name): mode:$cmd args:$args[0]" ); 
         if( $args[ 0 ] eq "play" ) {
             # CD 0014 start
@@ -803,6 +827,13 @@ sub SB_PLAYER_Parse( $$ ) {
                 readingsBulkUpdate( $hash, "playStatus", "playing" );
                 SB_PLAYER_Amplifier( $hash );
                 SB_PLAYER_QueryElapsedTime( $hash );    # CD 0014
+                # CD 0047 start
+                RemoveInternalTimer( "QueryElapsedTime:$name");
+                InternalTimer( gettimeofday() + 5, 
+                  "SB_PLAYER_tcb_QueryElapsedTime", 
+                  "QueryElapsedTime:$name", 
+                0 );
+                # CD 0047 end
             } # CD 0014
             # CD 0029 start
             if(defined($hash->{helper}{ttsOptions}{logplay})) {
@@ -839,6 +870,8 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0028 end
             readingsBulkUpdate( $hash, "playStatus", "stopped" );
             SB_PLAYER_Amplifier( $hash );
+            RemoveInternalTimer( "QueryElapsedTime:$name");         # CD 0047
+            readingsBulkUpdate( $hash, "currentTrackPosition", 0 ); # CD 0047
             $updateSyncedPlayers=1;     # CD 0039 gesyncte Player aktualisieren
         } elsif( $args[ 0 ] eq "pause" ) {
             readingsBulkUpdate( $hash, "playStatus", "paused" );
@@ -1109,14 +1142,16 @@ sub SB_PLAYER_Parse( $$ ) {
                 delete($hash->{helper}{recallPending});
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,1);
                 IOWrite( $hash, "$hash->{PLAYERMAC} play 300\n" );
-                IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{savedPlayerState}{elapsedTime}\n" );
+                IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{recallPendingElapsedTime}\n" );    # CD 0047, Position setzen korrigiert
+                delete($hash->{helper}{recallPendingElapsedTime});  # CD 0047
             }
         } elsif( $args[ 0 ] eq "loadtracks" ) {
             if(defined($hash->{helper}{recallPending})) {
                 delete($hash->{helper}{recallPending});
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,1);
                 IOWrite( $hash, "$hash->{PLAYERMAC} play 300\n" );
-                IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{savedPlayerState}{elapsedTime}\n" );
+                IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{recallPendingElapsedTime}\n" );    # CD 0047, Position setzen korrigiert
+                delete($hash->{helper}{recallPendingElapsedTime});  # CD 0047
             }
         # CD 0014 end
         } else {
@@ -1457,6 +1492,7 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "time" ) {
         $hash->{helper}{elapsedTime}{VAL}=$args[ 0 ];
         $hash->{helper}{elapsedTime}{TS}=gettimeofday();
+        readingsBulkUpdate( $hash, "currentTrackPosition",int($args[ 0 ]+0.5));  # CD 0047 
         delete($hash->{helper}{saveLocked}) if (($hash->{helper}{ttsstate}==TTS_IDLE) && defined($hash->{helper}{saveLocked}));
     } elsif( $cmd eq "playlist_tracks" ) {
         readingsBulkUpdate( $hash, "playlistTracks", $args[ 0 ] );
@@ -1905,6 +1941,7 @@ sub SB_PLAYER_Set( $@ ) {
             "alarmsSnooze:slider,0,1,30 alarmsTimeout:slider,0,5,90  alarmsDefaultVolume:slider,0,1,100 alarmsFadeIn:on,off alarmsEnabled:on,off " . # CD 0016, von MM übernommen, Namen geändert
             "cliraw talk sayText " .     # CD 0014 sayText hinzugefügt
             "unsync:noArg " .
+            "currentTrackPosition " .   # CD 0047 hinzugefügt
             "resetTTS:noArg ";          # CD 0028 hinzugefügt
         # add the favorites
         $res .= $hash->{FAVSET} . ":-," . $hash->{FAVSTR} . " ";    # CD 0014 '-' hinzugefügt
@@ -2291,12 +2328,13 @@ sub SB_PLAYER_Set( $@ ) {
                 if(defined($ttslink)) {
                     # Profile
                     my $lang=AttrVal( $name, "ttslanguage", "de" );
-                    if ($ttslink eq "VoiceRSS") {
+                    if ($ttslink =~ m/voicerss/i) { # CD 0047 Sprache auch bei voicerss innerhalb der URL anpassen
                         $lang="de-de" if($lang eq "de");
                         $lang="en-us" if($lang eq "en");
                         $lang="fr-fr" if($lang eq "fr");
                     }
 
+                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=t&prev=input" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047
                     $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=t&prev=input" if ($ttslink eq "Google");
                     $ttslink="http://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>" if ($ttslink eq "VoiceRSS");
 
@@ -2588,6 +2626,12 @@ sub SB_PLAYER_Set( $@ ) {
         }
     } elsif( $cmd eq "resetTTS" ) {
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+    # CD 0047 start
+    } elsif( lc($cmd) eq "currenttrackposition" ) {
+        if(defined($arg[0])) {
+            IOWrite( $hash, "$hash->{PLAYERMAC} time $arg[0]\n" );
+        }
+    # CD 0047 end
     } else {
         my $msg = "SB_PLAYER_Set: unsupported command given";
         Log3( $hash, 3, $msg );
@@ -2789,6 +2833,7 @@ sub SB_PLAYER_Recall($$) {
                     # paused kann nicht aus stop erreicht werden -> Playlist starten und dann pausieren
                     $hash->{helper}{recallPause}=1;
                     $hash->{helper}{recallPending}=1;
+                    $hash->{helper}{recallPendingElapsedTime}=$hash->{helper}{savedPlayerState}{$statename}{elapsedTime};   # CD 0047
                 }
             }
             # CD 0028 restore names
@@ -4071,6 +4116,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             $hash->{helper}{elapsedTime}{VAL}=$2;
             $hash->{helper}{elapsedTime}{TS}=gettimeofday();
             delete($hash->{helper}{saveLocked}) if (($hash->{helper}{ttsstate}==TTS_IDLE) && defined($hash->{helper}{saveLocked}));
+            readingsBulkUpdate( $hash, "currentTrackPosition", int($2+0.5) );  # CD 0047 
             next;
         } elsif( $cur =~ /^(playlist_tracks:)(.*)/ ) {
             readingsBulkUpdate( $hash, "playlistTracks", $2 );
