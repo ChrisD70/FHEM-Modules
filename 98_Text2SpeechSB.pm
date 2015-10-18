@@ -866,7 +866,7 @@ sub Text2SpeechSB_DoIt($) {
   	#Play .mp3 file
   	if(-e $Mp3FilePath) {
       if($hash->{ALSADEVICE} eq "SB_PLAYER") {  # CD
-        BlockingInformParent("Text2SpeechSB_DoTriggerByName", [$hash->{NAME}, "ttsadd $Mp3FilePath"], 0);
+        BlockingInformParent("Text2SpeechSB_DoTriggerByName", [$hash->{NAME}, "ttsadd " . md5_hex($hash->{helper}{Text2SpeechSB}[0]) . ".mp3"], 0);
       } else {
         $cmd = Text2SpeechSB_BuildMplayerCmdString($hash, $Mp3FilePath);
         Log3 $hash->{NAME}, 4, "Text2SpeechSB:" .$cmd;
