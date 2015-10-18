@@ -1,8 +1,11 @@
 ﻿97_SB_SERVER:
   150722 0015 - httpport bei Änderung an Clients übertragen
 98_SB_PLAYER:
-  151004 0046 - Events für alarmSound, alarmEnd, alarmSnooze und alarmSnoozeEnd hinzugefügt
-                                                                                                 .    
+  151018 0047 - Recall nach Pause korrigiert
+              - alte Google-TTS-Links automatisch anpassen
+              - Sprachcodes für VoiceRSS automatisch anpassen
+              - Reading und set für currentTrackPosition hinzugefügt
+              .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
@@ -41,6 +44,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  151018 0047 - Recall nach Pause korrigiert
+              - alte Google-TTS-Links automatisch anpassen
+              - Sprachcodes für VoiceRSS automatisch anpassen
+              - Reading und set für currentTrackPosition hinzugefügt                                                                                                 .    
   151004 0046 - Events für alarmSound, alarmEnd, alarmSnooze und alarmSnoozeEnd hinzugefügt
   150826 0045 - get alarmPlaylists hinzugefügt
               - VoiceRSS hinzugefügt
