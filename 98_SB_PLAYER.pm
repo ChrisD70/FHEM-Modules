@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8773 beta 0047 CD/MM/Matthew $
+# $Id: 98_SB_PLAYER.pm 8773 beta 0048 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -446,7 +446,7 @@ sub SB_PLAYER_Define( $$ ) {
     # link to the text2speech engine
     if( !defined( $attr{$name}{ttslink} ) ) {
         $attr{$name}{ttslink} = "http://translate.google.com" . 
-            "/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=t&prev=input";   # CD 0045 Format geändert, &client=t&prev=input hinzugefügt
+            "/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob";   # CD 0045 Format geändert, &client=t&prev=input hinzugefügt, CD 0048 client=tw-ob verwenden
     }
                         
     # turn on the server when player is used
@@ -1154,6 +1154,13 @@ sub SB_PLAYER_Parse( $$ ) {
                 delete($hash->{helper}{recallPendingElapsedTime});  # CD 0047
             }
         # CD 0014 end
+        # CD 0048 start
+        } elsif( $args[ 0 ] eq "path" ) {
+            delete $hash->{helper}{path} if defined($hash->{helper}{path});
+            if(defined($args[ 1 ]) && ($args[ 1 ] eq "0")) {
+                $hash->{helper}{path}=$args[ 2 ] if defined($args[ 2 ]);
+            }
+        # CD 0048 end
         } else {
         }
         # check if this caused going to play, as not send automatically
@@ -2173,9 +2180,9 @@ sub SB_PLAYER_Set( $@ ) {
             # Device überhaupt verwendbar ?
             if(defined($extTTS[1]) && defined($defs{$extTTS[1]})) {
                 my $ttshash=$defs{$extTTS[1]};
-                if(defined($ttshash->{TYPE}) && ($ttshash->{TYPE} eq 'Text2SpeechSB')) {
+                if(defined($ttshash->{TYPE}) && (($ttshash->{TYPE} eq 'Text2SpeechSB') || (($ttshash->{TYPE} eq 'Text2Speech') && defined($ttshash->{helper}{supportsSBPlayer})))) {    # CD 0048 Text2Speech (ohne SB) unterstützen
                     if(defined($ttshash->{ALSADEVICE}) && ($ttshash->{ALSADEVICE} eq 'SB_PLAYER')) {
-                        if (AttrVal($hash->{NAME}, "TTS_Ressource", "Google") eq "Google") {
+                        if ((AttrVal($hash->{NAME}, "TTS_Ressource", "x") =~ /$(Google|VoiceRSS|SVOX-pico)^/)) { # CD 0048 Default geändert, VoiceRSS und SVOX-pico hinzugefügt
                             $useText2Speech=1;
                             $hash->{helper}{text2speech}{name}=$extTTS[1];
                             $hash->{helper}{text2speech}{pathPrefix}=join(':',@extTTS[2..$#extTTS]) if defined($extTTS[2]);
@@ -2205,7 +2212,7 @@ sub SB_PLAYER_Set( $@ ) {
                                 return;
                             }
                         } else {
-                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": attribute TTS_Ressource must be set to Google";
+                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported TTS_Ressource";   # CD 0048 Text angepasst
                         }
                     } else {
                         $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported ALSADEVICE";
@@ -2334,8 +2341,8 @@ sub SB_PLAYER_Set( $@ ) {
                         $lang="fr-fr" if($lang eq "fr");
                     }
 
-                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=t&prev=input" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047
-                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=t&prev=input" if ($ttslink eq "Google");
+                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047, CD 0048 client=tw-ob verwenden
+                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq "Google");  # CD 0048 client=tw-ob verwenden
                     $ttslink="http://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>" if ($ttslink eq "VoiceRSS");
 
                     # alte Links anpassen
@@ -2771,16 +2778,22 @@ sub SB_PLAYER_Recall($$) {
                 # CD 0030 start
                 IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n");
                 my @playlistIds=split(',',$hash->{helper}{savedPlayerState}{$statename}{playlistIds});
+                my $f=0; # CD 0048
                 for my $id (@playlistIds) {
                     if($id>=0) {
                         IOWrite( $hash, "$hash->{PLAYERMAC} playlistcontrol cmd:add track_id:".$id."\n");
                     } else {
                         if(defined($hash->{helper}{savedPlayerState}{$statename}{playlistUrls}) && defined($hash->{helper}{savedPlayerState}{$statename}{playlistUrls}{$id})) {
-                            IOWrite( $hash, "$hash->{PLAYERMAC} playlist add ".$hash->{helper}{savedPlayerState}{$statename}{playlistUrls}{$id}."\n");
+                            if (defined($hash->{helper}{savedPlayerState}{$statename}{path}) && ($f==0)) {     # CD 0048
+                                IOWrite( $hash, "$hash->{PLAYERMAC} playlist add ".$hash->{helper}{savedPlayerState}{$statename}{path}."\n"); # CD 0048
+                            } else {     # CD 0048
+                                IOWrite( $hash, "$hash->{PLAYERMAC} playlist add ".$hash->{helper}{savedPlayerState}{$statename}{playlistUrls}{$id}."\n");
+                            }    # CD 0048
                         } else {
                             Log3( $hash, 2, "SB_PLAYER_Recall: $name: no url found for id ".$id);
                         }
                     }
+                    $f=1;     # CD 0048
                 }
                 IOWrite( $hash, "$hash->{PLAYERMAC} playlist index ".$hash->{helper}{savedPlayerState}{$statename}{playlistCurrentTrack}."\n");
                 # CD 0030 end
@@ -2898,6 +2911,7 @@ sub SB_PLAYER_Save($$) {
     $hash->{helper}{savedPlayerState}{$statename}{volumeStraight}=ReadingsVal($name,"volumeStraight","?");
     $hash->{helper}{savedPlayerState}{$statename}{playlist}=ReadingsVal($name,"playlists","-");
     $hash->{helper}{savedPlayerState}{$statename}{favorite}=ReadingsVal($name,"favorites","-");
+    $hash->{helper}{savedPlayerState}{$statename}{path}=$hash->{helper}{path};  # CD 0048
 
     # CD 0029 start
     delete($hash->{helper}{ttsOptions}{logloaddone}) if(defined($hash->{helper}{ttsOptions}{logloaddone}));
@@ -3273,6 +3287,8 @@ sub SB_PLAYER_GetStatus( $ ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} playerpref syncVolume ?\n" );
         # CD 0009
         IOWrite( $hash, "$hash->{PLAYERMAC} playlist name ?\n" );
+        # CD 0048
+        IOWrite( $hash, "$hash->{PLAYERMAC} playlist path 0 ?\n" );
         # CD 0014
         IOWrite( $hash, "$hash->{PLAYERMAC} duration ?\n" );
         SB_PLAYER_QueryElapsedTime($hash);
@@ -4381,7 +4397,7 @@ sub SB_PLAYER_LoadPlayerStates($)
 =pod
 =begin html
  
-  <a name="SB_PLAYER"></a>
+<a name="SB_PLAYER"></a>
 <h3>SB_PLAYER</h3>
 <ul>
   <a name="SBplayerdefine"></a>
@@ -4411,7 +4427,7 @@ sub SB_PLAYER_LoadPlayerStates($)
     <br><br>
    
     SB_Player related commands:<br><br>
-    <ul>
+   <ul>
      <li><b>play</b> -  start playback (might not work unless previously paused).</li>
      <li><b>pause [&lt;0|1&gt;]</b> -  toggle between play and pause states. &ldquo;pause 1&rdquo; and &ldquo;pause 0&rdquo; respectively pause and resume play unconditionally.</li>
      <li><b>stop</b> -  stop playback</li>
@@ -4467,18 +4483,18 @@ sub SB_PLAYER_LoadPlayerStates($)
          <li>line2 - Second line</li>
          <li>duration -  Duration of display in seconds</li>
        </ul>
-    </ul>
+   </ul>
 
    <br>Alarms<br>
    <ul>
    Multiple alarms may be defined.
-     <li><b>allalarms add &lt;Wochentage&gt; &lt;Weckzeit&gt; &lt;playlist|URL&gt;</b> -  fügt neuen Wecker hinzu</li>
-     <br>&lt;Wochentage&gt; - Tage an denen der Wecker aktiv sein soll, Format: [0..7|daily|all]<br>
-     0..6 für die Tage von Sonntag (0) bis Samstag (6), 7 für jeden Tag<br>
-     statt 0..6 können alternativ auch die beiden ersten Buchstaben des Tagesnamen verwendet werden<br><br>
-     &lt;Weckzeit&gt; im Format hh:mm[:ss]<br><br>
+     <li><b>allalarms add &lt;weekdays&gt; &lt;alarm time&gt; &lt;playlist|URL&gt;</b> -  Add a new alarm</li>
+     <br>&lt;weekdays&gt; - Active days for this alarm. Format: [0..7|daily|all]<br>
+     0..6 for Sunday (0) through Saturday (6), 7 for every day<br>
+     The first two letters of the english or german names may be used to specify days instead of a single digit. (Su/So, Mo, Tu/Di, We/Mi, Th/Do, Fr, Sa)<br>
+     &lt;alarm time&gt; Alarm time specified as hh:mm[:ss]<br><br>
      Example:<br>
-     <code>set player allalarms add 1DiWe 06:30 WeckPlaylist</code> - fügt einen neuen Wecker hinzu der von Montag bis Mittwoch um 06:30 die Playlist WeckPlaylist abspielt<br><br>
+     <code>set player allalarms add 1DiWe 06:30 AlarmPlaylist</code> - Add a new alarm to sound playlist AlarmPlaylist every Monday through Wednesday at 06:30<br><br>
      <li><b>allalarms enable|disable</b> - Set global enable/disable flag. Setting this to "disable" effectively turns off all alarms. Setting this to "enable" allows alarms to honor their individual flags.</li>
      <li><b>allalarms delete</b> - Delete all alarms.</li>
      <li><b>allalarms statusRequest</b> - Update status of all alarms.</li>
@@ -4491,19 +4507,15 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>alarm&lt;X&gt; delete</b> -  Delete alarm &lt;X&gt;</li>
      <li><b>alarm&lt;X&gt; volume &lt;n&gt;</b> -  Set volume for alarm &lt;X&gt; to &lt;n&gt;</li>
      <li><b>alarm&lt;X&gt; enable|disable</b> -  Enable or disable alarm &lt;X&gt;</li>
-     <li><b>alarm&lt;X&gt; sound &lt;playlist|URL&gt;</b> -  setzt die Playlist oder URL für den Wecker &lt;X&gt;</li>
-     <li><b>alarm&lt;X&gt; repeat 0|off|no|1|on|yes</b> - legt fest ob der Wecker einmalig auslöst oder sich wiederholt</li>
-     <li><b>alarm&lt;X&gt; wdays &lt;Wochentage&gt;</b> - legt die Tage fest an denen der Wecker aktiv sein soll, Format: [0..7|daily|all]<br>
-     0..6 für die Tage von Sonntag (0) bis Samstag (6), 7 für jeden Tag<br>
-     statt 0..6 können alternativ auch die beiden ersten Buchstaben des Tagesnamen verwendet werden</li>
-     <li><b>alarm&lt;X&gt; time hh:mm[:ss]</b> - setzt die Weckzeit</li>
+     <li><b>alarm&lt;X&gt; sound &lt;playlist|URL&gt;</b> - Define playlist or URL to be sounded by alarm &lt;X&gt;</li>
+     <li><b>alarm&lt;X&gt; repeat 0|off|no|1|on|yes</b> - Specify one-shot or repeating alarm</li>
+     <li><b>alarm&lt;X&gt; wdays &lt;weekdays&gt;</b> - Specify active days for alarm &lt;X&gt;. Format: [0..7|daily|all]<br>
+     0..6 for Sunday (0) through Saturday (6), 7 for every day<br>
+     The first two letters of the english or german names may be used to specify days instead of a single digit. (Su/So, Mo, Tu/Di, We/Mi, Th/Do, Fr, Sa)</li>
+     <li><b>alarm&lt;X&gt; time hh:mm[:ss]</b> - Define alarm time</li>
    </ul>
    </ul>
    <br>
- <b>Generated Readings</b><br>
-  <ul>
-   <li><b>READING</b> - READING DESCRIPTIONS</li>  /* CHECK TODO
-  </ul>
 
   <br><br>
   <a name="SBplayerattr"></a>
