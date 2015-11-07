@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm beta 20141120 0015 CD $
+# $Id: 97_SB_SERVER.pm 8246 beta 0016 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -314,6 +314,13 @@ sub SB_SERVER_Define( $$ ) {
     # CD wait for init_done
     if ($init_done>0){
         delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});          # CD 0007 reconnect immediately after modify
+        # CD 0016 start
+        if( $hash->{STATE} eq "opened" ) {
+            DevIo_CloseDev( $hash );
+            readingsSingleUpdate( $hash, "power", "?", 0 );
+            $hash->{STATE}="disconnected";
+        }
+        # CD 0016 end
         $ret= DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit" );
     }
 
@@ -552,15 +559,13 @@ sub SB_SERVER_Set( $@ ) {
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
 	
     } elsif( $cmd eq "cliraw" ) {
-	# write raw messages to the CLI interface per player
-	my $v = join( " ", @a );
-	$v .= "\n";	
-	Log3( $hash, 5, "SB_SERVER_Set: cliraw: $v " ); 
-	    IOWrite( $hash, $v );
-	
+        # write raw messages to the CLI interface per player
+        my $v = join( " ", @a );
+        $v .= "\n";	
+        Log3( $hash, 5, "SB_SERVER_Set: cliraw: $v " ); 
+        DevIo_SimpleWrite( $hash, $v, 0 ); # CD 0016 IOWrite in DevIo_SimpleWrite geändert
     } elsif( $cmd eq "rescan" ) {
-	IOWrite( $hash, $cmd . " " . $a[ 0 ] . "\n" );
-
+        DevIo_SimpleWrite( $hash, $cmd . " " . $a[ 0 ] . "\n", 0 );     # CD 0016 IOWrite in DevIo_SimpleWrite geändert
     # CD 0013/14 start
     } elsif( $cmd eq "updateModules" ) {
         if(defined($a[0])) {
@@ -957,6 +962,12 @@ sub SB_SERVER_ParseCmds( $$ ) {
             SB_SERVER_ParseServerAlarmPlaylists( $hash, \@args );
         }
     # CD 0011 end
+    # CD 0016 start
+    } elsif( $cmd eq "rescan" ) {
+        if( $args[0] eq "done" ) {
+        	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        }
+    # CD 0016 end
     } else {
 	# unkown
     }
@@ -1252,7 +1263,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = 
 		localtime( $2 );
 	    $year = $year + 1900;
-	    readingsBulkUpdate( $hash, "scan_last", "$mday-$mon-$year " . 
+	    readingsBulkUpdate( $hash, "scan_last", "$mday-".($mon+1)."-$year " .   # CD 0016 Monat korrigiert
 				"$hour:$min:$sec" );
 	    next;
 	} elsif( $_ =~ /^(scanning:)([0-9]*)/ ) {
@@ -2001,7 +2012,7 @@ sub SB_SERVER_setStates($$)
   <a name="SBserverdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRSENCE:&lt;PRSENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
     This module allows you to control Logitech Media Server and connected Squeezebox Media Players.<br><br>
