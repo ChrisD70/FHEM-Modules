@@ -1,10 +1,7 @@
 ﻿97_SB_SERVER:
   150722 0015 - httpport bei Änderung an Clients übertragen
 98_SB_PLAYER:
-  151031 0048 - path statt url bei Remote-Streams speichern
-              - Dokumentation überarbeitet (heppel)
-              - Google TTS-Link angepasst
-              - Text2Speech(SB)-Anbindung für SVOX-pico und VoiceRSS geändert
+  151107 0049 - Anbindung an Text2Speech korrigiert
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -44,6 +41,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  151107 0049 - Anbindung an Text2Speech korrigiert
+  151102      - in contrib eingecheckt (9752)
   151031 0048 - path statt url bei Remote-Streams speichern
               - Dokumentation überarbeitet (heppel)
               - Google TTS-Link angepasst

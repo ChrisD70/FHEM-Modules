@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 8773 beta 0048 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0049 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2182,7 +2182,7 @@ sub SB_PLAYER_Set( $@ ) {
                 my $ttshash=$defs{$extTTS[1]};
                 if(defined($ttshash->{TYPE}) && (($ttshash->{TYPE} eq 'Text2SpeechSB') || (($ttshash->{TYPE} eq 'Text2Speech') && defined($ttshash->{helper}{supportsSBPlayer})))) {    # CD 0048 Text2Speech (ohne SB) unterstützen
                     if(defined($ttshash->{ALSADEVICE}) && ($ttshash->{ALSADEVICE} eq 'SB_PLAYER')) {
-                        if ((AttrVal($hash->{NAME}, "TTS_Ressource", "x") =~ /$(Google|VoiceRSS|SVOX-pico)^/)) { # CD 0048 Default geändert, VoiceRSS und SVOX-pico hinzugefügt
+                        if ((AttrVal($ttshash->{NAME}, "TTS_Ressource", "x") =~ m/^(Google|VoiceRSS|SVOX-pico)$/)) { # CD 0049 $ttshash korrigiert
                             $useText2Speech=1;
                             $hash->{helper}{text2speech}{name}=$extTTS[1];
                             $hash->{helper}{text2speech}{pathPrefix}=join(':',@extTTS[2..$#extTTS]) if defined($extTTS[2]);
@@ -2212,7 +2212,7 @@ sub SB_PLAYER_Set( $@ ) {
                                 return;
                             }
                         } else {
-                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported TTS_Ressource";   # CD 0048 Text angepasst
+                            $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported TTS_Ressource ".AttrVal($ttshash->{NAME}, "TTS_Ressource", "x");   # CD 0049 $ttshash korrigiert
                         }
                     } else {
                         $errMsg = "SB_PLAYER_Set: ".$extTTS[1].": Text2Speech uses unsupported ALSADEVICE";
