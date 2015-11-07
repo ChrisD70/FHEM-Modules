@@ -1,11 +1,16 @@
 ﻿97_SB_SERVER:
-  150722 0015 - httpport bei Änderung an Clients übertragen
+  151107 0016 - Verbindung bei modify neu aufbauen
+              - cliraw, rescan und scan_last korrigiert
+              - Dokumentation korrigiert
 98_SB_PLAYER:
   151107 0049 - Anbindung an Text2Speech korrigiert
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  151107 0016 - Verbindung bei modify neu aufbauen
+              - cliraw, rescan und scan_last korrigiert
+              - Dokumentation korrigiert
   150722 0015 - httpport bei Änderung an Clients übertragen
   150319 0014 - in contrib eingecheckt (8246)
   150315 0014 - updateModules geändert, download und reload hinzugefügt
