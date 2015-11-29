@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0050 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0051 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2001,9 +2001,15 @@ sub SB_PLAYER_Set( $@ ) {
 
     } elsif( ( $cmd eq "Play" ) || ( $cmd eq "PLAY" ) || ( $cmd eq "play" ) ) {
         my @secbuf = split(',',AttrVal( $name, "fadeinsecs", '10,10' )); # CD 0050 split hinzugefügt
+        $secbuf[1]=$secbuf[0] if (@secbuf==1);  # CD 0051
         # CD 0030 wait until power on
         if(ReadingsVal($name,"power","x") eq "on") {
-            IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[0]."\n" );
+            # CD 0051 2. Wert von fadeinsecs bei pause -> play verwenden
+            if (ReadingsVal($name,"playStatus","?") eq 'paused') {
+              IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[1]."\n" );
+            } else {
+              IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[0]."\n" );
+            }
         } else {
             $hash->{helper}{playAfterPowerOn}=$secbuf[0];
             IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
