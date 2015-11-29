@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0049 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0050 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -425,7 +425,7 @@ sub SB_PLAYER_Define( $$ ) {
 
     # how many secs for fade in when going from stop to play
     if( !defined( $attr{$name}{fadeinsecs} ) ) {
-        $attr{$name}{fadeinsecs} = 10;
+        $attr{$name}{fadeinsecs} = "10";
     }
 
     # do not create FHEM notifies (true=no notifies)
@@ -1497,6 +1497,7 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "duration" ) {
         readingsBulkUpdate( $hash, "duration", $args[ 0 ] );
     } elsif( $cmd eq "time" ) {
+        $args[0]=0 if($args[ 0 ] eq '?'); # CD 0050
         $hash->{helper}{elapsedTime}{VAL}=$args[ 0 ];
         $hash->{helper}{elapsedTime}{TS}=gettimeofday();
         readingsBulkUpdate( $hash, "currentTrackPosition",int($args[ 0 ]+0.5));  # CD 0047 
@@ -1999,27 +2000,35 @@ sub SB_PLAYER_Set( $@ ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} stop\n" );
 
     } elsif( ( $cmd eq "Play" ) || ( $cmd eq "PLAY" ) || ( $cmd eq "play" ) ) {
-        my $secbuf = AttrVal( $name, "fadeinsecs", 10 );
+        my @secbuf = split(',',AttrVal( $name, "fadeinsecs", '10,10' )); # CD 0050 split hinzugefügt
         # CD 0030 wait until power on
         if(ReadingsVal($name,"power","x") eq "on") {
-            IOWrite( $hash, "$hash->{PLAYERMAC} play $secbuf\n" );
+            IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[0]."\n" );
         } else {
-            $hash->{helper}{playAfterPowerOn}=$secbuf;
+            $hash->{helper}{playAfterPowerOn}=$secbuf[0];
             IOWrite( $hash, "$hash->{PLAYERMAC} power 1\n" );
         }
         # CD 0030 end
     } elsif( ( $cmd eq "Pause" ) || ( $cmd eq "PAUSE" ) || ( $cmd eq "pause" ) ) {
-        my $secbuf = AttrVal( $name, "fadeinsecs", 10 );
+        my @secbuf = split(',',AttrVal( $name, "fadeinsecs", '10,10' )); # CD 0050 split hinzugefügt
+        $secbuf[1]=$secbuf[0] if (@secbuf==1);  # CD 0050
         if( @arg == 1 ) {
             if( $arg[ 0 ] eq "1" ) {
                 # pause the player
-                IOWrite( $hash, "$hash->{PLAYERMAC} pause 1 $secbuf\n" );
+                IOWrite( $hash, "$hash->{PLAYERMAC} pause 1\n" );
             } else {
                 # unpause the player
-                IOWrite( $hash, "$hash->{PLAYERMAC} pause 0 $secbuf\n" );
+                IOWrite( $hash, "$hash->{PLAYERMAC} pause 0 ".$secbuf[1]."\n" );
             }
         } else {
-            IOWrite( $hash, "$hash->{PLAYERMAC} pause $secbuf\n" );
+        # IOWrite( $hash, "$hash->{PLAYERMAC} pause $secbuf\n" ); # CD 0050 deaktiviert, funktioniert so nicht, wenn $secbuf verwendet wird muss 0 oder 1 davorstehen
+        # CD 0050 start
+          if (ReadingsVal($name,"playStatus","?") eq 'playing') {
+            IOWrite( $hash, "$hash->{PLAYERMAC} pause 1\n" );
+          } else {
+            IOWrite( $hash, "$hash->{PLAYERMAC} pause 0 ".$secbuf[1]."\n" );
+          }
+        # CD 0050 end
         }
 
     } elsif( ( $cmd eq "next" ) || ( $cmd eq "NEXT" ) || ( $cmd eq "Next" ) || 
@@ -2834,8 +2843,8 @@ sub SB_PLAYER_Recall($$) {
                     }
                     # CD 0028 end
                 } elsif(( $hash->{helper}{savedPlayerState}{$statename}{playStatus} eq "playing" )||($forceplay==1)) {  # CD 0036 added $forceplay
-                    my $secbuf = AttrVal( $name, "fadeinsecs", 10 );
-                    IOWrite( $hash, "$hash->{PLAYERMAC} play $secbuf\n" );
+                    my @secbuf = split(',',AttrVal( $name, "fadeinsecs", '10,10' )); # CD 0050 split hinzugefügt
+                    IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[0]."\n" );
                     IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{savedPlayerState}{$statename}{elapsedTime}\n" ) if(defined($hash->{helper}{savedPlayerState}{$statename}{elapsedTime}));
                     # CD 0028 start
                     if($hash->{helper}{ttsstate}==TTS_RESTORE) {
@@ -4533,6 +4542,8 @@ sub SB_PLAYER_LoadPlayerStates($)
         <li><code>play</code>: Switch on "play", "pause" and "stop" events.</li>
       </ul>
     </li>
+    <li>fadeinsecs<br>
+      Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
     <li>amplifierDelayOff<br>
       Delay in seconds before turning the amplifier off after the player has stopped or been turned off. A second comma separated delay optionally enables switching off the amplifier after receiving a pause event.</li>
     <li>updateReadingsOnSet<br>
