@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0051 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0052 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -483,9 +483,9 @@ sub SB_PLAYER_Define( $$ ) {
     }
 
     # the last unkown command
-    if( !defined( $hash->{READINGS}{lastunkowncmd}{VAL} ) ) {
-        $hash->{READINGS}{lastunkowncmd}{VAL} = "none";
-        $hash->{READINGS}{lastunkowncmd}{TIME} = $tn; 
+    if( !defined( $hash->{READINGS}{lastunknowncmd}{VAL} ) ) {
+        $hash->{READINGS}{lastunknowncmd}{VAL} = "none";
+        $hash->{READINGS}{lastunknowncmd}{TIME} = $tn; 
     }
 
     # the last unkown IR command
@@ -1386,7 +1386,7 @@ sub SB_PLAYER_Parse( $$ ) {
             } elsif( $args[ 1 ] eq "alarmSnoozeSeconds" ) {
                 readingsBulkUpdate( $hash, "alarmsSnooze", $args[ 2 ]/60 );
             } elsif( $args[ 1 ] eq "alarmDefaultVolume" ) {
-                readingsBulkUpdate( $hash, "alarmsDefaultVolume", $args[ 2 ]/60 );
+                readingsBulkUpdate( $hash, "alarmsDefaultVolume", $args[ 2 ] ); # CD 0052 fixed
             } elsif( $args[ 1 ] eq "alarmfadeseconds" ) {
                 if($args[ 2 ] eq "1") {
                     readingsBulkUpdate( $hash, "alarmsFadeIn", "on" );
@@ -1443,7 +1443,7 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0039 end
             }
         } else {
-            readingsBulkUpdate( $hash, "lastunkowncmd", 
+            readingsBulkUpdate( $hash, "lastunknowncmd", 
                                   $cmd . " " . join( " ", @args ) );
         }
 
@@ -1510,6 +1510,9 @@ sub SB_PLAYER_Parse( $$ ) {
         foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
             IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kcu\n" );   # CD 0039 u hinzugefügt
         }
+    # CD 0018
+    # CD 0052 jivealarm Meldungen ignorieren
+    } elsif( $cmd eq "jivealarm" ) {
     # CD 0018
     # CD 0022 fhemrelay ist keine Meldung des LMS sondern eine Info die von einem anderen Player über 98_SB_PLAYER kommt
     } elsif( $cmd eq "fhemrelay" ) {
@@ -1590,8 +1593,8 @@ sub SB_PLAYER_Parse( $$ ) {
         # autocreate
 
     } else {
-        # unkown command, we push it to the last command thingy
-        readingsBulkUpdate( $hash, "lastunkowncmd", 
+        # unknown command, we push it to the last command thingy
+        readingsBulkUpdate( $hash, "lastunknowncmd", 
                               $cmd . " " . join( " ", @args ) );
     }
     
@@ -1944,12 +1947,13 @@ sub SB_PLAYER_Set( $@ ) {
             "volumeStraight:slider,0,1,100 " . 
             "volumeUp:noArg volumeDown:noArg " . 
             "mute:noArg repeat:off,one,all show statusRequest:noArg " . 
-            "shuffle:off,on,song,album next:noArg prev:noArg playlist sleep " . # CD 0017 song und album hinzugefügt
+            "shuffle:off,song,album next:noArg prev:noArg playlist sleep " . # CD 0017 song und album hinzugefügt # CD 0052 shuffle on entfernt
             "allalarms:enable,disable,statusRequest,delete,add " .              # CD 0015 alarm1 alarm2 entfernt
             "alarmsSnooze:slider,0,1,30 alarmsTimeout:slider,0,5,90  alarmsDefaultVolume:slider,0,1,100 alarmsFadeIn:on,off alarmsEnabled:on,off " . # CD 0016, von MM übernommen, Namen geändert
             "cliraw talk sayText " .     # CD 0014 sayText hinzugefügt
             "unsync:noArg " .
             "currentTrackPosition " .   # CD 0047 hinzugefügt
+            "snooze:noArg " .           # CD 0052 hinzugefügt
             "resetTTS:noArg ";          # CD 0028 hinzugefügt
         # add the favorites
         $res .= $hash->{FAVSET} . ":-," . $hash->{FAVSTR} . " ";    # CD 0014 '-' hinzugefügt
@@ -2654,6 +2658,10 @@ sub SB_PLAYER_Set( $@ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} time $arg[0]\n" );
         }
     # CD 0047 end
+    # CD 0052 start
+    } elsif( lc($cmd) eq "snooze" ) {
+        IOWrite( $hash, "$hash->{PLAYERMAC} jivealarm snooze:1\n" );
+    # CD 0052 end
     } else {
         my $msg = "SB_PLAYER_Set: unsupported command given";
         Log3( $hash, 3, $msg );
