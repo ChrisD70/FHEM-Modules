@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0016 $
+﻿# $Id: 37_ModbusRegister.pm 0020 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -16,6 +16,9 @@
 # 150315 0015 added wago address conversion, added setList
 # 150316 0016 fix for eventMap 0:off 1:on, fixed SetExtensions
 # 150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE 
+# 151219 0018 added attribute 'enableUpdate'
+# 151220 0019 extended attribute 'enableUpdate'
+# 151228 0020 renamed attribute 'enableUpdate' to 'readCondition', added 'writeCondition'
 # TODO:
 
 package main;
@@ -59,6 +62,7 @@ ModbusRegister_Initialize($)
                        "registerType:Holding,Input ".
                        "stateAlias ".
                        "setList ".
+                       "readCondition writeCondition ".
                        "negativeRepresentation:2sComplement,flagged ".
                        "$readingFnAttributes";
 }
@@ -196,6 +200,7 @@ ModbusRegister_Define($$)
   
   if ($init_done){
     $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
+    $modules{$hash->{TYPE}}{AttrList} =~ s/enableUpdate.//;
   }
   return undef;
 }
@@ -327,8 +332,40 @@ ModbusRegister_Set($@)
     } else {
       $msg=pack("CCnn", $hash->{helper}{unitId}, 6, $hash->{helper}{address}, $v);
     }
-  
-    IOWrite($hash,$msg);
+
+    # CD 0020 start
+    my $wcond=AttrVal($name,'writeCondition',undef);
+    my $doWrite=1;
+    
+    if (defined($wcond)) {
+      my @c=split(':',$wcond);
+      if ($#c>=2) {
+        my $cv=ReadingsVal($c[0],$c[1],undef);
+        if (defined($cv) && ($cv ne $c[2])) {
+          if ($c[3]==1) {
+            my $conh=$defs{$c[0]};
+            if (defined($conh)) {
+              # check type, only if same IODev
+              if(($conh->{TYPE} eq 'ModbusRegister') && (defined($conh->{IODev}) && ($hash->{IODev} eq $conh->{IODev}))) {
+                my $condmsg=pack("CCnn", $conh->{helper}{unitId}, 6, $conh->{helper}{address}, $c[2]);
+                IOWrite($hash,$condmsg);
+              }
+              if(($conh->{TYPE} eq 'ModbusCoil') && (defined($conh->{IODev}) && ($hash->{IODev} eq $conh->{IODev}))) {
+                my $v=0;
+                $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
+                my $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                IOWrite($hash,$condmsg);
+              }
+            }
+          } else {
+            $doWrite=0;
+          }
+        }            
+      }
+    }
+    # CD 0020 end
+        
+    IOWrite($hash,$msg) if ($doWrite==1);
   } else {
     my $list = "off on "; 
     return SetExtensions($hash, $list, @a); 
@@ -389,8 +426,11 @@ ModbusRegister_Parse($$)
 
   my @list;
   my $raddr;
+  my $writeResponse=0;
+
   if($fc==WRITE_SINGLE_REGISTER) {
     $raddr = "3 $unitid $addr";
+    $writeResponse=1;
   } else {
     $raddr = "$fc $unitid $addr";
   }
@@ -400,6 +440,7 @@ ModbusRegister_Parse($$)
       my $lh = $rhash->{$n};
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
+        #Log3 undef,0,$n;
         next if($nvals!=$lh->{helper}{nread});
         next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0) && ($fc!=WRITE_SINGLE_REGISTER));
         next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}) && ($fc!=WRITE_SINGLE_REGISTER));
@@ -485,11 +526,27 @@ ModbusRegister_Parse($$)
             $lh->{".updateTime"} = $lh->{helper}{lastUpdate}; # in seconds since the epoch
             $lh->{".updateTimestamp"} = $fmtDateTime;
         }
-        readingsBulkUpdate($lh,"state",$v);
-        readingsBulkUpdate($lh,"RAW",unpack "H*",pack "n*", @vals); #sprintf("%08x",pack "n*", @vals));
-        readingsBulkUpdate($lh,AttrVal($n,"stateAlias",undef),$v) if(defined(AttrVal($n,"stateAlias",undef)));  # CD 0007
+        # CD 0018 start
+        my $cond=AttrVal($n,"readCondition",undef);
+        $cond=AttrVal($n,"writeCondition",undef) if ($writeResponse);
+        my $doupdate=1;
+        if (defined($cond)) {
+          my @c=split(':',$cond);
+          if ($#c>=2) {
+            my $cv=ReadingsVal($c[0],$c[1],undef);
+            if (defined($cv)) {
+              $doupdate=0 if ($cv ne $c[2]);
+            }            
+          }
+        }
+        if ($doupdate) {
+        # CD 0018 end
+          readingsBulkUpdate($lh,"state",$v);
+          readingsBulkUpdate($lh,"RAW",unpack "H*",pack "n*", @vals); #sprintf("%08x",pack "n*", @vals));
+          readingsBulkUpdate($lh,AttrVal($n,"stateAlias",undef),$v) if(defined(AttrVal($n,"stateAlias",undef)));  # CD 0007
+          $lh->{helper}{lastUpdate}=0 if ($fc!=WRITE_SINGLE_REGISTER);
+        }
         readingsEndUpdate($lh,1);
-        $lh->{helper}{lastUpdate}=0 if ($fc!=WRITE_SINGLE_REGISTER);
         push(@list, $n); 
       }
     }
@@ -680,6 +737,11 @@ sub ModbusRegister_Notify(@) {##################################################
       delete $attr{$name}{updateIntervall};
     }
     $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
+    if (defined($attr{$name}{enableUpdate})) {
+      $attr{$name}{readCondition}=$attr{$name}{enableUpdate} if(!defined($attr{$name}{readCondition}));
+      delete $attr{$name}{enableUpdate};
+    }
+    $modules{$hash->{TYPE}}{AttrList} =~ s/enableUpdate.//;
   }
   return;
 }
@@ -812,7 +874,7 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
         <code>returned value = a * raw data + b</code><br><br>
         Example:<ul>For an energy meter returning the current in 0.1A steps<br><code>attr &lt;name&gt; conversion 0.1:0</code><br>scales the value to A.</ul></li><br>
     <li><a name="">plcDataType</a><br>
-        A modbus register is 16 bit wide an contains an unsigned value ranging from 0 to 65535. With this attribute the data type
+        A modbus register is 16 bit wide and contains an unsigned value ranging from 0 to 65535. With this attribute the data type
         and size can be modified.<br>Possible values:<br>
         <ul>
             <li>WORD, 1 register, 16 bit unsigned, default</li>
@@ -832,6 +894,15 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
         The read data is written by default to the state reading. If this attribute is defined the data is also written to a reading with
         the name of the attribute value. This can be used to create a reading that is easier to use in a notify or in conjunction with an
         other module that requires a certain reading.
+    </li><br>
+    <li><a name="">readCondition &lt;device&gt;:&lt;reading&gt;:&lt;value&gt;[:&lt;force&gt;[:&lt;wait time&gt;]]</a><br>
+        Data is only read if the reading of the device has the specified value. If the parameter &lt;force&gt; is 1 and the type of the
+        specified device is ModbusRegister or ModbusCoil the value will be written before the read is started. An optional wait time between
+        the write and the read can be specified in milliseconds.
+    </li><br>
+    <li><a name="">writeCondition &lt;device&gt;:&lt;reading&gt;:&lt;value&gt;[:&lt;force&gt;]</a><br>
+        Data is only written if the reading of the device has the specified value. If the parameter &lt;force&gt; is 1 and the type of the
+        specified device is ModbusRegister or ModbusCoil the indicated value will be written before the write is started.
     </li><br>
   </ul>
 </ul>
