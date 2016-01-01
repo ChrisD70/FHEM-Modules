@@ -6,12 +6,11 @@
               added combineReads
               added support for coils
 36_ModbusTCPServer:
-  150330 0015 fixed errors in log, do not buffer writes if disconnected
+  160101 0018 added support for 'readCondition' and 'writeCondition'
 37_ModbusCoil:
-  150324 0008 do not trigger on set, use set_on and set_off
+  160101 0009 added attributes 'readCondition' and 'writeCondition'
 37_ModbusRegister:
-  150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
-              fixed min/max calculation after plcDataType change
+  160101 0020 added attributes 'readCondition' and 'writeCondition'
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -31,6 +30,7 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
+  160101 0018 added support for 'readCondition' and 'writeCondition'
   150330 0015 fixed errors in log, do not buffer writes if disconnected
   150314 0014 fixed first entry for combined reads
   150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
@@ -48,6 +48,7 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  160101 0009 added attributes 'readCondition' and 'writeCondition'
   150324 0008 do not trigger on set, use set_on and set_off
   150324 0007 added writeMode Impulse
   150315 0006 added wago address conversion
@@ -58,6 +59,7 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  160101 0020 added attributes 'readCondition' and 'writeCondition'
   150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
               fixed min/max calculation after plcDataType change
   150316 0016 fix for eventMap 0:off 1:on
