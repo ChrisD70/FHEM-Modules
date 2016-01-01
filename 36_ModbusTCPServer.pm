@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0015 $
+# $Id: 36_ModbusTCPServer.pm 0018 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -15,6 +15,9 @@
 # 150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
 # 150314 0014 fixed first entry for combined reads
 # 150330 0015 fixed errors in log, do not buffer writes if disconnected
+# 151220 0016 use enableUpdate from ModbusRegister
+# 151228 0017 use readCondition and writeCondition
+# 151231 0018 added delay for readCondition
 # TODO:
 
 package main;
@@ -40,7 +43,7 @@ sub ModbusTCPServer_DoInit($);
 sub ModbusTCPServer_Poll($);
 sub ModbusTCPServer_ReadDevId($);
 sub ModbusTCPServer_AddWQueue($$);
-sub ModbusTCPServer_AddRQueue($$);
+sub ModbusTCPServer_AddRQueue($$$);
 sub ModbusTCPServer_Timeout($);
 sub ModbusTCPServer_HandleWriteQueue($);
 sub ModbusTCPServer_HandleReadQueue($);
@@ -134,7 +137,9 @@ sub ModbusTCPServer_Define($$) {################################################
   $hash->{helper}{statistics}{bytesOut}=0;
   $hash->{statistics} =$hash->{helper}{statistics}{pktIn} ." / " . $hash->{helper}{statistics}{pktOut} ." / " . $hash->{helper}{statistics}{bytesIn} ." / " . $hash->{helper}{statistics}{bytesOut};
   $hash->{helper}{state}='?';   # CD 0015
-
+  $hash->{helper}{delayNextRead}=0;
+  $hash->{helper}{delayNextWrite}=0;
+  
   my $ret;
   
   if ($init_done){
@@ -501,8 +506,10 @@ sub ModbusTCPServer_Poll($) {##################################################
 
     if(!defined($hash->{RQUEUE})) {
       my @chlds=devspec2array("TYPE=ModbusRegister");
+      my $lastcondmsg="0";
 
       foreach(@chlds) {
+        my $cn=$_;
         my $chash=$defs{$_};
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
           if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
@@ -512,9 +519,48 @@ sub ModbusTCPServer_Poll($) {##################################################
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            if(!defined($hash->{helper}{combineReads})) {
+            # CD 0016 start
+            my $nocombineReads=0;
+            my $cond=AttrVal($cn,"readCondition",undef);
+            
+            if (defined($cond)) {
+              my @c=split(':',$cond);
+              if ($#c>=3) {
+                my $cv=ReadingsVal($c[0],$c[1],undef);
+                if (defined($cv) && ($c[3]==1)) {
+                  my $conh=$defs{$c[0]};
+                  if (defined($conh)) {
+                    # check type, only if same IODev
+                    my $condmsg='skip';
+                    if(($conh->{TYPE} eq 'ModbusRegister') && (defined($conh->{IODev}) && ($chash->{IODev} eq $conh->{IODev}))) {
+                      $condmsg=pack("CCnn", $conh->{helper}{unitId}, 6, $conh->{helper}{address}, $c[2]);
+                    }
+                    if(($conh->{TYPE} eq 'ModbusCoil') && (defined($conh->{IODev}) && ($chash->{IODev} eq $conh->{IODev}))) {
+                      my $v=0;
+                      $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
+                      $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                    }
+                    if($condmsg ne 'skip') {
+                      my $condf_mbap = pack("nnn", int(rand 65535), 0,bytes::length($condmsg));
+#                      Log3 $hash, 0, unpack("H*",$lastcondmsg)." - ".unpack("H*",$condmsg);
+                      if ($lastcondmsg ne $condmsg) {
+                        ModbusTCPServer_LogFrame($hash,"AddRQueue",$condf_mbap.$condmsg,5);
+                        ModbusTCPServer_AddRQueue($hash, $condf_mbap.$condmsg,1);
+                        if (defined($c[4])) {
+                          ModbusTCPServer_AddRQueue($hash, "delay:".$c[4],1);
+                        }
+                        $lastcondmsg=$condmsg;
+                      }
+                      $nocombineReads=1;
+                    }
+                  }
+                }            
+              }
+            }
+                                      
+            if(!defined($hash->{helper}{combineReads}) || ($nocombineReads==1)) {
                 ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
-                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
+                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg, $nocombineReads);
             } else {
                 push(@registers,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, $chash->{helper}{nread}]);
             }
@@ -582,6 +628,7 @@ sub ModbusTCPServer_Poll($) {##################################################
       @chlds=devspec2array("TYPE=ModbusCoil");
 
       foreach(@chlds) {
+        my $cn=$_;
         my $chash=$defs{$_};
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
           if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
@@ -591,9 +638,46 @@ sub ModbusTCPServer_Poll($) {##################################################
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
                                       $tx_hd_length);
 
-            if(!defined($hash->{helper}{combineReads})) {
+            # CD 0017 start
+            my $nocombineReads=0;
+            my $cond=AttrVal($cn,"readCondition",undef);
+            if (defined($cond)) {
+              my @c=split(':',$cond);
+              if ($#c>=3) {
+                my $cv=ReadingsVal($c[0],$c[1],undef);
+                if (defined($cv) && ($c[3]==1)) {
+                  my $conh=$defs{$c[0]};
+                  if (defined($conh)) {
+                    # check type, only if same IODev
+                    my $condmsg='skip';
+                    if(($conh->{TYPE} eq 'ModbusRegister') && (defined($conh->{IODev}) && ($chash->{IODev} eq $conh->{IODev}))) {
+                      $condmsg=pack("CCnn", $conh->{helper}{unitId}, 6, $conh->{helper}{address}, $c[2]);
+                    }
+                    if(($conh->{TYPE} eq 'ModbusCoil') && (defined($conh->{IODev}) && ($chash->{IODev} eq $conh->{IODev}))) {
+                      my $v=0;
+                      $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
+                      $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                    }
+                    if($condmsg ne 'skip') {
+                      my $condf_mbap = pack("nnn", int(rand 65535), 0,bytes::length($condmsg));
+                      if ($lastcondmsg ne $condmsg) {
+                        ModbusTCPServer_LogFrame($hash,"AddRQueue",$condf_mbap.$condmsg,5);
+                        ModbusTCPServer_AddRQueue($hash, $condf_mbap.$condmsg,1);
+                        if (defined($c[4])) {
+                          ModbusTCPServer_AddRQueue($hash, "delay:".$c[4],1);
+                        }
+                        $lastcondmsg=$condmsg;
+                      }
+                      $nocombineReads=1;
+                    }
+                  }
+                }            
+              }
+            }
+                                      
+            if(!defined($hash->{helper}{combineReads}) || ($nocombineReads==1)) {
                 ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
-                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg);
+                ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg, $nocombineReads);
             } else {
                 push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1]);
             }
@@ -673,7 +757,7 @@ ModbusTCPServer_AddCombinedCoilReads($$$$$) ####################################
     $hash->{helper}{combineReads}{data}{$hash->{helper}{seqCoils}}=[$ui, $rt, $st, $n];
     $hash->{helper}{seqCoils}++;
     ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
-    ModbusTCPServer_AddRQueue($hash, $tx);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
 }
 
 sub
@@ -685,7 +769,7 @@ ModbusTCPServer_AddCombinedReads($$$$$) ########################################
     $hash->{helper}{combineReads}{data}{$hash->{helper}{seq}}=[$ui, $rt, $st, $n];
     $hash->{helper}{seq}++;
     ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
-    ModbusTCPServer_AddRQueue($hash, $tx);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
 }
 
 sub
@@ -767,19 +851,26 @@ ModbusTCPServer_SendFromRQueue($$) #############################################
   my ($hash, $bstring) = @_;
   my $name = $hash->{NAME};
 
-  if($bstring ne "") {
-    ModbusTCPServer_SimpleWrite($hash, $bstring);
+  my @cmd=split(':',$bstring);
+  if($#cmd==1) {
+    if($cmd[0] eq 'delay') {
+      $hash->{helper}{delayNextRead}=time()+$cmd[1]/1000.0;
+    }
+  } else {
+    if($bstring ne "") {
+      ModbusTCPServer_SimpleWrite($hash, $bstring);
+    }
   }
   InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleReadQueue", $hash, 1);
 }
 
 sub
-ModbusTCPServer_AddRQueue($$) ##################################################
+ModbusTCPServer_AddRQueue($$$) ##################################################
 {
-  my ($hash, $bstring) = @_;
+  my ($hash, $bstring, $ignoreDups) = @_;
   
   if(!$hash->{RQUEUE}) {
-    if(($hash->{helper}{state} eq "idle")&&(!defined($hash->{WQUEUE}))) {
+    if(($hash->{helper}{state} eq "idle")&&(!defined($hash->{WQUEUE})) && ($hash->{helper}{delayNextRead}<time())) {
       $hash->{RQUEUE} = [ $bstring ];
       ModbusTCPServer_SendFromRQueue($hash, $bstring);
     } else {
@@ -794,7 +885,7 @@ ModbusTCPServer_AddRQueue($$) ##################################################
             $add=0;
         }
     }
-    if ($add==1) {
+    if (($add==1) or ($ignoreDups)) {
         Log3 $hash, 5,"adding to RQUEUE - ".scalar(@{$hash->{RQUEUE}});
         push(@{$hash->{RQUEUE}}, $bstring);
     }
@@ -805,7 +896,7 @@ sub
 ModbusTCPServer_HandleReadQueue($) ##################################################
 {
   my $hash = shift;
-  if(($hash->{helper}{state} eq "idle")&&(!defined($hash->{WQUEUE}))) {
+  if(($hash->{helper}{state} eq "idle")&&(!defined($hash->{WQUEUE})) && ($hash->{helper}{delayNextRead}<time())) {
     my $arr = $hash->{RQUEUE};
     if(defined($arr) && @{$arr} > 0) {
       shift(@{$arr});
