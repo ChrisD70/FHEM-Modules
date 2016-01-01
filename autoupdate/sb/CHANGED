@@ -3,10 +3,9 @@
               - cliraw, rescan und scan_last korrigiert
               - Dokumentation korrigiert
 98_SB_PLAYER:
-  151129 0051 - bei pause -> play 2. Wert von fadeinsecs verwenden
-  151129 0050 - unpause korrigiert
-              - Attribut fadeinsecs um 2. optionales Argument für unpause erweitert
-              - Fehlermeldung im Log nach Start korrigiert
+  160101 0052 - snooze hinzugefügt
+              - Readings alarmsDefaultVolume und lastunk(n)owncmd korrigiert
+              - shuffle on im UI entfernt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -50,6 +49,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  160101 0052 - snooze hinzugefügt
+              - Readings alarmsDefaultVolume und lastunk(n)owncmd korrigiert
+              - shuffle on im UI entfernt
   151129 0051 - bei pause -> play 2. Wert von fadeinsecs verwenden
   151129 0050 - unpause korrigiert
               - Attribut fadeinsecs um 2. optionales Argument für unpause erweitert
