@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0008 $
+﻿# $Id: 37_ModbusCoil.pm 0009 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -7,6 +7,7 @@
 # 150315 0006 added wago address conversion
 # 150324 0007 added writeMode Impulse
 # 150324 0008 do not trigger on set, use set_on and set_off
+# 151228 0009 added attribute 'readCondition' and 'writeCondition'
 # TODO:
 
 package main;
@@ -46,6 +47,7 @@ ModbusCoil_Initialize($)
                        "disableRegisterMapping:0,1 ".
                        "source:Coil,Input ".
                        "writeMode ".
+                       "readCondition writeCondition ".
                        "$readingFnAttributes";
 }
 
@@ -203,7 +205,7 @@ ModbusCoil_Set($@)
     my $msg;
     
     if(!defined($hash->{helper}{writeMode})) {
-      $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v),0;
+      $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v,0);
     } else {
       if($hash->{helper}{writeMode}{type} eq 'IM') {
         if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
@@ -212,12 +214,43 @@ ModbusCoil_Set($@)
            "ModbusCoil_tcb_ResetImpulse",
            "ModbusCoil_ResetImpulse:$name", 
            0 );
-          $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255),0;
+          $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255,0);
         }
       }
     }
     if(defined($msg)) {
-      IOWrite($hash,$msg);
+      # CD 0009 start
+      my $wcond=AttrVal($name,'writeCondition',undef);
+      my $doWrite=1;
+      
+      if (defined($wcond)) {
+        my @c=split(':',$wcond);
+        if ($#c>=2) {
+          my $cv=ReadingsVal($c[0],$c[1],undef);
+          if (defined($cv) && ($cv ne $c[2])) {
+            if ($c[3]==1) {
+              my $conh=$defs{$c[0]};
+              if (defined($conh)) {
+                # check type, only if same IODev
+                if(($conh->{TYPE} eq 'ModbusRegister') && (defined($conh->{IODev}) && ($hash->{IODev} eq $conh->{IODev}))) {
+                  my $condmsg=pack("CCnn", $conh->{helper}{unitId}, 6, $conh->{helper}{address}, $c[2]);
+                  IOWrite($hash,$condmsg);
+                }
+                if(($conh->{TYPE} eq 'ModbusCoil') && (defined($conh->{IODev}) && ($hash->{IODev} eq $conh->{IODev}))) {
+                  my $v=0;
+                  $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
+                  my $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                  IOWrite($hash,$condmsg);
+                }
+              }
+            } else {
+              $doWrite=0;
+            }
+          }            
+        }
+      }
+      # CD 0009 end
+      IOWrite($hash,$msg) if ($doWrite==1);
       if($v==0) {
         readingsSingleUpdate( $hash, "state", "set_off", 1 );
       } else {
@@ -239,7 +272,7 @@ ModbusCoil_tcb_ResetImpulse( $ ) {
     my $hash = $defs{$name};
     my $msg;
 
-    $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0),0;
+    $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0,0);
     IOWrite($hash,$msg);
 }
   
@@ -274,9 +307,12 @@ ModbusCoil_Parse($$)
 
   my @list;
   my $raddr;
+  my $writeResponse=0;
+  
   if($fc==WRITE_SINGLE_COIL) {
     $raddr = "1 $unitid $addr";
     $vals[0]=1 if ($vals[0]==65280);
+    $writeResponse=1;
   } else {
     $raddr = "$fc $unitid $addr";
   }
@@ -293,8 +329,24 @@ ModbusCoil_Parse($$)
           $lh->{ModbusCoil_lastRcv} = TimeNow();
           my $v="off";
           $v="on" if(($vals[0]&1)==1);
-          readingsBeginUpdate($lh);
-          readingsBulkUpdate($lh,"state",$v);
+          # CD 0018 start
+          my $cond=AttrVal($n,"readCondition",undef);
+          $cond=AttrVal($n,"writeCondition",undef) if ($writeResponse);
+          my $doupdate=1;
+          if (defined($cond)) {
+            my @c=split(':',$cond);
+            if ($#c>=2) {
+              my $cv=ReadingsVal($c[0],$c[1],undef);
+              if (defined($cv)) {
+                $doupdate=0 if ($cv ne $c[2]);
+              }            
+            }
+          }
+          if ($doupdate) {
+          # CD 0018 end
+            readingsBeginUpdate($lh);
+            readingsBulkUpdate($lh,"state",$v);
+          }
           readingsEndUpdate($lh,1);
         }
         push(@list, $n); 
@@ -520,6 +572,15 @@ sub ModbusCoil_is_float {
     <li><a name="ModbusCoilsource">source</a><br>
         This attribute can be used to define from which block (coils or discrete input) data is read. If the attribute
         <a href="#ModbusCoildisableRegisterMapping">disableRegisterMapping</a> is set to 0 or not defined, this attribute is ignored.</li><br>
+    <li><a name="">readCondition &lt;device&gt;:&lt;reading&gt;:&lt;value&gt;[:&lt;force&gt;[:&lt;wait time&gt;]]</a><br>
+        Data is only read if the reading of the device has the specified value. If the parameter &lt;force&gt; is 1 and the type of the
+        specified device is ModbusRegister or ModbusCoil the value will be written before the read is started. An optional wait time between
+        the write and the read can be specified in milliseconds.
+    </li><br>
+    <li><a name="">writeCondition &lt;device&gt;:&lt;reading&gt;:&lt;value&gt;[:&lt;force&gt;]</a><br>
+        Data is only written if the reading of the device has the specified value. If the parameter &lt;force&gt; is 1 and the type of the
+        specified device is ModbusRegister or ModbusCoil the indicated value will be written before the write is started.
+    </li><br>
   </ul>
 </ul>
 
