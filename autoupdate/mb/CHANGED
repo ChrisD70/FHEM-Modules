@@ -10,7 +10,7 @@
 37_ModbusCoil:
   160101 0009 added attributes 'readCondition' and 'writeCondition'
 37_ModbusRegister:
-  160101 0020 added attributes 'readCondition' and 'writeCondition'
+  160128 0021 fixed wago address conversion for MD and MF
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -59,6 +59,7 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  160128 0021 fixed wago address conversion for MD and MF
   160101 0020 added attributes 'readCondition' and 'writeCondition'
   150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
               fixed min/max calculation after plcDataType change

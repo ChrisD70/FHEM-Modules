@@ -19,6 +19,7 @@
 # 151219 0018 added attribute 'enableUpdate'
 # 151220 0019 extended attribute 'enableUpdate'
 # 151228 0020 renamed attribute 'enableUpdate' to 'readCondition', added 'writeCondition'
+# 160128 0021 fixed wago address conversion for MD and MF
 # TODO:
 
 package main;
@@ -109,7 +110,8 @@ ModbusRegister_Define($$)
       }
       if($1 eq 'M') {
         if($3<12288) {
-          $reg=12288+$3;
+          $reg=12288+$3 if($2 eq 'W');
+          $reg=12288+$3*2 if(($2 eq 'D')||($2 eq 'F'));  # CD 0021
           $hash->{helper}{registerType}=3;
         }
       }
