@@ -3,9 +3,10 @@
               - Absturz auf FritzBox behoben
               - nicht verwendete Tags aus Serverantwort herausfiltern 
 98_SB_PLAYER:
-  160101 0052 - snooze hinzugefügt
-              - Readings alarmsDefaultVolume und lastunk(n)owncmd korrigiert
-              - shuffle on im UI entfernt
+  160130 0054 - deutsche Commandref hinzugefügt (Eberhard)
+              - englische Commandref ergänzt (Eberhard)
+              - event-on-change-reading beachten für alarm.*-Trigger
+              - TTS: iso-8859-1 Strings in utf-8 konvertieren
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -52,6 +53,11 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  160130 0054 - deutsche Commandref hinzugefügt (Eberhard)
+              - englische Commandref ergänzt (Eberhard)
+              - event-on-change-reading beachten für alarm.*-Trigger
+              - TTS: iso-8859-1 Strings in utf-8 konvertieren
+         0053 - Testversion 
   160101 0052 - snooze hinzugefügt
               - Readings alarmsDefaultVolume und lastunk(n)owncmd korrigiert
               - shuffle on im UI entfernt
