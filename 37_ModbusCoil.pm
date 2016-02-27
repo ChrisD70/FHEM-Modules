@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0009 $
+﻿# $Id: 37_ModbusCoil.pm 0010 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -8,6 +8,7 @@
 # 150324 0007 added writeMode Impulse
 # 150324 0008 do not trigger on set, use set_on and set_off
 # 151228 0009 added attribute 'readCondition' and 'writeCondition'
+# 160227 0010 added duration for writeMode impulse
 # TODO:
 
 package main;
@@ -209,8 +210,10 @@ ModbusCoil_Set($@)
     } else {
       if($hash->{helper}{writeMode}{type} eq 'IM') {
         if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
+          my $dur=0.5;
+          $dur=$hash->{helper}{writeMode}{impDuration} if (defined($hash->{helper}{writeMode}{impDuration}));
           RemoveInternalTimer( "ModbusCoil_ResetImpulse:$name");
-          InternalTimer( gettimeofday() + 0.5, 
+          InternalTimer( gettimeofday() + $dur, 
            "ModbusCoil_tcb_ResetImpulse",
            "ModbusCoil_ResetImpulse:$name", 
            0 );
@@ -443,7 +446,11 @@ ModbusCoil_Attr(@)
         $hash->{helper}{writeMode}{register}=$args[1];
         $hash->{helper}{writeMode}{registerType}=$type;
         $hash->{helper}{writeMode}{address}=$coil;
-        
+        if(defined($args[2])) {
+          $hash->{helper}{writeMode}{impDuration}=$args[2];
+        } else {
+          $hash->{helper}{writeMode}{impDuration}=0.5;
+        }
         delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
         $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
         $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
