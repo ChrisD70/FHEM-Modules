@@ -3,10 +3,7 @@
               - Absturz auf FritzBox behoben
               - nicht verwendete Tags aus Serverantwort herausfiltern 
 98_SB_PLAYER:
-  160130 0054 - deutsche Commandref hinzugefügt (Eberhard)
-              - englische Commandref ergänzt (Eberhard)
-              - event-on-change-reading beachten für alarm.*-Trigger
-              - TTS: iso-8859-1 Strings in utf-8 konvertieren
+  160304 0055 - Attribut syncedNamesSource hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -53,6 +50,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  160304 0055 - Attribut syncedNamesSource hinzugefügt
   160130 0054 - deutsche Commandref hinzugefügt (Eberhard)
               - englische Commandref ergänzt (Eberhard)
               - event-on-change-reading beachten für alarm.*-Trigger

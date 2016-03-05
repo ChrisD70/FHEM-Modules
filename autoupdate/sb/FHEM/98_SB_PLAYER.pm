@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0054 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0055 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -57,6 +57,8 @@ use Encode qw(decode encode);
 
 # include this for the self-calling timer we use later on
 use Time::HiRes qw(gettimeofday);
+
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
 use constant { true => 1, false => 0 };
 
@@ -163,6 +165,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "amplifierDelayOff ";                     # CD 0012
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
+    $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
     $hash->{AttrList}  .= $readingFnAttributes;
     
     # CD 0036 aus 37_sonosBookmarker
@@ -295,6 +298,11 @@ sub SB_PLAYER_Attr( @ ) {
                        0 );
       }
     }
+    # CD 0055 start
+    elsif( $args[ 0 ] eq "syncedNamesSource" ) {
+        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" ) if ($init_done>0);
+    }
+    # CD 0055 end
     return;
     # CD 0012
 }
@@ -3533,9 +3541,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
     } else {
 
     }
-
 }
-
 
 # ----------------------------------------------------------------------------
 #  parse the return on the alarms status
@@ -4086,7 +4092,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
         } elsif( $cur =~ /^(sync_master:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
             $hash->{SYNCMASTER} = $2;
             $hash->{SYNCED} = "yes";
-            $hash->{SYNCMASTERPN} = SB_PLAYER_MACToPlayername($hash,$2);  # CD 0018
+            $hash->{SYNCMASTERPN} = SB_PLAYER_MACToLMSPlayername($hash,$2);  # CD 0018
             next;
 
         } elsif( $cur =~ /^(sync_slaves:)(.*)/ ) {
@@ -4096,13 +4102,13 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             my $syncgroup;
             foreach ( @macs ) {
                 my $mac=$_;
-                my $dev=SB_PLAYER_MACToPlayername($hash,$mac);
+                my $dev=SB_PLAYER_MACToLMSPlayername($hash,$mac);
                 $syncgroup.="," if(defined($syncgroup));
                 if(defined($dev)) {
                     $syncgroup.=$dev;
                 } else {
                     if($mac eq $hash->{PLAYERMAC}) {
-                        $syncgroup.=$name;
+                        $syncgroup.=$hash->{PLAYERNAME};  # CD 0055 FIX: PLAYERNAME verwenden
                     } else {
                         $syncgroup.=$mac;
                     }
@@ -4110,7 +4116,25 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             }
             $hash->{SYNCGROUPPN} = $syncgroup;
             # CD 0018 end
-            readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}" );    # Matthew 0019 hinzugefügt
+            # CD 0055 start
+            if(AttrVal($name, "syncedNamesSource", "LMS") eq "FHEM") {
+                my @pn=split ',',"$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}";
+                my @players=devspec2array("TYPE=SB_PLAYER");
+                $syncgroup=undef;
+                
+                foreach(@players) {
+                    my $pn=$_;
+                    my $phash=$defs{$_};
+                    if($phash->{PLAYERNAME} ~~ @pn) {
+                        $syncgroup.="," if(defined($syncgroup));
+                        $syncgroup.=$pn;
+                    }
+                }
+                readingsBulkUpdate( $hash, "synced", $syncgroup );
+            } else {
+            # CD 0055 end
+                readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}" );    # Matthew 0019 hinzugefügt
+            }
             next;
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
@@ -4235,9 +4259,9 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
 # CD 0018 start
 # ----------------------------------------------------------------------------
-#  convert MAC to playername
+#  convert MAC to (LMS) playername
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_MACToPlayername( $$ ) {
+sub SB_PLAYER_MACToLMSPlayername( $$ ) {
     my( $hash, $mac ) = @_;
     my $name = $hash->{NAME};
 
@@ -4620,8 +4644,8 @@ sub SB_PLAYER_LoadPlayerStates($)
       Determines if the MAC-adress should be the unique identifier</li>
     <li>volumeStep &lt;value&gt;<br>
       Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1–100. Default value: 10</li>
-    <li>cliport &lt;portnumber&gt;<br>
-      If the default cli-port ist not 9090, you have to specify it here</li>
+    <li>syncedNamesSource FHEM|LMS<br>
+      Determines if the synced reading contains the LMS or FHEM names of the players</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
       For the use of T2Speech from the company VoiceRSS (voicerss.org) an API-key is needed. Not needed with Google’s T2Speech.</li>
     <li>ttslanguage de|en|fr<br>
@@ -4873,9 +4897,8 @@ sub SB_PLAYER_LoadPlayerStates($)
       Soll die MAC-Adresse des Players als ID genommen werden, muss true (default) eingetragen werden, sonst false.</li>
     <li>volumeStep &lt;value&gt;<br>
       Hier wird die Granularit&aumlt der Lautst&aumlrkeregelung festgelegt. Default ist 10</li>
-    <li>cliport &lt;portnumber&gt;<br>
-      Der Port ist f&uumlr die Kommunikation mit dem Befehlszeileninterpreters (CLI) des LMS vorgesehen.
-      Default ist 9090; wenn dieser Port im Server ge&aumlndert wurde, dann ist hier dieser Wert einzutragen.</li>
+    <li>syncedNamesSource FHEM|LMS<br>
+      Legt fest ob die FHEM-Ger&aumltenamen oder die LMS-Namen der Player im synced-Reading verwendet werden</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
       F&uumlr die Benutzung von T2Speech der Firma VoiceRSS (voicerss.org) ist ein API-Key erforderlich.
       F&uumlr Googles T2Speech ist kein Key notwendig.</li>
