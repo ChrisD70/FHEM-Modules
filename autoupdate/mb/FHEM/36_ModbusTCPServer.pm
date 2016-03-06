@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0018 $
+# $Id: 36_ModbusTCPServer.pm 0019 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -18,6 +18,7 @@
 # 151220 0016 use enableUpdate from ModbusRegister
 # 151228 0017 use readCondition and writeCondition
 # 151231 0018 added delay for readCondition
+# 160305 0019 added serverType, read Wago configuration, apply offset to coils
 # TODO:
 
 package main;
@@ -110,6 +111,7 @@ sub ModbusTCPServer_Initialize($) {
                      "timeout " .
                      "presenceLink " .
                      "combineReads " .
+                     "serverType:Wago " . # CD 0019
                      $readingFnAttributes;
 }
 sub ModbusTCPServer_Define($$) {#########################################################
@@ -250,6 +252,33 @@ sub ModbusTCPServer_Attr(@) {###################################################
       delete($defs{$name}->{helper}{presence});
     }
   }
+  # CD 0019 start
+  elsif($aName eq "serverType") {
+    delete($hash->{helper}{Wago}) if(defined($hash->{helper}{Wago}));
+    delete($hash->{server}) if(defined($hash->{server}));
+    if ($cmd eq "set") {
+      if ($aVal eq "Wago") {
+        RemoveInternalTimer( "poll:".$name);
+        $hash->{helper}{Wago}{x}=1;
+        if($hash->{STATE} ne "disconnected") {
+          # read controller informations
+          my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 5);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+          # read I/O informations
+          $tx=pack("nnnCCnn", 4130, 0, 6, 0, 3, 4130, 4);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+        }
+      }
+    } else {
+      RemoveInternalTimer( "poll:".$name);
+      if($hash->{STATE} ne "disconnected") {
+        InternalTimer(gettimeofday()+AttrVal($name,"pollInterval",0.5), "ModbusTCPServer_Poll", "poll:".$name, 0);
+      }
+    }
+  # CD 0019 end
+  }
   return;
 }
 
@@ -265,6 +294,7 @@ sub ModbusTCPServer_Write($$) {#################################################
   my $id=int(rand 65535);
   my $tx_hd_pr_id      = 0;
   my $tx_hd_length     = bytes::length($msg);
+  $tx_hd_length-=4 if((substr $msg,-4,4) eq "QQQQ");  # CD 0019
 
   my $f_mbap = pack("nnn", $id, $tx_hd_pr_id,
                             $tx_hd_length);
@@ -362,7 +392,32 @@ sub ModbusTCPServer_Parse($$) {#################################################
             }
             delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
         } else {
+          # CD 0019 start
+          if(defined($hash->{helper}{Wago}) && !defined($hash->{helper}{Wago}{initDone})) {
+            my ($cnt,@v)=unpack "Cn*",$f_body;
+            if(($rx_hd_tr_id==4130) && ($cnt==8)) {
+              $hash->{helper}{Wago}{AO}=$v[0]/16;
+              $hash->{helper}{Wago}{AI}=$v[1]/16;
+              $hash->{helper}{Wago}{DO}=$v[2];
+              $hash->{helper}{Wago}{DI}=$v[3];
+              $hash->{helper}{Wago}{DOOffset}=$v[0];
+              $hash->{helper}{Wago}{DIOffset}=$v[1];
+              $hash->{helper}{Wago}{initDone}=1;
+              RemoveInternalTimer( "poll:".$name);
+              InternalTimer(gettimeofday()+AttrVal($name,"pollInterval",0.5), "ModbusTCPServer_Poll", "poll:".$name, 0);
+            }
+            if(($rx_hd_tr_id==8208) && ($cnt==10)) {
+              $hash->{helper}{Wago}{INFO_REVISION}=$v[0];
+              $hash->{helper}{Wago}{INFO_SERIES}=$v[1];
+              $hash->{helper}{Wago}{INFO_ITEM}=$v[2];
+              $hash->{helper}{Wago}{INFO_MAJOR}=$v[3];
+              $hash->{helper}{Wago}{INFO_MINOR}=$v[4];
+              $hash->{server}="Wago ".$v[1]."-".$v[2] if($v[1]+$v[2]>0);
+            }
+          } else {
+          # CD 0019 end
             Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9n$nvals", $rmsg)), undef); 
+          }
         }
       }
       if($rx_bd_fc==WRITE_SINGLE_REGISTER) {
@@ -381,7 +436,7 @@ sub ModbusTCPServer_Parse($$) {#################################################
                     if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
                         $off=$r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2];
 #                        Log 0,"ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off];
-                        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off], undef); 
+                        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[4]:$r->[1]:$r->[3]:".$coilvals[$off], undef); # CD 0019 $r->[4] statt $r->[2]
                     }
                 }
             }
@@ -391,7 +446,14 @@ sub ModbusTCPServer_Parse($$) {#################################################
         }
       }
       if($rx_bd_fc==WRITE_SINGLE_COIL) {
-        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+        # CD 0019 start
+        if(defined($hash->{helper}{wagowritereturnaddress})) {
+          Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".$hash->{helper}{wagowritereturnaddress}.":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+          delete $hash->{helper}{wagowritereturnaddress};
+        } else {
+        # CD 0019 end
+          Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+        }
       }
       if($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
         ;
@@ -431,10 +493,21 @@ sub ModbusTCPServer_SimpleWrite(@) {############################################
 
   my $name = $hash->{NAME};
   my $len = length($msg);
+
   if($hash->{TCPDev}) {
     $hash->{helper}{last_hd_tr_id}=$hash->{helper}{hd_tr_id} if(defined($hash->{helper}{hd_tr_id}) && ($hash->{helper}{hd_tr_id}!=-1));
     $hash->{helper}{last_fc}=$hash->{helper}{fc} if(defined($hash->{helper}{fc}) && ($hash->{helper}{fc}!=-1));
     my ($tx_hd_tr_id, $tx_hd_pr_id, $tx_hd_length, $tx_hd_unit_id, $tx_bd_fc, $f_body) = unpack "nnnCCa*", $msg;
+    # CD 0019 start
+    if(((substr $msg,-4,4) eq "QQQQ")&&($tx_bd_fc==5)) {
+      $msg=substr $msg,0,$len-4;
+      my ($wadr,$wv)=unpack "nn",$f_body;
+      if(defined($hash->{helper}{Wago}{DOOffset}) && ($hash->{helper}{Wago}{DOOffset}>0) && ($hash->{helper}{Wago}{DOOffset}<$wadr)) {
+        $msg=pack("nnnCCnn", $tx_hd_tr_id, $tx_hd_pr_id, $tx_hd_length,$tx_hd_unit_id, $tx_bd_fc, $wadr-$hash->{helper}{Wago}{DOOffset}, $wv);
+      }
+      $hash->{helper}{wagowritereturnaddress}=$wadr;
+    }
+    # CD 0019 end
     $hash->{helper}{hd_tr_id}=$tx_hd_tr_id;
     $hash->{helper}{fc}=$tx_bd_fc;
     $hash->{helper}{state}="active";
@@ -456,9 +529,25 @@ sub ModbusTCPServer_DoInit($) {#################################################
   
   delete($hash->{WQUEUE}) if(defined($hash->{WQUEUE}));     # CD 0015
   $hash->{helper}{state}="idle";
-  RemoveInternalTimer( "poll:".$name);
-  InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
 
+  RemoveInternalTimer( "poll:".$name);
+
+  # CD 0019 start
+  if (defined($hash->{helper}{Wago})) {
+    delete($hash->{helper}{Wago}{initDone}) if defined($hash->{helper}{Wago}{initDone});
+    # read controller informations
+    my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 5);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+    # read I/O informations
+    $tx=pack("nnnCCnn", 4130, 0, 6, 0, 3, 4130, 4);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+  } else {
+  # CD 0019 end
+    InternalTimer($tn+$pollInterval, "ModbusTCPServer_Poll", "poll:".$name, 0);
+  }
+  
   return undef;
 }
 
@@ -633,6 +722,16 @@ sub ModbusTCPServer_Poll($) {##################################################
         if(defined($chash) && defined($chash->{helper}{readCmd}) && defined($chash->{IODev}) && ($chash->{IODev} eq $hash)) {
           if((!defined($chash->{helper}{nextUpdate}))||($chash->{helper}{nextUpdate}<=time())) {
             my $msg=$chash->{helper}{readCmd};
+            # CD 0019 start
+            if(defined($chash->{helper}{wagoT})) {
+              if(($chash->{helper}{wagoT} eq "I") && (defined($hash->{helper}{Wago}{DIOffset})) && ($hash->{helper}{Wago}{DIOffset}<$chash->{helper}{address})) {
+                $msg=pack("CCnn", $chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}-$hash->{helper}{Wago}{DIOffset}, $chash->{helper}{nread});
+              }
+              if(($chash->{helper}{wagoT} eq "Q") && (defined($hash->{helper}{Wago}{DOOffset})) && ($hash->{helper}{Wago}{DOOffset}<$chash->{helper}{address})) {
+                $msg=pack("CCnn", $chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}-$hash->{helper}{Wago}{DOOffset}, $chash->{helper}{nread});
+              }
+            }
+            # CD 0019 end
             my $tx_hd_length     = bytes::length($msg);
 
             my $f_mbap = pack("nnn", $chash->{helper}{address}, 0,
@@ -657,6 +756,13 @@ sub ModbusTCPServer_Poll($) {##################################################
                       my $v=0;
                       $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
                       $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                      # CD 0019 start
+                      if(defined($conh->{helper}{wagoT})) {
+                        if(($conh->{helper}{wagoT} eq "Q") && (defined($hash->{helper}{Wago}{DOOffset})) && ($hash->{helper}{Wago}{DOOffset}<$conh->{helper}{address})) {
+                          $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}-$hash->{helper}{Wago}{DOOffset}, $v, 0);
+                        }
+                      }
+                      # CD 0019 end
                     }
                     if($condmsg ne 'skip') {
                       my $condf_mbap = pack("nnn", int(rand 65535), 0,bytes::length($condmsg));
@@ -679,7 +785,20 @@ sub ModbusTCPServer_Poll($) {##################################################
                 ModbusTCPServer_LogFrame($hash,"AddRQueue",$f_mbap.$msg,5);
                 ModbusTCPServer_AddRQueue($hash, $f_mbap.$msg, $nocombineReads);
             } else {
-                push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1]);
+              # CD 0019 start
+              if(defined($chash->{helper}{wagoT})) {
+                if(($chash->{helper}{wagoT} eq "I") && (defined($hash->{helper}{Wago}{DIOffset})) && ($hash->{helper}{Wago}{DIOffset}<$chash->{helper}{address})) {
+                  push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}-$hash->{helper}{Wago}{DIOffset}, 1, $chash->{helper}{address}]);
+                }
+                elsif(($chash->{helper}{wagoT} eq "Q") && (defined($hash->{helper}{Wago}{DOOffset})) && ($hash->{helper}{Wago}{DOOffset}<$chash->{helper}{address})) {
+                  push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}-$hash->{helper}{Wago}{DOOffset}, 1, $chash->{helper}{address}]);
+                } else {
+                  push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1, $chash->{helper}{address}]);
+                }
+              } else {
+              # CD 0019 end
+                push(@coils,[$chash->{helper}{unitId}, $chash->{helper}{registerType}, $chash->{helper}{address}, 1, $chash->{helper}{address}]);
+              }
             }
             ModbusTCPServer_CalcNextUpdate($chash);
           }
@@ -706,7 +825,7 @@ sub ModbusTCPServer_Poll($) {##################################################
           my $rlast;
           for my $r (@sorted)
           {
-            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3])))) {
+            if(!defined($rlast) || (defined($rlast) && (($rlast->[0]!=$r->[0]) || ($rlast->[1]!=$r->[1]) || ($rlast->[2]!=$r->[2]) || ($rlast->[3]!=$r->[3]) || ($rlast->[4]!=$r->[4])))) { # CD 0019 added $r->[4]
                 push(@{$hash->{helper}{combineReads}{coils}},$r) ;
             }
             $rlast=$r;
@@ -787,6 +906,7 @@ ModbusTCPServer_Timeout($) ##################################################
   $hash->{helper}{last_fc}=$hash->{helper}{fc};
   $hash->{helper}{hd_tr_id}=-1;
   $hash->{helper}{fc}=-1;
+  delete $hash->{helper}{wagowritereturnaddress} if(defined($hash->{helper}{wagowritereturnaddress}));  # CD 0019
 }
 
 sub

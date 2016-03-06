@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0010 $
+﻿# $Id: 37_ModbusCoil.pm 0011 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -9,6 +9,7 @@
 # 150324 0008 do not trigger on set, use set_on and set_off
 # 151228 0009 added attribute 'readCondition' and 'writeCondition'
 # 160227 0010 added duration for writeMode impulse
+# 160305 0011 changes for Wago I/O addressing
 # TODO:
 
 package main;
@@ -75,6 +76,7 @@ ModbusCoil_Define($$)
 
     $hash->{helper}{registerType}=$type;
     $a[2]=0;  # UnitId
+    $hash->{helper}{wagoT}=substr $a[3],0,1;  # CD 0011
     $a[3]=$coil;
     $hash->{helper}{wago}=1;
     $hash->{helper}{disableRegisterMapping}=1;
@@ -207,6 +209,7 @@ ModbusCoil_Set($@)
     
     if(!defined($hash->{helper}{writeMode})) {
       $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v,0);
+      $msg.="QQQQ" if(defined($hash->{helper}{wagoT}) && ($hash->{helper}{wagoT} eq "Q"));  # CD 0011
     } else {
       if($hash->{helper}{writeMode}{type} eq 'IM') {
         if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
@@ -218,6 +221,7 @@ ModbusCoil_Set($@)
            "ModbusCoil_ResetImpulse:$name", 
            0 );
           $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255,0);
+          $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");  # CD 0011
         }
       }
     }
@@ -243,6 +247,7 @@ ModbusCoil_Set($@)
                   my $v=0;
                   $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
                   my $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                  $condmsg.="QQQQ" if(defined($conh->{helper}{wagoT}) && ($conh->{helper}{wagoT} eq "Q"));  # CD 0011
                   IOWrite($hash,$condmsg);
                 }
               }
@@ -276,6 +281,7 @@ ModbusCoil_tcb_ResetImpulse( $ ) {
     my $msg;
 
     $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0,0);
+    $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");  # CD 0011
     IOWrite($hash,$msg);
 }
   

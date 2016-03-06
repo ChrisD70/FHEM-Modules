@@ -6,11 +6,11 @@
               added combineReads
               added support for coils
 36_ModbusTCPServer:
-  160101 0018 added support for 'readCondition' and 'writeCondition'
+  160305 0019 added serverType, read Wago configuration, apply offset to coils
 37_ModbusCoil:
-  160227 0010 added duration for writeMode impulse
+  160305 0011 changes for Wago I/O addressing
 37_ModbusRegister:
-  160128 0021 fixed wago address conversion for MD and MF
+  160305 0022 added precision to conversion, changes for Wago I/O addressing
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -30,7 +30,10 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
-  160101 0018 added support for 'readCondition' and 'writeCondition'
+  160305 0019 added serverType, read Wago configuration, apply offset to coils
+  151231 0018 added delay for readCondition
+  151228 0017 use readCondition and writeCondition
+  151220 0016 use enableUpdate from ModbusRegister
   150330 0015 fixed errors in log, do not buffer writes if disconnected
   150314 0014 fixed first entry for combined reads
   150310 0013 delete and restart timeout timer after receiving bad packets, modified timeout log level
@@ -48,6 +51,7 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  160305 0011 changes for Wago I/O addressing
   160227 0010 added duration for writeMode impulse
   160101 0009 added attributes 'readCondition' and 'writeCondition'
   150324 0008 do not trigger on set, use set_on and set_off
@@ -60,8 +64,11 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  160305 0022 added precision to conversion, changes for Wago I/O addressing
   160128 0021 fixed wago address conversion for MD and MF
   160101 0020 added attributes 'readCondition' and 'writeCondition'
+  151220 0019 extended attribute 'enableUpdate'
+  151219 0018 added attribute 'enableUpdate'
   150406 0017 added negativeRepresentation, 3WORD_S and 3WORD_S_BE
               fixed min/max calculation after plcDataType change
   150316 0016 fix for eventMap 0:off 1:on
