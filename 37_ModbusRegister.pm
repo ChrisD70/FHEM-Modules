@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0020 $
+﻿# $Id: 37_ModbusRegister.pm 0022 $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -20,6 +20,7 @@
 # 151220 0019 extended attribute 'enableUpdate'
 # 151228 0020 renamed attribute 'enableUpdate' to 'readCondition', added 'writeCondition'
 # 160128 0021 fixed wago address conversion for MD and MF
+# 160305 0022 added precision to conversion, changes for Wago I/O addressing
 # TODO:
 
 package main;
@@ -356,6 +357,7 @@ ModbusRegister_Set($@)
                 my $v=0;
                 $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
                 my $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
+                $condmsg.="QQQQ" if(defined($conh->{helper}{wagoT}) && ($conh->{helper}{wagoT} eq "Q"));  # CD 0022
                 IOWrite($hash,$condmsg);
               }
             }
@@ -521,6 +523,9 @@ ModbusRegister_Parse($$)
         }
         if(defined($lh->{helper}{cnv})) {
           $v=$v*$lh->{helper}{cnv}{a}+$lh->{helper}{cnv}{b};
+          if(defined($lh->{helper}{cnv}{pr}) && ($lh->{helper}{cnv}{pr}>=0)) {  # CD 0022
+            $v=sprintf("%.".$lh->{helper}{cnv}{pr}."f",$v);
+          }
         }
         readingsBeginUpdate($lh);
         if(defined($lh->{helper}{alignUpdateInterval}) && defined($lh->{helper}{lastUpdate}) && ($fc!=WRITE_SINGLE_REGISTER)) {
@@ -603,10 +608,11 @@ ModbusRegister_Attr(@)
   elsif($attrName eq "conversion") {
     if ($cmd eq "set") {
       my @a=split(":",$attrVal);
-      if(@a == 2) {
+      if(@a >= 2) {
         $attr{$name}{conversion} = $attrVal;
         $hash->{helper}{cnv}{a}=$a[0];
         $hash->{helper}{cnv}{b}=$a[1];
+        $hash->{helper}{cnv}{pr}=(@a >= 3)?$a[2]:-1;    # CD 0022
         ModbusRegister_SetMinMax($hash);
       } else {
         return "wrong syntax: conversion a:b";
@@ -614,6 +620,7 @@ ModbusRegister_Attr(@)
     } else {
       $hash->{helper}{cnv}{a}=1;
       $hash->{helper}{cnv}{b}=0;
+      $hash->{helper}{cnv}{pr}=-1;
       ModbusRegister_SetMinMax($hash);
     }
   }
