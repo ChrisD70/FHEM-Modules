@@ -1,13 +1,20 @@
 ﻿97_SB_SERVER:
-  160128 0017 - Attribute ignoredIPs, ignoredMACs und internalPingProtocol hinzugefügt
-              - Absturz auf FritzBox behoben
-              - nicht verwendete Tags aus Serverantwort herausfiltern 
+  160416 0018 - deutsche Commandref hinzugefügt (Eberhard)
+              - englische Commandref ergänzt (Eberhard)
+              - Befehl updateModules entfernt
+              - Befehle addToFHEMUpdate und removeFromFHEMUpdate hinzugefügt
+              - Favoriten mit Playlisten und Unterelementen nicht mehr ignorieren
 98_SB_PLAYER:
   160304 0055 - Attribut syncedNamesSource hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  160416 0018 - deutsche Commandref hinzugefügt (Eberhard)
+              - englische Commandref ergänzt (Eberhard)
+              - Befehl updateModules entfernt
+              - Befehle addToFHEMUpdate und removeFromFHEMUpdate hinzugefügt
+              - Favoriten mit Playlisten und Unterelementen nicht mehr ignorieren
   160128 0017 - Attribute ignoredIPs, ignoredMACs und internalPingProtocol hinzugefügt
               - Absturz auf FritzBox behoben
               - nicht verwendete Tags aus Serverantwort herausfiltern 
