@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 8246 beta 0016 CD $
+# $Id: 97_SB_SERVER.pm 9811 beta 0018 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -47,10 +47,11 @@ use warnings;
 
 use IO::Socket;
 use URI::Escape;
-# inlcude for using the perl ping command
+# include for using the perl ping command
 use Net::Ping;
 use Encode qw(decode encode);           # CD 0009 hinzugefügt
 
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
 # this will hold the hash of hashes for all instances of SB_SERVER
 my %favorites;
@@ -97,6 +98,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "doalivecheck:true,false ";
     $hash->{AttrList} .= "maxcmdstack ";
     $hash->{AttrList} .= "httpport ";
+    $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream ";
     $hash->{AttrList} .= $readingFnAttributes;
 
 }
@@ -524,7 +526,7 @@ sub SB_SERVER_Set( $@ ) {
 	my $res = "Unknown argument ?, choose one of " . 
 	    "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
 	$res .= "rescan:full,playlists ";
-    $res .= "updateModules:download,reload ";  # CD 0013
+    $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg";  # CD 0019
 
 	return( $res );
 
@@ -566,17 +568,12 @@ sub SB_SERVER_Set( $@ ) {
         DevIo_SimpleWrite( $hash, $v, 0 ); # CD 0016 IOWrite in DevIo_SimpleWrite geändert
     } elsif( $cmd eq "rescan" ) {
         DevIo_SimpleWrite( $hash, $cmd . " " . $a[ 0 ] . "\n", 0 );     # CD 0016 IOWrite in DevIo_SimpleWrite geändert
-    # CD 0013/14 start
-    } elsif( $cmd eq "updateModules" ) {
-        if(defined($a[0])) {
-            if($a[0] eq "download") {
-                fhem("update force https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
-            }
-            elsif($a[0] eq "reload") {
-                fhem('define at_reload_sb_modules at +00:00:01 {fhem("reload 98_SB_PLAYER");;fhem("reload 97_SB_SERVER");;fhem("set '.$name.' statusRequest")}');
-            }
-        }
-    # CD 0013/14 end
+    # CD 0018 start
+    } elsif( $cmd eq "addToFHEMUpdate" ) {
+        fhem("update add https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
+    } elsif( $cmd eq "removeFromFHEMUpdate" ) {
+        fhem("update delete https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
+    # CD 0018 end
     } else {
 	;
     }
@@ -1020,18 +1017,26 @@ sub SB_SERVER_Alive( $ ) {
         # CD 0007 end
             Log3( $hash, 4,"SB_SERVER_Alive($name): using internal ping");                              # CD 0007 # CD 0009 level 2->4
             # check via ping
-            my $p = Net::Ping->new( 'tcp' );
-            if( $p->ping( $hash->{IP}, 2 ) ) {
+            my $p;
+            # CD 0017 eval hinzugefügt, Absturz auf FritzBox, bei Fehler annehmen dass Host verfügbar ist, internalPingProtocol hinzugefügt
+            eval { $p = Net::Ping->new( AttrVal($name, "internalPingProtocol", "tcp" ) ); };
+            if($@) {
+                Log3( $hash,1,"SB_SERVER_Alive($name): internal ping failed with $@");
                 $pingstatus = "on";
-                $hash->{helper}{pingCounter}=0;                                 # CD 0004
+                $hash->{helper}{pingCounter}=0;
             } else {
-                $pingstatus = "off";
-                $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                if( $p->ping( $hash->{IP}, 2 ) ) {
+                    $pingstatus = "on";
+                    $hash->{helper}{pingCounter}=0;                                 # CD 0004
+                } else {
+                    $pingstatus = "off";
+                    $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                }
+                # close our ping mechanism again
+                $p->close( );
             }
-            # close our ping mechanism again
-            $p->close( );
         } # CD 0007
-        Log3( $hash, 5, "SB_SERVER_Alive($name): " .
+        Log3( $hash, 5, "SB_SERVER_Alive($name): " .            # CD Test 5
               "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 # CD 0009 level 2->3 # CD 0014 level -> 5
     }
 
@@ -1306,7 +1311,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    next;
 	} elsif( $_ =~ /^(playerid:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
 	    my $id = join( "", split( ":", $2 ) );
-	    if( $addplayers = true ) {
+	    if( $addplayers == true ) { # CD 0017 fixed ==
 		$players{$id}{ID} = $id;
 		$players{$id}{MAC} = $2;
 		$currentplayerid = $id;
@@ -1355,6 +1360,23 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	} elsif( $_ =~ /^(seq_no:)(.*)/ ) {
 	    # just to take care of the keyword
 	    next;
+    # CD 0017 start
+	} elsif( $_ =~ /^(isplaying:)(.*)/ ) {
+	    # just to take care of the keyword
+	    next;
+	} elsif( $_ =~ /^(snplayercount:)(.*)/ ) {
+	    # just to take care of the keyword
+	    next;
+	} elsif( $_ =~ /^(otherplayercount:)(.*)/ ) {
+	    # just to take care of the keyword
+	    next;
+	} elsif( $_ =~ /^(server:)(.*)/ ) {
+	    # just to take care of the keyword
+	    next;
+	} elsif( $_ =~ /^(serverurl:)(.*)/ ) {
+	    # just to take care of the keyword
+	    next;
+    # CD 0017 end
 	} else {
 	    # no keyword found, so let us assume it is part of the player name
 	    if( $currentplayerid ne "none" ) {
@@ -1366,6 +1388,9 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 
     readingsEndUpdate( $hash, 1 );
 
+    my @ignoredIPs=split(',',AttrVal($name,'ignoredIPs',''));   # CD 0017
+    my @ignoredMACs=split(',',AttrVal($name,'ignoredMACs',''));   # CD 0017
+    
     foreach my $player ( keys %players ) {
 	if( defined( $players{$player}{isplayer} ) ) {
 	    if( $players{$player}{isplayer} eq "0" ) {
@@ -1373,6 +1398,23 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 		next;
 	    }
 	}
+
+    # CD 0017 check ignored IPs
+	if( defined( $players{$player}{IP} ) ) {
+        my @ip=split(':',$players{$player}{IP});
+        if ($ip[0] ~~ @ignoredIPs) {
+            $players{$player}{ignore}=1;
+            next;
+        }
+    }
+    
+    # CD 0017 check ignored MACs
+	if( defined( $players{$player}{MAC} ) ) {
+        if ($players{$player}{MAC} ~~ @ignoredMACs) {
+            $players{$player}{ignore}=1;
+            next;
+        }
+    }
 
 	# if the player is not yet known, it will be created
 	if( defined( $players{$player}{ID} ) ) {
@@ -1426,10 +1468,13 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 
     # now send the list for the sync masters
     foreach my $player ( keys %players ) {
-	my $uniqueid = join( "", split( ":", $players{$player}{MAC} ) );
-	SB_SERVER_Broadcast( $hash, "SYNCMASTER",  
-			     "ADD $players{$player}{name} " . 
-			     "$players{$player}{MAC} $uniqueid", undef );
+        next if defined($players{$player}{ignore});
+        my $uniqueid = join( "", split( ":", $players{$player}{MAC} ) );
+        Log3( $hash, 1, "SB_SERVER_ParseServerStatus($name): player has no name") unless defined($players{$player}{name});
+        Log3( $hash, 1, "SB_SERVER_ParseServerStatus($name): player has no MAC") unless defined($players{$player}{MAC});
+        SB_SERVER_Broadcast( $hash, "SYNCMASTER",  
+                     "ADD $players{$player}{name} " . 
+                     "$players{$player}{MAC} $uniqueid", undef );
     }
 
 
@@ -1522,6 +1567,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $idbuf = "";
     my $hasitemsbuf = false;
     my $isaudiobuf = "";
+    my $isplaylist = false;
     my $url = "?";           # CD 0009 hinzugefügt
 
     foreach ( @data ) {
@@ -1529,20 +1575,21 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 	    # we found an ID, that is typically the start of a new session
 	    # so save the old session first
 	    if( $firstone == false ) {
-		if( $hasitemsbuf == false ) {
-		    # derive our hash entry
-		    my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-		    $favorites{$name}{$entryuid} = {
-			ID => $idbuf,
-			Name => $namebuf,
-            URL => $url, };         # CD 0009 hinzugefügt
-		    $namebuf = "";
-		    $isaudiobuf = "";
-            $url = "?";              # CD 0009 hinzugefügt
-		    $hasitemsbuf = false;
-		} else {
-		    # that is a folder we found, but we don't handle that
-		}	   
+            if(( $hasitemsbuf == false )||($isplaylist == true)) {
+                # derive our hash entry
+                my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
+                $favorites{$name}{$entryuid} = {
+                ID => $idbuf,
+                Name => $namebuf,
+                URL => $url, };         # CD 0009 hinzugefügt
+                $namebuf = "";
+                $isaudiobuf = "";
+                $url = "?";              # CD 0009 hinzugefügt
+                $hasitemsbuf = false;
+                $isplaylist = false;
+            } else {
+                # that is a folder we found, but we don't handle that
+            }	   
 	    }
 
 	    $firstone = false;
@@ -1569,12 +1616,13 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 	    if( $namestarted == true ) {
 		$namestarted = false;
 	    }
-
-	} elsif( $_ =~ /^(type:)([a|u|d|i|o]*)/ ) {
+    # CD 0018 start
+    } elsif( $_ =~ /^(type:)(.*)/ ) {
+        $isplaylist = true if($2 eq "playlist");
 	    if( $namestarted == true ) {
-		$namestarted = false;
+            $namestarted = false;
 	    }
-
+    # CD 0018 end
 	#} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {     # CD 0007   # CD 0009 deaktiviert
 	} elsif( $_ =~ /^(name:)(.*)/ ) {     # CD 0009 hinzugefügt
 	    $namebuf = $2;
@@ -1595,7 +1643,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 
     # capture the last element also
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
-	if( $hasitemsbuf == false ) {
+    if(( $hasitemsbuf == false )||($isplaylist == true)) {
 	    # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
         my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 	    $favorites{$name}{$entryuid} = {
@@ -2015,34 +2063,104 @@ sub SB_SERVER_setStates($$)
     <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
-    This module allows you to control Logitech Media Server and connected Squeezebox Media Players.<br><br>
+    This module allows you in combination with the module SB_PLAYER to control a
+    Logitech Media Server (LMS) and connected Squeezebox Media Players.<br><br>
    
-   Attention:  The <code>&lt;ip[:cliserverport]&gt;</code> parameter is optional. You just need to configure it if you changed it on the LMS. The default TCP port is 9090.<br>
+    Attention:  The <code>[:cliserverport]</code> parameter is
+    optional. You just need to configure it if you changed it on the LMS.
+    The default TCP port is 9090.<br>
    
-   <b>Optional</b>
-   <ul>
+    <b>Optional</b>
+    <ul>
       <li><code>&lt;[RCC]&gt;</code>: You can define a FHEM RCC Device, if you want to wake it up when you set the SB_SERVER on.  </li>
       <li><code>&lt;[WOL]&gt;</code>: You can define a FHEM WOL Device, if you want to wake it up when you set the SB_SERVER on.  </li>
       <li><code>&lt;[PRESENCE]&gt;</code>: You can define a FHEM PRESENCE Device that is used to check if the server is reachable.  </li>
       <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: If your LMS is password protected you can define the credentials here.  </li>
-   </ul><br><br>
+    </ul><br>
+  </ul>
   <a name="SBserverset"></a>
   <b>Set</b>
   <ul>
     <code>set &lt;name&gt; &lt;command&gt;</code>
     <br><br>
-    This module supports the following commands:<br>
-   
+    This module supports the following SB_Server related commands:<br>
+ 
     SB_Server related commands:<br>
-   <ul>
-     <li><b>renew</b> -  Renewes the connection to the server</li>
-     <li><b>abort</b> -  Stops the connection to the server</li>
-     <li><b>cliraw &lt;command&gt;</b> -  Sends the &lt;command&gt; to the LMS CLI</li>
-     <li><b>rescan</b> -  Starts the scan of the music library of the server</li>
-     <li><b>statusRequest</b> -  Update of readings from server and configured players</li>
-   </ul>   
-   </ul>
-</ul>
+    <ul>
+      <li><b>renew</b> -  Renews the connection to the server</li>
+      <li><b>abort</b> -  Stops the connection to the server</li>
+      <li><b>cliraw &lt;cli-command&gt;</b> -  Sends a &lt;cli-command&gt; to the LMS CLI</li>
+      <li><b>rescan</b> -  Starts the scan of the music library of the server</li>
+      <li><b>statusRequest</b> -  Update of readings from server and configured players</li>
+      <li><b>addToFHEMUpdate</b> -  Includes the modules in the FHEM update, needs to be executed only once</li>
+      <li><b>removeFromFHEMUpdate</b> -  Removes the modules from the FHEM update</li>
+    </ul>   
+    <br>
+  </ul>
+  <a name="SBserverattr"></a>
+  <b>Attributes</b>
+  <ul>
+    <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Address&gt;[,IP-Address]</code></b>
+    </a><br />With this attribute you can define IP-addresses of players which will to be ignored by the server, e.g. "192.168.0.11,192.168.0.37"</li>
+    <li><a name="SBserver_attribut_ignoredMACs"><b><code>ignoredMACs &lt;MAC-Address&gt;[,MAC-Address]</code></b>
+    </a><br />With this attribute you can define MAC-addresses of players which will to be ignored by the server, e.g. "00:11:22:33:44:55,ff:ee:dd:cc:bb:aa"</li>
+  </ul>
 </ul>
 =end html
+
+=begin html_DE
+
+<a name="SB_SERVER"></a>
+<h3>SB_SERVER</h3>
+<ul>
+  <a name="SBserverdefine"></a>
+  <b>Define</b>
+  <ul>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <br><br>
+
+    Diese Modul erm&oumlglicht es - zusammen mit dem Modul SB_PLAYER - einen
+    Logitech Media Server (LMS) und die angeschlossenen Squeezebox Media
+    Player zu steuern.<br><br>
+   
+    Achtung: Die Angabe des Parameters <code>[:cliserverport]</code> ist
+    optional und nur dann erforderlich, wenn die Portnummer im LMS vom
+    Standardwert (TCP Port 9090) abweichend eingetragen wurde.<br><br>
+   
+    <b>Optionen</b>
+    <ul>
+      <li><code>&lt;[RCC]&gt;</code>: Hier kann ein FHEM RCC Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
+      <li><code>&lt;[WOL]&gt;</code>: Hier kann ein FHEM WOL Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
+      <li><code>&lt;[PRESENCE]&gt;</code>: Hier kann ein FHEM PRESENCE Device angegeben werden mit dem die Erreichbarkeit des Servers &uumlberpr&uumlft werden kann.</li>
+      <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&oumlnnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
+    </ul><br>
+  </ul>
+  <a name="SBserverset"></a>
+  <b>Set</b>
+  <ul>
+    <code>set &lt;name&gt; &lt;command&gt;</code>
+    <br><br>
+    Dieses Modul unterst&uumltzt folgende SB_SERVER relevanten Befehle:<br><br>
+    <ul>
+      <li><b>renew</b> -  Erneuert die Verbindung zum Server.</li>
+      <li><b>abort</b> -  Bricht die Verbindung zum Server ab.</li>
+      <li><b>cliraw &lt;cli-command&gt;</b> -  Sendet einen CLI-Befehl an das LMS CLI</li>
+      <li><b>rescan</b> -  Startet einen Scan der Musikbibliothek f&uumlr alle im Server angegebenen Verzeichnisse.</li>
+      <li><b>statusRequest</b> -  Aktualisiert die Readings von Server und konfigurierten Playern.</li>
+      <li><b>addToFHEMUpdate</b> -  F&uumlgt die Module dem FHEM-Update hinzu, muss nur einmalig ausgef&uumlhrt werden.</li>
+      <li><b>removeFromFHEMUpdate</b> -  Schlie&szlig;t die Module vom FHEM-Update aus.</li>
+    </ul>   
+    <br>
+  </ul>
+  <a name="SBserverattr"></a>
+  <b>Attribute</b>
+  <ul>
+    <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Adresse&gt;[,IP-Adresse]</code></b>
+    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&aumlte durch die Angabe derer IP-Adressen unterdrückt werden, z.B. "192.168.0.11,192.168.0.37"</li>
+    <li><a name="SBserver_attribut_ignoredMACs"><b><code>ignoredMACs &lt;MAC-Adresse&gt;[,MAC-Adresse]</code></b>
+    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&aumlte durch die Angabe derer MAC-Adressen unterdrückt werden, z.B. "00:11:22:33:44:55,ff:ee:dd:cc:bb:aa"</li>
+  </ul>
+</ul>
+=end html_DE
+
 =cut
