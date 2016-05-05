@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0011 $
+﻿# $Id: 37_ModbusCoil.pm 0012 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -10,6 +10,7 @@
 # 151228 0009 added attribute 'readCondition' and 'writeCondition'
 # 160227 0010 added duration for writeMode impulse
 # 160305 0011 changes for Wago I/O addressing
+# 160416 0012 added alignUpdateInterval
 # TODO:
 
 package main;
@@ -45,7 +46,7 @@ ModbusCoil_Initialize($)
   $hash->{ParseFn}   = "ModbusCoil_Parse";
   $hash->{AttrFn}    = "ModbusCoil_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "updateInterval updateIntervall ".
+                       "updateInterval updateIntervall alignUpdateInterval ".
                        "disableRegisterMapping:0,1 ".
                        "source:Coil,Input ".
                        "writeMode ".
@@ -332,13 +333,15 @@ ModbusCoil_Parse($$)
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
         next if($nvals!=ceil($lh->{helper}{nread}/8));
+        next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0) && ($fc!=WRITE_SINGLE_COIL));  # CD 0012
+        next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}) && ($fc!=WRITE_SINGLE_COIL));    # CD 0012
         if(($fc==WRITE_SINGLE_COIL)&&defined($lh->{helper}{writeMode})) {
           # Rückmeldung ignorieren
         } else {
           $lh->{ModbusCoil_lastRcv} = TimeNow();
           my $v="off";
           $v="on" if(($vals[0]&1)==1);
-          # CD 0018 start
+          # CD 0009 start
           my $cond=AttrVal($n,"readCondition",undef);
           $cond=AttrVal($n,"writeCondition",undef) if ($writeResponse);
           my $doupdate=1;
@@ -352,9 +355,17 @@ ModbusCoil_Parse($$)
             }
           }
           if ($doupdate) {
-          # CD 0018 end
+          # CD 0009 end
             readingsBeginUpdate($lh);
+            # CD 0012 start
+            if(defined($lh->{helper}{alignUpdateInterval}) && defined($lh->{helper}{lastUpdate}) && ($fc!=WRITE_SINGLE_COIL)) {
+                my $fmtDateTime = FmtDateTime($lh->{helper}{lastUpdate});
+                $lh->{".updateTime"} = $lh->{helper}{lastUpdate}; # in seconds since the epoch
+                $lh->{".updateTimestamp"} = $fmtDateTime;
+            }
+            # CD 0012 end
             readingsBulkUpdate($lh,"state",$v);
+            $lh->{helper}{lastUpdate}=0 if ($fc!=WRITE_SINGLE_COIL);
           }
           readingsEndUpdate($lh,1);
         }
@@ -369,6 +380,29 @@ ModbusCoil_Parse($$)
   return @list;
 }
 
+# CD 0012 start
+sub ModbusCoil_CalcNextUpdate(@) {##########################################################
+    my ($hash)=@_;
+    my $name = $hash->{NAME};
+
+    delete($hash->{helper}{lastUpdate}) if(defined($hash->{helper}{lastUpdate}));
+    if(defined($hash->{helper}{alignUpdateInterval})) {
+        my $t=int(time());
+        my @lt = localtime($t);
+        
+        $t -= ($lt[2]*3600+$lt[1]*60+$lt[0]);
+        my $nextUpdate=$t+$hash->{helper}{alignUpdateInterval};
+        while($nextUpdate<time()) {
+            $nextUpdate+=$hash->{helper}{updateIntervall};
+        }
+        $hash->{nextUpdate}=localtime($nextUpdate);
+        $hash->{helper}{nextUpdate}=$nextUpdate;
+    } else {
+        $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+    }
+}
+# CD 0012 end
+
 sub
 ModbusCoil_Attr(@)
 {
@@ -377,14 +411,35 @@ ModbusCoil_Attr(@)
 
   if(($attrName eq "updateIntervall") || ($attrName eq "updateInterval")) {
     if ($cmd eq "set") {
+      # CD 0012 start
+      if($attrVal =~ m/:/) {
+        my ($err, $hr, $min, $sec, $fn) = GetTimeSpec($attrVal);
+        return $err if($err);
+        $hash->{helper}{updateIntervall}=($hr*60+$min)*60+$sec;
+      } else {
+        $hash->{helper}{updateIntervall}=$attrVal;
+      }
+      # CD 0012 end
       $attr{$name}{updateInterval} = $attrVal;
-      $hash->{helper}{updateIntervall}=$attrVal;
     } else {
       $hash->{helper}{updateIntervall}=0.1;
       delete $attr{$name}{updateInterval} if defined($attr{$name}{updateInterval});
       delete $attr{$name}{updateIntervall} if defined($attr{$name}{updateIntervall});
     }
-    $hash->{helper}{nextUpdate}=time()+$hash->{helper}{updateIntervall};
+    ModbusCoil_CalcNextUpdate($hash);
+  }
+  elsif($attrName eq "alignUpdateInterval") {
+    if (($cmd eq "set") && defined($attrVal)) {
+        my @args=split(",",$attrVal);
+        if(@args>0) {
+            my ($err, $hr, $min, $sec, $fn) = GetTimeSpec($args[0]);
+            return $err if($err);
+            $hash->{helper}{alignUpdateInterval}=($hr*60+$min)*60+$sec;
+        }
+    } else {
+        delete($hash->{helper}{alignUpdateInterval}) if (defined($hash->{helper}{alignUpdateInterval}));
+    }
+    ModbusCoil_CalcNextUpdate($hash);
   }
   elsif($attrName eq "source") {
     if (!defined($hash->{helper}{wago})) {
