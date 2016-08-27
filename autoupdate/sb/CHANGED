@@ -1,15 +1,25 @@
 ﻿97_SB_SERVER:
-  160416 0018 - deutsche Commandref hinzugefügt (Eberhard)
-              - englische Commandref ergänzt (Eberhard)
-              - Befehl updateModules entfernt
-              - Befehle addToFHEMUpdate und removeFromFHEMUpdate hinzugefügt
-              - Favoriten mit Playlisten und Unterelementen nicht mehr ignorieren
+  160827 0021 - Alivecheck nur ausführen wenn während vorgegebener Zeit keine Daten mehr empfangen wurden
+              - optional Alivecheck ohne Ping ausführen (internalPingProtocol none)
+              - item_summary für Dokumentation hinzugefügt
 98_SB_PLAYER:
-  160304 0055 - Attribut syncedNamesSource hinzugefügt
+  160827 0056 - Status wurde nach sync nicht immer aktualisert
+              - Kommunikation zwischen gesyncten Playern bei TTS korrigiert
+              - resetTTS korrigiert
+              - restore nach TTS korrigiert
+              - vermeiden dass mehrere Player den gleichen Namen bekommen
+              - Änderung des Syncmasters im statusrequest an Sync-Gruppe weiterleiten
+              - item_summary für Dokumentation hinzugefügt
+              - Fehlermeldung bei ungültigem Playlist Index behoben (heppel)
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  160827 0021 - Alivecheck nur ausführen wenn während vorgegebener Zeit keine Daten mehr empfangen wurden
+              - optional Alivecheck ohne Ping ausführen (internalPingProtocol none)
+              - item_summary für Dokumentation hinzugefügt
+         0020 - eigner Timer für Alive Check
+         0019 - addToFHEMUpdate und removeFromFHEMUpdate hinzugefügt
   160416 0018 - deutsche Commandref hinzugefügt (Eberhard)
               - englische Commandref ergänzt (Eberhard)
               - Befehl updateModules entfernt
@@ -57,6 +67,14 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  160827 0056 - Status wurde nach sync nicht immer aktualisert
+              - Kommunikation zwischen gesyncten Playern bei TTS korrigiert
+              - resetTTS korrigiert
+              - restore nach TTS korrigiert
+              - vermeiden dass mehrere Player den gleichen Namen bekommen
+              - Änderung des Syncmasters im statusrequest an Sync-Gruppe weiterleiten
+              - item_summary für Dokumentation hinzugefügt
+              - Fehlermeldung bei ungültigem Playlist Index behoben (heppel)
   160304 0055 - Attribut syncedNamesSource hinzugefügt
   160130 0054 - deutsche Commandref hinzugefügt (Eberhard)
               - englische Commandref ergänzt (Eberhard)
