@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 9811 beta 0018 CD $
+# $Id: 97_SB_SERVER.pm 9811 beta 0021 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -61,11 +61,11 @@ my $favsetstring = "favorites: ";
 my %SB_SERVER_CmdStack;
 
 # include this for the self-calling timer we use later on
-use Time::HiRes qw(gettimeofday);
+use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0014';
+use constant SB_SERVER_VERSION => '0021';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -98,7 +98,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "doalivecheck:true,false ";
     $hash->{AttrList} .= "maxcmdstack ";
     $hash->{AttrList} .= "httpport ";
-    $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream ";
+    $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     $hash->{AttrList} .= $readingFnAttributes;
 
 }
@@ -493,7 +493,13 @@ sub SB_SERVER_Attr( @ ) {
 
     if( $cmd eq "set" ) {
         if( $args[ 0 ] eq "alivetimer" ) {
-
+            # CD 0021 start
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
+            InternalTimer( gettimeofday() + $args[ 1 ],
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
+                       0 );
+            # CD 0021 end
         }
         # CD 0015 bei Änderung des Ports diesen an Clients schicken
         if( $args[ 0 ] eq "httpport" ) {
@@ -590,6 +596,8 @@ sub SB_SERVER_Read( $ ) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
+    #my $start = time;   # CD 0019
+    
     Log3( $hash, 4, "SB_SERVER_Read($name): called" );
     Log3( $hash, 5, "+++++++++++++++++++++++++++++++++++++++++++++++++++++" );
     Log3( $hash, 5, "New Squeezebox Server Read cycle starts here" );
@@ -598,27 +606,27 @@ sub SB_SERVER_Read( $ ) {
     my $buf = DevIo_SimpleRead( $hash );
 
     if( !defined( $buf ) ) {
-	return( "" );
+        return( "" );
     }
 
     # if we have data, the server is on again
     if( ReadingsVal( $name, "power", "off" ) ne "on" ) {
-	readingsSingleUpdate( $hash, "power", "on", 1 );
-	if( defined( $SB_SERVER_CmdStack{$name}{cnt} ) ) {
-	    my $maxmsg = $SB_SERVER_CmdStack{$name}{cnt};
-	    my $out;
-	    for( my $n = 0; $n <= $maxmsg; $n++ ) {
-		$out = SB_SERVER_CMDStackPop( $hash );
-		if( $out ne "empty" ) {
-		    DevIo_SimpleWrite( $hash, $out , 0 );
-		}	    
-	    }
-	}
-
-
-	#Log3( $hash, 5, "SB_SERVER_Read($name): please implement the " .   # CD 0009 Meldung deaktiviert
-	#      "sending of the CMDStack." );                                # CD 0009 Meldung deaktiviert
+        readingsSingleUpdate( $hash, "power", "on", 1 );
+        if( defined( $SB_SERVER_CmdStack{$name}{cnt} ) ) {
+            my $maxmsg = $SB_SERVER_CmdStack{$name}{cnt};
+            my $out;
+            for( my $n = 0; $n <= $maxmsg; $n++ ) {
+                $out = SB_SERVER_CMDStackPop( $hash );
+                if( $out ne "empty" ) {
+                    DevIo_SimpleWrite( $hash, $out , 0 );
+                }	    
+            }
+        }
+        #Log3( $hash, 5, "SB_SERVER_Read($name): please implement the " .   # CD 0009 Meldung deaktiviert
+        #      "sending of the CMDStack." );                                # CD 0009 Meldung deaktiviert
     }
+
+    #my $t1 = time;   # CD 0020
 
     # if there are remains from the last time, append them now
     $buf = $hash->{PARTIAL} . $buf;
@@ -626,6 +634,16 @@ sub SB_SERVER_Read( $ ) {
     $buf = uri_unescape( $buf );
     Log3( $hash, 6, "SB_SERVER_Read: the buf: $buf" );  # CD TEST 6
 
+    # CD 0021 start - Server lebt noch, alivetimer neu starten
+    RemoveInternalTimer( "SB_SERVER_Alive:$name");
+    InternalTimer( gettimeofday() + 
+               AttrVal( $name, "alivetimer", 10 ),
+               "SB_SERVER_tcb_Alive",
+               "SB_SERVER_Alive:$name", 
+               0 );
+    # CD 0021 end
+    
+    #my $t2 = time;   # CD 0020
 
     # if we have received multiline commands, they are split by \n
     my @cmds = split( "\n", $buf );
@@ -633,22 +651,32 @@ sub SB_SERVER_Read( $ ) {
     # check for last element in string
     my $lastchr = substr( $buf, -1, 1 );
     if( $lastchr ne "\n" ) {
-	#ups, the return doesn't seem to be complete
-	$hash->{PARTIAL} = $cmds[ $#cmds ];
-	# and remove the last element
-	pop( @cmds );
-	Log3( $hash, 5, "SB_SERVER_Read: uncomplete command received" );
+        #ups, the return doesn't seem to be complete
+        $hash->{PARTIAL} = $cmds[ $#cmds ];
+        # and remove the last element
+        pop( @cmds );
+        Log3( $hash, 5, "SB_SERVER_Read: uncomplete command received" );
     } else {
-	Log3( $hash, 5, "SB_SERVER_Read: complete command received" );
-	$hash->{PARTIAL} = "";
+        Log3( $hash, 5, "SB_SERVER_Read: complete command received" );
+        $hash->{PARTIAL} = "";
     }
+
+    #my $t3 = time;   # CD 0020
 
     # and dispatch the rest
     foreach( @cmds ) {
-	# double check complete line
-	my $lastchar = substr( $_, -1);
-	SB_SERVER_DispatchCommandLine( $hash, $_  );
+        #my $t31=time;   # CD 0020
+        # double check complete line
+        my $lastchar = substr( $_, -1);
+        SB_SERVER_DispatchCommandLine( $hash, $_  );
+        # CD 0020 start
+        #if((time-$t31)>0.3) {
+        #    Log3($hash,0,"SB_SERVER_Read($name), time:".int((time-$t31)*1000)." cmd: ".$_);
+        #}
+        # CD 0020 end
     }
+
+    #my $t4 = time;   # CD 0020
 
     # CD 0009 check for reload of newer version
     $hash->{helper}{SB_SERVER_VERSION}=0 if (!defined($hash->{helper}{SB_SERVER_VERSION}));     # CD 0012
@@ -664,11 +692,18 @@ sub SB_SERVER_Read( $ ) {
         DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
     }
     # CD 0009 end
-    
+
     Log3( $hash, 5, "+++++++++++++++++++++++++++++++++++++++++++++++++++++" );
     Log3( $hash, 5, "Squeezebox Server Read cycle ends here" );
     Log3( $hash, 5, "+++++++++++++++++++++++++++++++++++++++++++++++++++++" );
-
+    
+    # CD 0019 start
+    #my $end   = time;
+    #if (($end - $start)>1) {
+    #    Log3( $hash, 0, "SB_SERVER_Read($name), times: ".int(($t1 - $start)*1000)." ".int(($t2 - $t1)*1000)." ".int(($t3 - $t2)*1000)." ".int(($t4 - $t3)*1000)." ".int(($end - $start)*1000)." nCmds: ".$#cmds );
+    #}
+    # CD 0019 end
+    
     return( undef );
 }
 
@@ -782,10 +817,12 @@ sub SB_SERVER_DoInit( $ ) {
 
             } elsif( AttrVal( $name, "doalivecheck", "false" ) eq "true" ) {
             # start the alive checking mechanism
+            # CD 0020 SB_SERVER_tcb_Alive verwenden
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + 
                        AttrVal( $name, "alivetimer", 10 ),
-                       "SB_SERVER_Alive", 
-                       $hash, 
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
                        0 );
             return( 0 );
 
@@ -970,6 +1007,16 @@ sub SB_SERVER_ParseCmds( $$ ) {
     }
 }
 
+# CD 0020 start
+sub SB_SERVER_tcb_Alive($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    #Log 0,"SB_SERVER_tcb_Alive";
+    SB_SERVER_Alive($hash);
+}
+# CD 0020 end
 
 # ----------------------------------------------------------------------------
 #  Alivecheck of the server
@@ -1015,26 +1062,40 @@ sub SB_SERVER_Alive( $ ) {
             }
         } else {
         # CD 0007 end
-            Log3( $hash, 4,"SB_SERVER_Alive($name): using internal ping");                              # CD 0007 # CD 0009 level 2->4
-            # check via ping
-            my $p;
-            # CD 0017 eval hinzugefügt, Absturz auf FritzBox, bei Fehler annehmen dass Host verfügbar ist, internalPingProtocol hinzugefügt
-            eval { $p = Net::Ping->new( AttrVal($name, "internalPingProtocol", "tcp" ) ); };
-            if($@) {
-                Log3( $hash,1,"SB_SERVER_Alive($name): internal ping failed with $@");
-                $pingstatus = "on";
-                $hash->{helper}{pingCounter}=0;
-            } else {
-                if( $p->ping( $hash->{IP}, 2 ) ) {
-                    $pingstatus = "on";
-                    $hash->{helper}{pingCounter}=0;                                 # CD 0004
-                } else {
+            # CD 0021 start
+            my $ipp=AttrVal($name, "internalPingProtocol", "tcp" );
+            if($ipp eq "none") {
+                if ($hash->{STATE} eq "disconnected") {
                     $pingstatus = "off";
-                    $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                    $hash->{helper}{pingCounter}=3;
+                } else {
+                    $pingstatus = "on";
+                    $hash->{helper}{pingCounter}=0;
                 }
-                # close our ping mechanism again
-                $p->close( );
-            }
+            } else {
+            # CD 0021 end
+                Log3( $hash, 4,"SB_SERVER_Alive($name): using internal ping");                              # CD 0007 # CD 0009 level 2->4
+                # check via ping
+                my $p;
+                # CD 0017 eval hinzugefügt, Absturz auf FritzBox, bei Fehler annehmen dass Host verfügbar ist, internalPingProtocol hinzugefügt
+                
+                eval { $p = Net::Ping->new( $ipp ); };
+                if($@) {
+                    Log3( $hash,1,"SB_SERVER_Alive($name): internal ping failed with $@");
+                    $pingstatus = "on";
+                    $hash->{helper}{pingCounter}=0;
+                } else {
+                    if( $p->ping( $hash->{IP}, 2 ) ) {
+                        $pingstatus = "on";
+                        $hash->{helper}{pingCounter}=0;                                 # CD 0004
+                    } else {
+                        $pingstatus = "off";
+                        $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                    }
+                    # close our ping mechanism again
+                    $p->close( );
+                }
+            } # CD 0021
         } # CD 0007
         Log3( $hash, 5, "SB_SERVER_Alive($name): " .            # CD Test 5
               "RCC:" . $rccstatus . " Ping:" . $pingstatus );               # CD 0006 changed log level from 5 to 2 # CD 0009 level 2->3 # CD 0014 level -> 5
@@ -1111,7 +1172,6 @@ sub SB_SERVER_Alive( $ ) {
                 # if we receive the echo, the server is still alive
                 $hash->{ALIVECHECK} = "waiting";
                 DevIo_SimpleWrite( $hash, "fhemalivecheck\n", 0 );
-                
             }
         }
     } elsif( ( $rccstatus eq "off" ) && ( $pingstatus eq "off" ) ) {
@@ -1148,9 +1208,11 @@ sub SB_SERVER_Alive( $ ) {
     }
 
     # do an update of the status
+    # CD 0020 SB_SERVER_tcb_Alive verwenden
+    RemoveInternalTimer( "SB_SERVER_Alive:$name");
     InternalTimer( $nexttime, 
-		   "SB_SERVER_Alive", 
-		   $hash, 
+           "SB_SERVER_tcb_Alive",
+           "SB_SERVER_Alive:$name", 
 		   0 );
 }
 
@@ -1571,6 +1633,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $url = "?";           # CD 0009 hinzugefügt
 
     foreach ( @data ) {
+    #Log 0,$_;
 	if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
 	    # we found an ID, that is typically the start of a new session
 	    # so save the old session first
@@ -1912,10 +1975,12 @@ sub SB_SERVER_CheckConnection($) {
             readingsSingleUpdate( $hash, "power", "on", 1 );
         } elsif( AttrVal( $name, "doalivecheck", "false" ) eq "true" ) {
             # start the alive checking mechanism
+            # CD 0020 SB_SERVER_tcb_Alive verwenden
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + 
                        AttrVal( $name, "alivetimer", 10 ),
-                       "SB_SERVER_Alive", 
-                       $hash, 
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
                        0 );
         }
     }
@@ -1958,10 +2023,13 @@ sub SB_SERVER_Notify( $$ ) {
     if( $devName eq $hash->{RCCNAME} ) {
         if( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "off" ) {
             RemoveInternalTimer( $hash );
+            # CD 0020 SB_SERVER_tcb_Alive verwenden
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + 10, 
-                 "SB_SERVER_Alive", 
-                 $hash, 
-                 0 );
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
+                       0 );
+
             # CD 0007 use DevIo_Disconnected instead of DevIo_CloseDev
             #DevIo_CloseDev( $hash ); 
             DevIo_Disconnected( $hash ); 
@@ -1973,10 +2041,12 @@ sub SB_SERVER_Notify( $$ ) {
         } elsif( ReadingsVal( $hash->{RCCNAME}, "state", "off" ) eq "on" ) {
             RemoveInternalTimer( $hash );
             # do an update of the status, but SB CLI must come up
+            # CD 0020 SB_SERVER_tcb_Alive verwenden
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + 20, 
-                 "SB_SERVER_Alive", 
-                 $hash, 
-                 0 );
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
+                       0 );
         } else {
             return( undef );
         }
@@ -1987,10 +2057,12 @@ sub SB_SERVER_Notify( $$ ) {
             Log3( $hash, 2, "SB_SERVER_Notify($name): $devName changed to ". join(" ",@{$dev_hash->{CHANGED}}));
             RemoveInternalTimer( $hash );
             # do an update of the status, but SB CLI must come up
+            # CD 0020 SB_SERVER_tcb_Alive verwenden
+            RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + 10, 
-                 "SB_SERVER_Alive", 
-                 $hash, 
-                 0 );
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name", 
+                       0 );
             return( "" );
         } else {
             return( undef );
@@ -2052,6 +2124,8 @@ sub SB_SERVER_setStates($$)
 1;
 
 =pod
+=item summary    connect to a Logitech Media Server (LMS)
+=item summary_DE Anbindung an Logitech Media Server (LMS) 
 =begin html
 
 <a name="SB_SERVER"></a>
