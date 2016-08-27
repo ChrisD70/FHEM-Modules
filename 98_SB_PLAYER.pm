@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0055 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0056 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -865,13 +865,15 @@ sub SB_PLAYER_Parse( $$ ) {
                 SB_PLAYER_TTSStopped($hash);
             }
 
-            # wenn tts auf Slave aktiv ist schickt der LMS den Stop nur an den Master 
-            if(($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) && ($hash->{SYNCMASTER} eq $hash->{PLAYERMAC})) {
-                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
-                    my @pl=split(",",$hash->{SYNCGROUP});
-                    foreach (@pl) {
-                        if ($hash->{PLAYERMAC} ne $_) {
-                            IOWrite( $hash, "$_ fhemrelay ttsstopped\n" );
+            # wenn tts auf Slave aktiv ist schickt der LMS den Stop nur an den Master
+            if (ReadingsVal($name,"presence","x") eq "present") {   # CD 0056 Meldung nicht weiterschicken wenn der Master nicht 'present' ist
+                if(($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) && ($hash->{SYNCMASTER} eq $hash->{PLAYERMAC})) {
+                    if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                        my @pl=split(",",$hash->{SYNCGROUP});
+                        foreach (@pl) {
+                            if ($hash->{PLAYERMAC} ne $_) {
+                                IOWrite( $hash, "$_ fhemrelay ttsstopped\n" );
+                            }
                         }
                     }
                 }
@@ -1105,7 +1107,7 @@ sub SB_PLAYER_Parse( $$ ) {
             SB_PLAYER_Amplifier( $hash );
         # CD 0014 start
         } elsif( $args[ 0 ] eq "index" ) {
-            readingsBulkUpdate( $hash, "playlistCurrentTrack", $args[ 1 ]+1 );
+            readingsBulkUpdate( $hash, "playlistCurrentTrack", $args[ 1 ] eq '?' ? 0 : $args[ 1 ]+1 );  # Heppel 0056
             $queryMode=0;
         } elsif( $args[ 0 ] eq "addtracks" ) {
             $queryMode=0;
@@ -1517,8 +1519,9 @@ sub SB_PLAYER_Parse( $$ ) {
     # CD 0018 sync Meldungen auswerten, alle anderen Player abfragen
     } elsif( $cmd eq "sync" ) {
         foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
-            IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kcu\n" );   # CD 0039 u hinzugefügt
+            IOWrite( $hash, $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}." status 0 500 tags:Kcu\n" ) if defined($hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC});   # CD 0039 u hinzugefügt # CD 0056 if defined hinzugefügt
         }
+        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" ); # CD 0056 auch betroffenen Player abfragen
     # CD 0018
     # CD 0052 jivealarm Meldungen ignorieren
     } elsif( $cmd eq "jivealarm" ) {
@@ -1550,14 +1553,20 @@ sub SB_PLAYER_Parse( $$ ) {
                 # CD 0031 end
             }
             elsif ($args[0] eq "ttsstopped") {
-                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsstopped" );
-                if($hash->{helper}{ttsstate}==TTS_PLAYING) {
-                        # CD 0034 delay ttsstopped 
-                        RemoveInternalTimer( "TTSStopped:$name");
-                        InternalTimer( gettimeofday() + 0.01, 
-                           "SB_PLAYER_tcb_TTSStopped",
-                           "TTSRestore:$name", 
-                           0 );
+                # CD 0056 Meldung ignorieren wenn Player Syncmaster ist
+                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsstopped, ignoring" );
+                } else {
+                # CD 0056 end
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_Parse: $name: fhemrelay ttsstopped" );
+                    if($hash->{helper}{ttsstate}==TTS_PLAYING) {
+                            # CD 0034 delay ttsstopped 
+                            RemoveInternalTimer( "TTSStopped:$name");
+                            InternalTimer( gettimeofday() + 0.01, 
+                               "SB_PLAYER_tcb_TTSStopped",
+                               "TTSRestore:$name", 
+                               0 );
+                    }
                 }
             }
             elsif ($args[0] eq "ttsplaying") {
@@ -2685,6 +2694,7 @@ sub SB_PLAYER_Set( $@ ) {
             return( $msg );
         }
     } elsif( $cmd eq "resetTTS" ) {
+        delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));  # CD 0056
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
     # CD 0047 start
     } elsif( lc($cmd) eq "currenttrackposition" ) {
@@ -2880,6 +2890,7 @@ sub SB_PLAYER_Recall($$) {
                 IOWrite( $hash, "$hash->{PLAYERMAC} power 0\n" );
                 if($hash->{helper}{ttsstate}==TTS_RESTORE) {
                     SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+                    delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));  # CD 0056
                 }
             } else {
             # CD 0028 end
@@ -2888,6 +2899,7 @@ sub SB_PLAYER_Recall($$) {
                     # CD 0028 start
                     if($hash->{helper}{ttsstate}==TTS_RESTORE) {
                         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+                        delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));  # CD 0056
                     }
                     # CD 0028 end
                 } elsif(( $hash->{helper}{savedPlayerState}{$statename}{playStatus} eq "playing" )||($forceplay==1)) {  # CD 0036 added $forceplay
@@ -2911,6 +2923,13 @@ sub SB_PLAYER_Recall($$) {
             readingsSingleUpdate( $hash,"favorites", $hash->{helper}{savedPlayerState}{$statename}{favorite},(AttrVal($name, "donotnotify", "true") eq "true")?0:1) if(defined($hash->{helper}{savedPlayerState}{$statename}{favorite}));
         }
         delete($hash->{helper}{savedPlayerState}{$statename}) if(($del==1)||($delonly==1));
+    } else {
+    # CD 0056 start
+        if($hash->{helper}{ttsstate}==TTS_RESTORE) {
+            SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+            delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));
+        }
+    # CD 0056 end
     }
 }
 
@@ -3465,7 +3484,12 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
 
     } elsif( $cmd eq "SYNCMASTER" ) {
         if( $args[ 0 ] eq "ADD" ) {
-            if( $args[ 1 ] ne $hash->{PLAYERNAME} ) {
+            if(( $args[ 1 ] ne $hash->{PLAYERNAME} ) || ( $args[ 2 ] ne $hash->{PLAYERMAC} )) {   # CD 0056 Name oder MAC müssen unterschiedlich sein
+                # CD 0056 mehrere Player haben gleichen Namen -> Namen anpassen
+                if(( $args[ 1 ] eq $hash->{PLAYERNAME} ) || (defined($hash->{helper}{SB_PLAYER_SyncMasters}{$args[1]}))) {
+                    $args[ 1 ]=$args[ 1 ] . "_MAC_" . $args[ 3 ];
+                }
+                # CD 0056 Ende
                 $hash->{helper}{SB_PLAYER_SyncMasters}{$args[1]}{MAC} = $args[ 2 ];
                 if( $hash->{SYNCMASTERS} eq "" ) {
                     $hash->{SYNCMASTERS} = $args[ 1 ];
@@ -3974,6 +3998,9 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     #readingsBeginUpdate( $hash );
 
     # set default values for stuff not always send
+    my $oldsyncmaster=$hash->{SYNCMASTER};  # CD 0056
+    my $oldsyncgroup=$hash->{SYNCGROUP};  # CD 0056
+    
     $hash->{SYNCMASTER} = "none";
     $hash->{SYNCGROUP} = "none";
     $hash->{SYNCMASTERPN} = "none";      # CD 0018
@@ -4090,9 +4117,25 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             next;
 
         } elsif( $cur =~ /^(sync_master:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
-            $hash->{SYNCMASTER} = $2;
+            # CD 0056 überprüfen ob Syncmaster gewechselt hat (passiert z.B. bei stop->play wenn aktueller Syncmaster aus ist)
+            my $sm=$2;
+            if ($oldsyncmaster ne "none") {
+                if ($oldsyncmaster ne $2) {
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_ParsePlayerStatus: $name: Syncmaster changed from $oldsyncmaster to $sm" );
+                    if (defined($oldsyncgroup) && ($oldsyncgroup ne '?') && ($oldsyncmaster ne 'none')) {
+                        my @pl=split(",",$oldsyncgroup.",".$oldsyncmaster);
+                        foreach (@pl) {
+                            if ($hash->{PLAYERMAC} ne $_) {
+                                IOWrite( $hash, "$_ status 0 500 tags:Kcu\n" );
+                            }
+                        }
+                    }                
+                }
+            }
+            # CD 0056 end
+            $hash->{SYNCMASTER} = $sm;
             $hash->{SYNCED} = "yes";
-            $hash->{SYNCMASTERPN} = SB_PLAYER_MACToLMSPlayername($hash,$2);  # CD 0018
+            $hash->{SYNCMASTERPN} = SB_PLAYER_MACToLMSPlayername($hash,$sm);  # CD 0018
             next;
 
         } elsif( $cur =~ /^(sync_slaves:)(.*)/ ) {
@@ -4269,7 +4312,7 @@ sub SB_PLAYER_MACToLMSPlayername( $$ ) {
 
     my $dev;
     foreach my $e ( keys %{$hash->{helper}{SB_PLAYER_SyncMasters}} ) {
-        if($mac eq $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC}) {
+        if(defined($hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC})&&($mac eq $hash->{helper}{SB_PLAYER_SyncMasters}{$e}{MAC})) {   # 0056 defined hinzugefügt
             $dev=$e;
             last;
         }
@@ -4468,6 +4511,8 @@ sub SB_PLAYER_LoadPlayerStates($)
 1;
 
 =pod
+=item summary    control Squeezebox Media Players
+=item summary_DE Ansteuerung von Squeezebox Media Playern 
 =begin html
  
 <a name="SB_PLAYER"></a>
