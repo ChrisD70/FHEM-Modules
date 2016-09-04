@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0057 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0058 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -253,6 +253,7 @@ sub SB_PLAYER_Attr( @ ) {
                     $hash->{helper}{ttsOptions}{forcegroupon}=1 if($opt=~ m/forcegroupon/);
                     $hash->{helper}{ttsOptions}{internalsave}=1 if($opt=~ m/internalsave/);         # CD 0029
                     $hash->{helper}{ttsOptions}{ignorevolumelimit}=1 if($opt=~ m/ignorevolumelimit/);   # CD 0031
+                    $hash->{helper}{ttsOptions}{nouriescape}=1 if($opt=~ m/nouriescape/);   # CD 0058
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -2397,7 +2398,8 @@ sub SB_PLAYER_Set( $@ ) {
                 Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: ".(utf8::is_utf8($outstr)?"utf-8":"no utf-8")); # CD 0057
                 # CD 0057
                 
-                $outstr = uri_escape( $outstr );
+                $outstr = uri_escape( $outstr ) if(!defined($hash->{helper}{ttsOptions}{nouriescape}));  # CD 0058
+                
                 # CD 0045
                 my $ttslink=AttrVal( $name, "ttslink", "" );
                 if(defined($ttslink)) {
