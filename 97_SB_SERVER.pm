@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 9811 beta 0022 CD $
+# $Id: 97_SB_SERVER.pm 9811 beta 0021 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -65,7 +65,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0022';
+use constant SB_SERVER_VERSION => '0021';
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -2124,7 +2124,6 @@ sub SB_SERVER_setStates($$)
 1;
 
 =pod
-=item device 
 =item summary    connect to a Logitech Media Server (LMS)
 =item summary_DE Anbindung an Logitech Media Server (LMS) 
 =begin html
@@ -2143,7 +2142,8 @@ sub SB_SERVER_setStates($$)
    
     Attention:  The <code>[:cliserverport]</code> parameter is
     optional. You just need to configure it if you changed it on the LMS.
-    The default TCP port is 9090.<br><br>   
+    The default TCP port is 9090.<br>
+   
     <b>Optional</b>
     <ul>
       <li><code>&lt;[RCC]&gt;</code>: You can define a FHEM RCC Device, if you want to wake it up when you set the SB_SERVER on.  </li>
@@ -2157,41 +2157,27 @@ sub SB_SERVER_setStates($$)
   <ul>
     <code>set &lt;name&gt; &lt;command&gt;</code>
     <br><br>
-    This module supports the following SB_Server related commands:<br><br>
+    This module supports the following SB_Server related commands:<br>
+ 
+    SB_Server related commands:<br>
     <ul>
-      <li><b>abort</b> -  Stops the connection to the server</li>
-      <li><b>addToFHEMUpdate</b> -  Includes the modules in the FHEM update, needs to be executed only once</li>
-      <li><b>cliraw &lt;cli-command&gt;</b> -  Sends a &lt;cli-command&gt; to the LMS CLI</li>
-      <li><b>on</b> -  Tries to switch on the Server by WOL or RCC</li>
-      <li><b>removeFromFHEMUpdate</b> -  Removes the modules from the FHEM update</li>
       <li><b>renew</b> -  Renews the connection to the server</li>
+      <li><b>abort</b> -  Stops the connection to the server</li>
+      <li><b>cliraw &lt;cli-command&gt;</b> -  Sends a &lt;cli-command&gt; to the LMS CLI</li>
       <li><b>rescan</b> -  Starts the scan of the music library of the server</li>
       <li><b>statusRequest</b> -  Update of readings from server and configured players</li>
+      <li><b>addToFHEMUpdate</b> -  Includes the modules in the FHEM update, needs to be executed only once</li>
+      <li><b>removeFromFHEMUpdate</b> -  Removes the modules from the FHEM update</li>
     </ul>   
     <br>
   </ul>
   <a name="SBserverattr"></a>
   <b>Attributes</b>
   <ul>
-    <li><code>alivetimer &lt;sec&gt;</code><br>
-    Default: 120. Every &lt;sec&gt; seconds it is checked, whether the computer with its LMS is still reachable
-    – either via an internal ping (that leads regulary to problems) or via PRESENCE (preferred, no problems)
-    - and running.</li>
-    <li><code>doalivecheck &lt;true|false&gt;</code><br>
-    Switches the LMS-monitoring on or off.</li>
-    <li><code>httpport &lt;port&gt;</code><br>
-    Normally the http-port is set to 9000. If this ist NOT the case, you have to enter here the new
-    port-number. You can check the port-number of the LMS within its setup under Setup – Network – Web Server Port Number.</li>
-    <li><a name="SBserver_attribut_ignoredIPs"><code>ignoredIPs &lt;IP-Address[,IP-Address]&gt;</code>
+    <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Address&gt;[,IP-Address]</code></b>
     </a><br />With this attribute you can define IP-addresses of players which will to be ignored by the server, e.g. "192.168.0.11,192.168.0.37"</li>
-    <li><a name="SBserver_attribut_ignoredMACs"><code>ignoredMACs &lt;MAC-Address[,MAC-Address]&gt;</code>
+    <li><a name="SBserver_attribut_ignoredMACs"><b><code>ignoredMACs &lt;MAC-Address&gt;[,MAC-Address]</code></b>
     </a><br />With this attribute you can define MAC-addresses of players which will to be ignored by the server, e.g. "00:11:22:33:44:55,ff:ee:dd:cc:bb:aa"</li>
-    <li><code>maxcmdstack &lt;quantity&gt;</code><br>
-    By default the stack ist set up to 200. If the connection to the LMS is lost, up to &lt;quantity&gt;
-    commands are buffered. After the link is reconnected, commands, that are not older than five minutes,
-    are send to the LMS.</li>
-    <li><code>maxfavorites &lt;number&gt;</code><br>
-    Adjust here the maximal number of the favourites.</li>
   </ul>
 </ul>
 =end html
@@ -2207,7 +2193,7 @@ sub SB_SERVER_setStates($$)
     <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
-    Diese Modul erm&ouml;glicht es - zusammen mit dem Modul SB_PLAYER - einen
+    Diese Modul erm&oumlglicht es - zusammen mit dem Modul SB_PLAYER - einen
     Logitech Media Server (LMS) und die angeschlossenen Squeezebox Media
     Player zu steuern.<br><br>
    
@@ -2219,8 +2205,8 @@ sub SB_SERVER_setStates($$)
     <ul>
       <li><code>&lt;[RCC]&gt;</code>: Hier kann ein FHEM RCC Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
       <li><code>&lt;[WOL]&gt;</code>: Hier kann ein FHEM WOL Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
-      <li><code>&lt;[PRESENCE]&gt;</code>: Hier kann ein FHEM PRESENCE Device angegeben werden mit dem die Erreichbarkeit des Servers &uuml;berpr&uuml;ft werden kann.</li>
-      <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&ouml;nnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
+      <li><code>&lt;[PRESENCE]&gt;</code>: Hier kann ein FHEM PRESENCE Device angegeben werden mit dem die Erreichbarkeit des Servers &uumlberpr&uumlft werden kann.</li>
+      <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&oumlnnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
     </ul><br>
   </ul>
   <a name="SBserverset"></a>
@@ -2228,42 +2214,25 @@ sub SB_SERVER_setStates($$)
   <ul>
     <code>set &lt;name&gt; &lt;command&gt;</code>
     <br><br>
-    Dieses Modul unterst&uuml;tzt folgende SB_SERVER relevanten Befehle:<br><br>
+    Dieses Modul unterst&uumltzt folgende SB_SERVER relevanten Befehle:<br><br>
     <ul>
-      <li><b>abort</b> -  Bricht die Verbindung zum Server ab.</li>
-      <li><b>addToFHEMUpdate</b> -  F&uuml;gt die Module dem FHEM-Update hinzu, muss nur einmalig ausgef&uuml;hrt werden.</li>
-      <li><b>cliraw &lt;cli-command&gt;</b> -  Sendet einen CLI-Befehl an das LMS CLI</li>
-      <li><b>on</b> -  Versucht den Server per WOL oder RCC einzuschalten.</li>
-      <li><b>removeFromFHEMUpdate</b> -  Schlie&szlig;t die Module vom FHEM-Update aus.</li>
       <li><b>renew</b> -  Erneuert die Verbindung zum Server.</li>
-      <li><b>rescan</b> -  Startet einen Scan der Musikbibliothek f&uuml;r alle im Server angegebenen Verzeichnisse.</li>
+      <li><b>abort</b> -  Bricht die Verbindung zum Server ab.</li>
+      <li><b>cliraw &lt;cli-command&gt;</b> -  Sendet einen CLI-Befehl an das LMS CLI</li>
+      <li><b>rescan</b> -  Startet einen Scan der Musikbibliothek f&uumlr alle im Server angegebenen Verzeichnisse.</li>
       <li><b>statusRequest</b> -  Aktualisiert die Readings von Server und konfigurierten Playern.</li>
+      <li><b>addToFHEMUpdate</b> -  F&uumlgt die Module dem FHEM-Update hinzu, muss nur einmalig ausgef&uumlhrt werden.</li>
+      <li><b>removeFromFHEMUpdate</b> -  Schlie&szlig;t die Module vom FHEM-Update aus.</li>
     </ul>   
     <br>
   </ul>
   <a name="SBserverattr"></a>
   <b>Attribute</b>
   <ul>
-    <li><code>alivetimer &lt;sec&gt;</code><br>
-    Default 120. Alle &lt;sec&gt; Sekunden wird &uuml;berpr&uuml;ft, ob der Rechner mit dem LMS noch erreichbar ist
-    - entweder über internen Ping (f&uuml;hrt zu regelm&auml;&szlig;igen H&auml;ngern von FHEM) oder PRESENCE (bevorzugt,
-    keine H&auml;nger) - und ob der LMS noch l&auml;uft.</li>
-    <li><code>doalivecheck &lt;true|false&gt;</code><br>
-    &Uuml;berwachung des LMS ein- oder auschalten.</li>
-    <li><code>httpport &lt;port&gt;</code><br>
-    Im Normalfall ist der http-Port auf 9000 eingestellt. Sollte dies NICHT der Fall sein muss hier die ge&auml;nderte
-    Portnummer eingetragen werden. Zur &Uuml;berpr&uuml;fung kann im Server unter Einstellungen – Erweitert –Netzwerk
-    - Anschlussnummer des Webservers nachgeschlagen werden.</li>
     <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Adresse&gt;[,IP-Adresse]</code></b>
-    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&auml;te durch die Angabe derer IP-Adressen unterdrückt werden, z.B. "192.168.0.11,192.168.0.37"</li>
+    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&aumlte durch die Angabe derer IP-Adressen unterdrückt werden, z.B. "192.168.0.11,192.168.0.37"</li>
     <li><a name="SBserver_attribut_ignoredMACs"><b><code>ignoredMACs &lt;MAC-Adresse&gt;[,MAC-Adresse]</code></b>
-    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&auml;te durch die Angabe derer MAC-Adressen unterdrückt werden, z.B. "00:11:22:33:44:55,ff:ee:dd:cc:bb:aa"</li>
-    <li><code>maxcmdstack &lt;Anzahl&gt;</code><br>
-    Default ist der Stack auf eine Gr&ouml;&szlig;e von 200 eingestellt. Wenn die Verbindung zum LMS unterbrochen ist,
-    werden bis zu &lt;Anzahl&gt; Befehle zwischengespeichert. Nach dem Verbindungsaufbau werden die Befehle,
-    die nicht &auml;lter als 5 Minuten sind, an den LMS geschickt.</li>
-    <li><code>maxfavorites &lt;Anzahl&gt;</code><br>
-    Die maximale Anzahl der Favoriten wird hier eingestellt.</li>
+    </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&aumlte durch die Angabe derer MAC-Adressen unterdrückt werden, z.B. "00:11:22:33:44:55,ff:ee:dd:cc:bb:aa"</li>
   </ul>
 </ul>
 =end html_DE
