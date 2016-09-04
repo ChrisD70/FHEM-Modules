@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0056 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0057 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2390,7 +2390,13 @@ sub SB_PLAYER_Set( $@ ) {
                     Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: string is not utf-8, using iso-8859-1");
                     $outstr=encode('utf-8',decode("iso-8859-1",$outstr));
                 }
-
+                
+                # CD 0057 Test FHEMAN
+                Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: ".(utf8::is_utf8($outstr)?"utf-8":"no utf-8")); # CD 0057
+                utf8::upgrade($outstr);
+                Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: ".(utf8::is_utf8($outstr)?"utf-8":"no utf-8")); # CD 0057
+                # CD 0057
+                
                 $outstr = uri_escape( $outstr );
                 # CD 0045
                 my $ttslink=AttrVal( $name, "ttslink", "" );
@@ -4511,6 +4517,7 @@ sub SB_PLAYER_LoadPlayerStates($)
 1;
 
 =pod
+=item device 
 =item summary    control Squeezebox Media Players
 =item summary_DE Ansteuerung von Squeezebox Media Playern 
 =begin html
@@ -4598,14 +4605,16 @@ sub SB_PLAYER_LoadPlayerStates($)
           <li>play - ignore saved play state, start playing after restore</li>
           <li>stop - ignore saved play state, stop playing after restore</li>
         </ul>
-    <li><b>show line1:&lt;line1&gt; line2:[&lt;line2&gt;] duration:&lt;duration&gt;</b> - show text on the display of the player for a certain duration.
+     <li><b>show line1:&lt;line1&gt; line2:[&lt;line2&gt;] duration:&lt;duration&gt;</b> - show text on the display of the player for a certain duration.
     If no 2. row should be displayed, the command however must contain 'line2:'</li>
        <ul>
          <li>line1 - Text to be displayed in the first line</li>
          <li>line2 - Text to be displayed in the second line</li>
          <li>duration -  Duration of display in seconds</li>
        </ul>
-   </ul>
+     <li><b>CurrentTrackPosition &lt;TimePosition&gt;</b> -  Sets the current timeposition inside the title to the given value.</li>
+     <li><b>resetTTS</b> -  Resets TTS, can be necessary if the output via Google blocks.</li>
+    </ul>
 
    <br>Alarms<br>
    <ul>
@@ -4651,8 +4660,6 @@ sub SB_PLAYER_LoadPlayerStates($)
     <li><a href="#do_not_notify">do_not_notify</a> true|false<br>
     Disable FileLog/notify/inform notification for a device. This affects the received signal, the set and trigger commands.
     Possible values are true|false</li>
-    <li>volumeLimit &lt;value&gt;<br>
-      Upper limit for volume setting by FHEM.</li>
     <li><a name="SBplayeramplifier">amplifier</a> on|play<br>
       Configure trigger for amplifier device. Possible values:
       <ul>
@@ -4660,45 +4667,38 @@ sub SB_PLAYER_LoadPlayerStates($)
         <li><code>play</code>: Switch on "play", "pause" and "stop" events.</li>
       </ul>
     </li>
-    <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
-      Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
     <li>amplifierDelayOff &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Delay in seconds before turning the amplifier off after the player has stopped or been turned off. A second comma separated delay optionally enables switching off the amplifier after receiving a pause event.</li>
-    <li>updateReadingsOnSet true|false<br>
-      If set to true, most readings are immediately updated when a set command is executed without waiting for a reply from the server.</li>
-    <li>statusRequestInterval &lt;sec&gt;<br>
-      Interval in seconds for automatic status requests. Default: 300</li>
-    <li>ttsDelay &lt;sec1&gt;[,&lt;sec2&gt;]<br>
-      Delay in seconds before starting text to speech playback. A second comma separated delay may optionally be given to be used if the player is off.</li>
-    <li>ttsMP3FileDir &lt;directory&gt;<br>
-      Directory to be used by default for text-embedded MP3-Files.</li><br>
-      Example:<br>
-      <code>attr &lt;SB_device&gt; ttsMP3FileDir /volume1/music/sounds</code><br><br>
-    <li>ttsPrefix &lt;text&gt;<br>
-      Text prepended to every text to speech output</li>
-    <li>ttsVolume &lt;value&gt;<br>
-      Volume for text to speech. Defaults to current volume. If the attribute <code>ttsoptions</code> contains <code>ignorevolumelimit</code>
-      any volume limit will be ignored for text to speech. Possible values: 0-100</li>
     <li>coverartheight 50|100|200<br>Display the coverart with a height of 50, 100 or 200 pixels</li>
     <li>coverartwidth 50|100|200<br>Display the coverart with a width of 50, 100 or 200 pixels</li>
     <li><a href="#event-on-change-reading">event-on-change-reading</a> &lt;expression&gt;<br><br>
       Example:<br>
       <code>attr &lt;playername&gt; event-on-change-reading currentAlbum, currentArtist, currentTitle</code><br>
       Only changes in the readings currentAlbum, currentArtist, currentTitle cause an event.</li><br>
+    <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
+      Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
     <li>idismac true|false<br>
       Determines if the MAC-adress should be the unique identifier</li>
-    <li>volumeStep &lt;value&gt;<br>
-      Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1–100. Default value: 10</li>
+    <li>statusRequestInterval &lt;sec&gt;<br>
+      Interval in seconds for automatic status requests. Default: 300</li>
     <li>syncedNamesSource FHEM|LMS<br>
       Determines if the synced reading contains the LMS or FHEM names of the players</li>
+    <li>syncVolume 0|1<br>
+      Defines whether the loudness of this player is synchronized with the other players of its group</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
       For the use of T2Speech from the company VoiceRSS (voicerss.org) an API-key is needed. Not needed with Google’s T2Speech.</li>
+    <li>ttsDelay &lt;sec1&gt;[,&lt;sec2&gt;]<br>
+      Delay in seconds before starting text to speech playback. A second comma separated delay may optionally be given to be used if the player is off.</li>
     <li>ttslanguage de|en|fr<br>
       Specifies the language of the voice output. A complete list of available languages using Google’s TTS can be found at wikipedia.org.</li>
     <li>ttslink &lt;link&gt;<br>
       Enter the link to the TTS-Funktion. Google, VoiceRSS and –with reservations- Text2Speech are supported.<br><br>
       Example of using Google’s TTS:<br>
       <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&tl=&lt;LANG&gt;&q=&lt;TEXT&gt;&client=tw-ob</code></li><br>
+    <li>ttsMP3FileDir &lt;directory&gt;<br>
+      Directory to be used by default for text-embedded MP3-Files.</li><br>
+      Example:<br>
+      <code>attr &lt;SB_device&gt; ttsMP3FileDir /volume1/music/sounds</code><br><br>
     <li>ttsOptions &lt;options&gt;<br>various options, comma-separated, for TTS-output.
       <br><br>Options:<ul>
       <li>debug - Write additional information into the FHEM-logfile</li>
@@ -4707,6 +4707,17 @@ sub SB_PLAYER_LoadPlayerStates($)
       <li>forcegroupon - Switch on all players of the group.</li>
       <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output</li>
       </ul></li>
+    <li>ttsPrefix &lt;text&gt;<br>
+      Text prepended to every text to speech output</li>
+    <li>ttsVolume &lt;value&gt;<br>
+      Volume for text to speech. Defaults to current volume. If the attribute <code>ttsoptions</code> contains <code>ignorevolumelimit</code>
+      any volume limit will be ignored for text to speech. Possible values: 0-100</li>
+    <li>updateReadingsOnSet true|false<br>
+      If set to true, most readings are immediately updated when a set command is executed without waiting for a reply from the server.</li>
+    <li>volumeLimit &lt;value&gt;<br>
+      Upper limit for volume setting by FHEM.</li>
+    <li>volumeStep &lt;value&gt;<br>
+      Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1–100. Default value: 10</li>
   </ul>
 </ul>
 =end html
@@ -4733,7 +4744,7 @@ sub SB_PLAYER_LoadPlayerStates($)
       <li><code>&lt;[ampl]&gt;</code>: Ein FHEM-Device welches ein- oder ausgeschaltet werden soll, wenn
       ein passendes Event empfangen wird. Das Attribut 
       <a href="#SBplayeramplifier">amplifier</a> gibt an, ob das passende Event on/off oder play/pause sein soll.</li>
-      <li><code>&lt;[coverart]&gt;</code>: Unter <coverart> gibt man den Namen eines FHEM weblink image
+      <li><code>&lt;[coverart]&gt;</code>: Unter &lt;coverart&gt; gibt man den Namen eines FHEM weblink image
       Elementes an. Der Player aktualisiert dann jeweils den Link auf das aktuelle Coverart Bild, so dass
       man dieses z.B. im Floorplan anzeigen kann.</li>
    </ul><br><br>
@@ -4752,72 +4763,72 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>pause [0|1]</b> -  Schaltet zwischen play und pause hin und her (Toggle-Funktion).
      &ldquo;pause 1&rdquo; und &ldquo;pause 0&rdquo; schaltet bedingungslos auf Pause resp. Wiedergabe.</li>
      <li><b>stop</b> -  Stoppt die Wiedergabe</li>
-     <li><b>next|channelUp</b> -  Springt zum n&aumlchsten Track</li>
-     <li><b>prev|channelDown</b> -  Springt zum vorherigen Track bzw. zum Anfang des gegenw&aumlrtig gespielten Tracks.</li>
-     <li><b>mute</b> -  Toggelt die Lautst&aumlrke stumm und wieder zur&uumlck.</li>
-     <li><b>volume &lt;n&gt;</b> -  Stellt die Lautst&aumlrke auf einen Wert &lt;n&gt; ein. Dabei muss &lt;n&gt;
+     <li><b>next|channelUp</b> -  Springt zum n&auml;chsten Track</li>
+     <li><b>prev|channelDown</b> -  Springt zum vorherigen Track bzw. zum Anfang des gegenw&auml;rtig gespielten Tracks.</li>
+     <li><b>mute</b> -  Toggelt die Lautst&auml;rke stumm und wieder zur&uuml;ck.</li>
+     <li><b>volume &lt;n&gt;</b> -  Stellt die Lautst&auml;rke auf einen Wert &lt;n&gt; ein. Dabei muss &lt;n&gt;
      eine Zahl zwischen 0 und 100 sein.</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  mit volume identisch</li>
-     <li><b>volumeDown</b> -  Verringert die Lautst&aumlrke um eine bestimmte Anzahl von Schritten die mit dem Attribut
+     <li><b>volumeDown</b> -  Verringert die Lautst&auml;rke um eine bestimmte Anzahl von Schritten die mit dem Attribut
      <a href="#SBplayervolumeStep">volumeStep</a> vorgegeben werden. Wird nichts vorgegeben, werden 10 Schritte verwendet</li>
-     <li><b>volumeUp</b> -  Erh&oumlht die Lautst&aumlrke um eine bestimmte Anzahl von Schritten, die mit dem Attribut
+     <li><b>volumeUp</b> -  Erh&ouml;ht die Lautst&auml;rke um eine bestimmte Anzahl von Schritten, die mit dem Attribut
      <a href="#SBplayervolumeStep">volumeStep</a> vorgegeben werden. Wird nichts vorgegeben, werden 10 Schritte verwendet</li>
-     <li><b>on</b> -  Schaltet den Player ein. Ist das nicht m&oumlglich, wird ein play-Befehl gesendet.</li>
-     <li><b>off</b> -  Schaltet den Player aus. Ist das nicht m&oumlglich, wird ein stop-Befehl gesendet.</li>
-     <li><b>shuffle off|song|album</b> -  Schaltet die zuf&aumlllige Wiedergabe aus (off); f&uumlr Songs einer Wiedergabeliste (song)
-     ein oder f&uumlr eine Liste von Alben ein(album).</li>
-     <li><b>repeat one|all|off</b> -  Schaltet die Wiederholung von Tracks einer Wiedergabeliste aus (off), f&uumlr ein Track
-     ein (one) oder f&uumlr alle St&uumlcke der Wiedergabeliste ein (all).</li>
+     <li><b>on</b> -  Schaltet den Player ein. Ist das nicht m&ouml;glich, wird ein play-Befehl gesendet.</li>
+     <li><b>off</b> -  Schaltet den Player aus. Ist das nicht m&ouml;glich, wird ein stop-Befehl gesendet.</li>
+     <li><b>shuffle off|song|album</b> -  Schaltet die zuf&auml;llige Wiedergabe aus (off); f&uuml;r Songs einer Wiedergabeliste (song)
+     ein oder f&uuml;r eine Liste von Alben ein(album).</li>
+     <li><b>repeat one|all|off</b> -  Schaltet die Wiederholung von Tracks einer Wiedergabeliste aus (off), f&uuml;r ein Track
+     ein (one) oder f&uuml;r alle St&uuml;cke der Wiedergabeliste ein (all).</li>
      <li><b>sleep &lt;timespec&gt;</b> -  Dauer, nach der sich der Player ausschalten soll,
      Format hh:mm[:ss]. Bei der Zeitangabe handelt es sich um eine relative Zeitangabe ab
      dem Aufruf. Das bedeutet:
      <code>set &lt;myPlayer&gt; sleep 22:00:00</code> schaltet den Player nicht um 10 Uhr abends aus,
      sondern erst 22 Stunden nach dem Aufruf!</li>   
-     <li><b>favorites &lt;favorite&gt;</b> -  L&oumlscht die aktuelle Wiedergabeliste und startet den Favoriten &lt;favorite&gt;.
-     &lt;favorite&gt; ist der ausgew&aumlhlte Favorit aus einer Favoritenliste. Das Frontend kann eine
-     Dropdownliste zur Verf&uumlgung stellen, aus der der Favorit ausgew&aumlhlt werden kann.</li>   
+     <li><b>favorites &lt;favorite&gt;</b> -  L&ouml;scht die aktuelle Wiedergabeliste und startet den Favoriten &lt;favorite&gt;.
+     &lt;favorite&gt; ist der ausgew&auml;hlte Favorit aus einer Favoritenliste. Das Frontend kann eine
+     Dropdownliste zur Verf&uuml;gung stellen, aus der der Favorit ausgew&auml;hlt werden kann.</li>   
      <li><b>talk|sayText &lt;text&gt;</b> -  Speichert den aktuellen Stand der Playlist, sagt den Text
      &lt;text&gt; unter Zuhilfenahme von GoogleTTS oder VoiceRSS an und setzt die Wiedergabe ab dem
      gespeicherten Punkt fort.</li>
-     <li><b>playlist track|album|artist|genre|year &lt;x&gt;</b> -  L&oumlscht die aktuelle Wiedergabeliste
+     <li><b>playlist track|album|artist|genre|year &lt;x&gt;</b> -  L&ouml;scht die aktuelle Wiedergabeliste
      und gibt das vorgegebene Argument &lt;x&gt; wieder.</li>
      <li><b>playlist genre:&lt;genre&gt; artist:&lt;artist&gt; album:&lt;album&gt;</b> -  
-     L&oumlscht die aktuelle Wiedergabeliste und gibt alle Tracks wieder, die den angegebenen Kriterien entsprechen.
-     Ein * steht f&uumlr beliebige Angaben.</li>
+     L&ouml;scht die aktuelle Wiedergabeliste und gibt alle Tracks wieder, die den angegebenen Kriterien entsprechen.
+     Ein * steht f&uuml;r beliebige Angaben.</li>
      <br>Beispiel:<br>
      <code>set myplayer playlist genre:* artist:Whigfield album:*</code><br><br>
-     <li><b>playlist play &lt;filename|playlistname&gt;</b> -  L&oumlscht die aktuelle Wiedergabeliste und
+     <li><b>playlist play &lt;filename|playlistname&gt;</b> -  L&ouml;scht die aktuelle Wiedergabeliste und
      startet die Wiedergabe eines Track oder einer Playlist.</li>
-     <li><b>playlist add &lt;filename|playlistname&gt;</b> -  H&aumlngt die angegebene Datei oder Playlist
+     <li><b>playlist add &lt;filename|playlistname&gt;</b> -  H&auml;ngt die angegebene Datei oder Playlist
      an das Ende der aktuellen Playlist an.</li>
-     <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uumlgt die angegebene Datei oder Playlist
+     <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uuml;gt die angegebene Datei oder Playlist
      hinter der aktuellen Datei oder Playlist in der aktuellen Playlist ein.</li>
      <li><b>statusRequest</b> -  Aktualisierung aller Readings.</li>
-     <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - F&uumlgt den/die Player mit dem/den Namen
+     <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - F&uuml;gt den/die Player mit dem/den Namen
      &lt;playerName&gt; der Multiroom-Gruppe desjenigen Players hinzu, der diesen Befehl aufgerufen hat;
      entfernt aber bei Bedarf den Player &lt;playerName&gt; aus seiner bisherigen Gruppe.<br>Optionen:</li>
         <ul>
           <li>new - Bildet eine neue Gruppe und entfernt den/die Player aus seiner/ihren bisherigen Gruppe/n</li>
-          <li>asSlave - F&uumlgt diesen Player zu einem anderen Player oder einer vorhandenen Gruppe hinzu.</li>
+          <li>asSlave - F&uuml;gt diesen Player zu einem anderen Player oder einer vorhandenen Gruppe hinzu.</li>
         </ul><br>
      Examples:<br>
-     <code>set playerA sync playerB</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uumlgt PlayerB der Gruppe von PlayerA hinzu;
+     <code>set playerA sync playerB</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uuml;gt PlayerB der Gruppe von PlayerA hinzu;
      beide geben den Inhalt von PlayerA wieder.<br>
-     <code>set playerA sync playerB,playerC,playerD</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uumlgt PlayerB, C and D der
+     <code>set playerA sync playerB,playerC,playerD</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uuml;gt PlayerB, C and D der
      Gruppe von PlayerA hinzu; alle geben den Inhalt von PlayerA wieder.<br>
      <code>set playerA sync playerB new</code>&nbsp;&nbsp;&nbsp;&nbsp;Bildet eine neue Gruppe mit PlayerA
      und PlayerB, beide geben den Inhalt von PlayerA wieder.<br>
-     <code>set playerA sync playerB asSlave</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uumlgt PlayerA der Gruppe von
+     <code>set playerA sync playerB asSlave</code>&nbsp;&nbsp;&nbsp;&nbsp;F&uuml;gt PlayerA der Gruppe von
      PlayerB hinzu; beide geben den Inhalt von PlayerB wieder.<br><br>
      <li><b>unsync</b> -  Entfernt diesen Player aus allen Multiroom-Gruppen</li>
-     <li><b>playlists &lt;name&gt;</b> -  L&oumlscht die aktuelle Playlist und startet die ausgew&aumlhlte Playlist.</li>
+     <li><b>playlists &lt;name&gt;</b> -  L&ouml;scht die aktuelle Playlist und startet die ausgew&auml;hlte Playlist.</li>
      <li><b>cliraw &lt;command&gt;</b> - Kann direkte Befehle an das CLI Interface schicken. Die Antwort
      steht dann im Internal LASTANSWER.</li>
      <li><b>save [&lt;name&gt;]</b> -  Speichert den derzeitigen Player-Status unter dem Namen &lt;name&gt;.</li>
      <li><b>recall [&lt;name&gt;] [options] </b> -  Ruft einen gespeicherten Player-Status auf.<br>Optionen:</li>
         <ul>
-          <li>del - L&oumlscht nach dem Restore den gespeicherten Status</li>
-          <li>delonly - L&oumlscht den gespeicherten Status ohne vorherigem Restore</li>
+          <li>del - L&ouml;scht nach dem Restore den gespeicherten Status</li>
+          <li>delonly - L&ouml;scht den gespeicherten Status ohne vorherigem Restore</li>
           <li>off - Beachtet die gespeicherten Einstellungen zum Betriebszustand nicht
           sondern schaltet den Player nach Restore aus.</li>
           <li>on - Beachtet die gespeicherten Einstellungen zum Betriebszustand nicht
@@ -4826,61 +4837,64 @@ sub SB_PLAYER_LoadPlayerStates($)
           <li>stop - Beachtet den gespeicherten play-Status nicht sondern stoppt die Wiedergabe nach Restore.</li>
         </ul>
     <li><b>show line1:&lt;text1&gt; line2:[&lt;text2&gt;] duration:&lt;duration&gt;</b> - Zeigt
-    einen beliebigen Text auf dem Display f&uumlr eine vorgegebene Dauer an. Wenn keine 2. Zeile
+    einen beliebigen Text auf dem Display f&uuml;r eine vorgegebene Dauer an. Wenn keine 2. Zeile
     angezeigt werden sollen, muss trotzdem 'line2:' im Aufruf enthalten sein</li>
        <ul>
          <li>text1 - Inhalt der ersten Zeile</li>
          <li>text2 - Inhalt der zweiten Zeile</li>
          <li>duration -  Dauer der Anzeige auf dem Display in Sekunden</li>
        </ul>
+     <li><b>CurrentTrackPosition &lt;TimePosition&gt;</b> -  Setzt die Abspielposition innerhalb des
+     Liedes auf den angegebenen Zeitwert (z.B. 0:01:15).</li>
+     <li><b>resetTTS</b> -  TTS zur&uuml;cksetzen, kann n&ouml;tig sein wenn die Ausgabe über Google h&auml;ngt.</li>
    </ul>
 
-   <br>Befehlsliste zur Steuerung der Wecker, mehrere Wecker k&oumlnnen definiert werden.<br><br>
+   <br>Befehlsliste zur Steuerung der Wecker, mehrere Wecker k&ouml;nnen definiert werden.<br><br>
    <ul>
-     <li><b>allalarms add &lt;weekdays&gt; &lt;alarm time&gt; [&lt;playlist|URL&gt;]</b> -  F&uumlgt einen neuen Wecker hinzu.</li>
-     <br>&lt;weekdays&gt; - Aktive Tage f&uumlr diesen Wecker. Format: [0..7|daily|all]
-     0 bis 6 f&uumlr Sonntag bis Samstag. 7, daily und all f&uumlr t&aumlgliches Wecken.
-     Die Wochentage k&oumlnnen ebenfalls durch die ersten zwei Buchstaben des
+     <li><b>allalarms add &lt;weekdays&gt; &lt;alarm time&gt; [&lt;playlist|URL&gt;]</b> -  F&uuml;gt einen neuen Wecker hinzu.</li>
+     <br>&lt;weekdays&gt; - Aktive Tage f&uuml;r diesen Wecker. Format: [0..7|daily|all]
+     0 bis 6 f&uuml;r Sonntag bis Samstag. 7, daily und all f&uuml;r t&auml;gliches Wecken.
+     Die Wochentage k&ouml;nnen ebenfalls durch die ersten zwei Buchstaben des
      Wochentages sowohl in deutscher und englischer Sprache angegeben werden
      (Su/So, Mo, Tu/Di, We/Mi, Th/Do, Fr, Sa).<br><br>
      &lt;alarm time&gt; Weckzeit im Format hh:mm[:ss]<br>
      &lt;playlist|URL&gt; Weckton, wenn dieser Parameter nicht gesetzt wird, wird die aktuelle Playlist verwendet.<br><br>
      Beispiel:<br>
-     <code>set player allalarms add 1DiWe 06:30 AlarmPlaylist</code> - F&uumlgt einen
+     <code>set player allalarms add 1DiWe 06:30 AlarmPlaylist</code> - F&uuml;gt einen
      neuen Wecker hinzu. Der Wecker startet jeden Montag bis Mittwoch um 6:30 Uhr
      und spielt die Playlist AlarmPlaylist ab.<br><br>
-     <li><b>allalarms enable|disable</b> - Setzt das globale einable/disable Flag f&uumlr alle Wecker.
+     <li><b>allalarms enable|disable</b> - Setzt das globale einable/disable Flag f&uuml;r alle Wecker.
      "disable" deaktiviert alle Wecker. “enable" gestattet allen
      Weckern sich nach den individuellen Flags zu richten. Identisch mit dem Befehl alarmsEnabled on|off.</li>
-     <li><b>allalarms delete</b> -  L&oumlscht alle Wecker.</li>
+     <li><b>allalarms delete</b> -  L&ouml;scht alle Wecker.</li>
      <li><b>allalarms statusRequest</b> -  Aktualisiert den Zustand aller Wecker.</li>
      <li><b>alarmsSnooze &lt;minutes&gt;</b> -  Setzt die Dauer der Weckwiederholung (in Minuten).</li>
-     <li><b>alarmsTimeout &lt;minutes&gt;</b> -  Bestimmt, wie lange ein Wecker l&aumluft
-     bevor er automatisch beendet wird. Ist der Wert 0, l&aumluft der Wecker, bis er manuell beendet wird.</li>
-     <li><b>alarmsDefaultVolume &lt;vol&gt;</b> -  Legt die generelle Lautst&aumlrke (0-100) f&uumlr den Wecker fest.
-     Dieser Wert kann durch eine individuelle Lautst&aumlrkeangabe je Alarm &uumlberschrieben werden (siehe auch
+     <li><b>alarmsTimeout &lt;minutes&gt;</b> -  Bestimmt, wie lange ein Wecker l&auml;uft
+     bevor er automatisch beendet wird. Ist der Wert 0, l&auml;uft der Wecker, bis er manuell beendet wird.</li>
+     <li><b>alarmsDefaultVolume &lt;vol&gt;</b> -  Legt die generelle Lautst&auml;rke (0-100) f&uuml;r den Wecker fest.
+     Dieser Wert kann durch eine individuelle Lautst&auml;rkeangabe je Alarm &uuml;berschrieben werden (siehe auch
      <a href="#SBplayeralarmxvolume">alarm&lt;X&gt; volume &lt;n&gt;</a>)</li>
-     <li><b>alarmsFadeIn on|off</b> -  Schaltet fadeIn f&uumlr die Wecker ein (on) oder aus (off)</li>
-     <li><b>alarmsEnabled on|off</b> -  Gibt an, ob die eingetragenen Wecker &uumlberhaupt abgespielt
+     <li><b>alarmsFadeIn on|off</b> -  Schaltet fadeIn f&uuml;r die Wecker ein (on) oder aus (off)</li>
+     <li><b>alarmsEnabled on|off</b> -  Gibt an, ob die eingetragenen Wecker &uuml;berhaupt abgespielt
      werden sollen (on) oder nicht (off).</li>
      <li><b>snooze</b> - Schaltet einen gerade laufenden Wecker aus und nach einer durch
      das Reading alarmsSnooze definierten Zeit wieder ein..</li>
      <br>
    </ul>
-   Befehle f&uumlr einzelne Wecker (X entspricht der Nummer des Weckers)
+   Befehle f&uuml;r einzelne Wecker (X entspricht der Nummer des Weckers)
    <ul>
      <br>
-     <li><b>alarm&lt;X&gt; delete</b> -  L&oumlscht den Wecker &lt;X&gt; aus der Weckerliste.</li>
+     <li><b>alarm&lt;X&gt; delete</b> -  L&ouml;scht den Wecker &lt;X&gt; aus der Weckerliste.</li>
      <li><b><a name="SBplayeralarmxvolume">alarm&lt;X&gt; volume &lt;n&gt;</a></b> -  Stellt
-     die Lautst&aumlrke des Weckers &lt;X&gt; auf den Wert &lt;n&gt;.</li>
+     die Lautst&auml;rke des Weckers &lt;X&gt; auf den Wert &lt;n&gt;.</li>
      <li><b>alarm&lt;X&gt; enable|disable</b> -  Aktiviert bzw. deaktiviert den Wecker &lt;X&gt;</li>
      <li><b>alarm&lt;X&gt; sound &lt;playlist|URL&gt;</b> -  Bestimmt eine Playlist oder URL, die
      beim Wecker &lt;X&gt; abgespielt werden soll.</li>
      <li><b>alarm&lt;X&gt; repeat 0|off|no|1|on|yes</b> -  Bestimmt, ob Wecker &lt;X&gt; einmalig
-     (0|off|no) oder mehrfach (1|on|yes) ausgel&oumlst werden soll.</li>
-     <li><b>alarm&lt;X&gt; wdays &lt;weekdays&gt;</b> -  Aktive Tage f&uumlr diesen Wecker.
-     &lt;weekdays&gt; hat die m&oumlglichen Inhalte 0 bis 6 f&uumlr Sonntag bis Samstag, 7,
-     daily und all f&uumlr t&aumlgliches Wecken. Die Wochentage k&oumlnnen ebenfalls durch die ersten
+     (0|off|no) oder mehrfach (1|on|yes) ausgel&ouml;st werden soll.</li>
+     <li><b>alarm&lt;X&gt; wdays &lt;weekdays&gt;</b> -  Aktive Tage f&uuml;r diesen Wecker.
+     &lt;weekdays&gt; hat die m&ouml;glichen Inhalte 0 bis 6 f&uuml;r Sonntag bis Samstag, 7,
+     daily und all f&uuml;r t&auml;gliches Wecken. Die Wochentage k&ouml;nnen ebenfalls durch die ersten
      zwei Buchstaben des Wochentages sowohl in deutscher und englischer Sprache angegeben
      werden (Su/So, Mo, Tu/Di, We/Mi, Th/Do, Fr, Sa).</li>
      <li><b>alarm&lt;X&gt; time hh:mm[:ss]</b> - Weckzeit im Format hh:mm[:ss].</li>
@@ -4894,74 +4908,76 @@ sub SB_PLAYER_LoadPlayerStates($)
     <li>IODev &lt;servername&gt;<br>
       FHEM-Name des SB_SERVERS.</li>
     <li><a href="#do_not_notify">do_not_notify</a> true|false<br>
-    Mit diesem Attribut kann man einstellen, ob der Player ein FHEM Notify bei jeder &aumlnderung eines Readings lostritt oder nicht.</li>
-    <li>volumeLimit &lt;value&gt;<br>
-    Oberer Grenzwert zur Lautst&aumlrkeeinstellung durch FHEM.</li>
+    Mit diesem Attribut kann man einstellen, ob der Player ein FHEM Notify bei jeder &auml;nderung eines Readings lostritt oder nicht.</li>
     <li><a name="SBplayeramplifier">amplifier</a> on|play<br>
-      Gibt an, mit welcher Funktion ein zuschaltbarer Verst&aumlrkers eingeschaltet werden soll, entweder bei einem
+      Gibt an, mit welcher Funktion ein zuschaltbarer Verst&auml;rkers eingeschaltet werden soll, entweder bei einem
       Einschaltvorgang (on) oder bei einen Startvorgang zum Abspielen eines Files (play).
     </li>
-    <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
-      Fade in f&uumlr Beginn von Playlisten und neuen Soundfiles. Bezeichnet die Dauer des Vorganges, in der die
-      Lautst&aumlrke auf den vorgegebenen Wert ansteigt und wird in Sekunden angegeben. Ein zweiter, durch Komma
-      getrennter optionaler Wert, gibt die Dauer des Fadein beim Verlassen des Pausenzustandes an.</li>
     <li>amplifierDelayOff &lt;sec1&gt;[,&lt;sec2&gt;]<br>
-      Stellt eine Verz&oumlgerung zwischen dem Ausschaltvorgang des Players und des Verst&aumlrkers in Sekunden ein.
+      Stellt eine Verz&ouml;gerung zwischen dem Ausschaltvorgang des Players und des Verst&auml;rkers in Sekunden ein.
       Wird eine optionale zweite Zeit durch Komma getrennt angegeben, so wird diese bei Pause verwendet. Fehlt
       die zweite Zeitangabe, wird bei Pause nicht abgeschaltet.</li>
-    <li>updateReadingsOnSet true|false<br>
-      Wird ein Befehl ausgef&uumlhrt, werden die Readings erst aktualisiert, wenn die Antwort des LMS eintrifft.
-      Ist dieses Attribut auf true gesetzt, wird die Antwort nicht abgewartet, sondern die Readings werden
-      soweit wie m&oumlglich sofort aktualisiert.</li>
+    <li>coverartheight 50|100|200<br>Stellt das Cover mit einer vertikalen Aufl&ouml;sung von 50, 100 oder 200 Pixel dar.</li>
+    <li>coverartwidth 50|100|200<br>Stellt das Cover mit einer horizontalen Aufl&ouml;sung von 50, 100 oder 200 Pixel dar.</li>
+    <li><a href="#event-on-change-reading">event-on-change-reading</a> &lt;expression&gt;<br>Wird <a href="#do_not_notify">do_not_notify</a>
+    auf false gesetzt, veranlasst jede &Auml;nderung eines Readings ein Notify. Mit diesem Attribut k&ouml;nnen
+    ausl&ouml;sende Ereignisse gefiltert werden.<br><br>
+      Beispiel:<br>
+      <code>attr &lt;playername&gt; event-on-change-reading currentAlbum, currentArtist, currentTitle</code><br>
+      Nur &auml;nderungen der Readings currentAlbum, currentArtist, currentTitle erzeugen Events.</li><br>
+    <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
+      Fade in f&uuml;r Beginn von Playlisten und neuen Soundfiles. Bezeichnet die Dauer des Vorganges, in der die
+      Lautst&auml;rke auf den vorgegebenen Wert ansteigt und wird in Sekunden angegeben. Ein zweiter, durch Komma
+      getrennter optionaler Wert, gibt die Dauer des Fadein beim Verlassen des Pausenzustandes an.</li>
+    <li>idismac true|false<br>
+      Soll die MAC-Adresse des Players als ID genommen werden, muss true (default) eingetragen werden, sonst false.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Aktualisierungsintervall der automatischen Status-Abfrage. Default: 300</li>
+    <li>syncedNamesSource FHEM|LMS<br>
+      Legt fest ob die FHEM-Ger&auml;tenamen oder die LMS-Namen der Player im synced-Reading verwendet werden.</li>
+    <li>syncVolume 0|1<br>
+      Legt fest ob die Lautst&auml;rke des Players mit anderen Playern aus der Gruppe synchronisiert wird.</li>
+    <li>ttsAPIKey &lt;API-key&gt;<br>
+      F&uuml;r die Benutzung von T2Speech der Firma VoiceRSS (voicerss.org) ist ein API-Key erforderlich.
+      F&uuml;r Googles T2Speech ist kein Key notwendig.</li>
     <li>ttsDelay &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Wartezeit in Sekunden bevor die TTS-Ausgabe gestartet wird. Optional kann eine 2. Zeit durch
       Komma getrennt angegeben werden. In diesem Fall wird die 1. Zeit verwendet wenn der Player
       eingeschaltet ist und die 2. wenn er ausgeschaltet ist.</li>
+    <li>ttslanguage de|en|fr<br>
+      Stellt die gew&uuml;nschte Sprache f&uuml;r die Text-to-Speech Funktion ein. Eine vollst&auml;ndige Liste
+      der verf&uuml;gbaren Sprachen findet sich in wikipedia.org</li>
+    <li>ttslink &lt;link&gt;<br>
+      Link zur TTS-Funktion. Unterst&uuml;tzt werden: Google, VoiceRSS (API-Key wird ben&ouml;tigt) und mit Einschr&auml;nkungen Text2Speech.<br><br>
+      Beispiel f&uuml;r Google’s TTS:<br>
+      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&tl=&lt;LANG&gt;&q=&lt;TEXT&gt;&client=tw-ob</code></li><br>
     <li>ttsMP3FileDir &lt;directory&gt;<br>
-      Standard-Verzeichnis f&uumlr Musik- und Sprachdateien (z.B. Gong, Sirene, Ansagen,...)
+      Standard-Verzeichnis f&uuml;r Musik- und Sprachdateien (z.B. Gong, Sirene, Ansagen,...)
       im mp3-Format, die beim TTS eingebunden werden sollen.</li><br>
       Beispiel:<br>
       <code>attr &lt;SB_device&gt; ttsMP3FileDir /volume1/music/sounds</code><br><br>
+    <li>ttsOptions &lt;Optionen&gt;<br>Verschiedene durch Komma getrennte Optionen f&uuml;r die TTS-Ausgabe.
+      <br><br>Optionen:<ul>
+      <li>debug - Schreibt zus&auml;tzliche Meldungen zum TTS ins Log.</li>
+      <li>debugsaverestore - Schreibt zus&auml;tzliche Meldungen zum Speichern/Laden des Playerzustandes ins Log.</li>
+      <li>nosaverestore - Zustand des Players nicht sichern und wiederherstellen, dadurch stoppt die Wiedergabe nach Abspielen des TTS.</li>
+      <li>forcegroupon - Player in der Gruppe werden eingeschaltet.</li>
+      <li>ignorevolumelimit - Attribut volumeLimit f&uuml;r die TTS-Ausgabe ignorieren</li>
+      </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text, der vor jede TTS-Ausgabe gehangen wird</li>
     <li>ttsVolume &lt;value&gt;<br>
-      Lautst&aumlrke f&uumlr die TTS-Ausgabe. Standardwert ist die gegenw&aumlrtige Lautst&aumlrke. Wenn das Attribut
-      ttsOption ignorevolumelimit angegeben worden ist, wird das eingestellte Lautst&aumlrkelimit bei
+      Lautst&auml;rke f&uuml;r die TTS-Ausgabe. Standardwert ist die gegenw&auml;rtige Lautst&auml;rke. Wenn das Attribut
+      ttsOption ignorevolumelimit angegeben worden ist, wird das eingestellte Lautst&auml;rkelimit bei
       TTS nicht beachtet.</li>
-    <li>coverartheight 50|100|200<br>Stellt das Cover mit einer vertikalen Aufl&oumlsung von 50, 100 oder 200 Pixel dar.</li>
-    <li>coverartwidth 50|100|200<br>Stellt das Cover mit einer horizontalen Aufl&oumlsung von 50, 100 oder 200 Pixel dar.</li>
-    <li><a href="#event-on-change-reading">event-on-change-reading</a> &lt;expression&gt;<br>Wird <a href="#do_not_notify">do_not_notify</a>
-    auf false gesetzt, veranlasst jede &Aumlnderung eines Readings ein Notify. Mit diesem Attribut k&oumlnnen
-    ausl&oumlsende Ereignisse gefiltert werden.<br><br>
-      Beispiel:<br>
-      <code>attr &lt;playername&gt; event-on-change-reading currentAlbum, currentArtist, currentTitle</code><br>
-      Nur &aumlnderungen der Readings currentAlbum, currentArtist, currentTitle erzeugen Events.</li><br>
-    <li>idismac true|false<br>
-      Soll die MAC-Adresse des Players als ID genommen werden, muss true (default) eingetragen werden, sonst false.</li>
+    <li>updateReadingsOnSet true|false<br>
+      Wird ein Befehl ausgef&uuml;hrt, werden die Readings erst aktualisiert, wenn die Antwort des LMS eintrifft.
+      Ist dieses Attribut auf true gesetzt, wird die Antwort nicht abgewartet, sondern die Readings werden
+      soweit wie m&ouml;glich sofort aktualisiert.</li>
+    <li>volumeLimit &lt;value&gt;<br>
+    Oberer Grenzwert zur Lautst&auml;rkeeinstellung durch FHEM.</li>
     <li>volumeStep &lt;value&gt;<br>
-      Hier wird die Granularit&aumlt der Lautst&aumlrkeregelung festgelegt. Default ist 10</li>
-    <li>syncedNamesSource FHEM|LMS<br>
-      Legt fest ob die FHEM-Ger&aumltenamen oder die LMS-Namen der Player im synced-Reading verwendet werden</li>
-    <li>ttsAPIKey &lt;API-key&gt;<br>
-      F&uumlr die Benutzung von T2Speech der Firma VoiceRSS (voicerss.org) ist ein API-Key erforderlich.
-      F&uumlr Googles T2Speech ist kein Key notwendig.</li>
-    <li>ttslanguage de|en|fr<br>
-      Stellt die gew&uumlnschte Sprache f&uumlr die Text-to-Speech Funktion ein. Eine vollst&aumlndige Liste
-      der verf&uumlgbaren Sprachen findet sich in wikipedia.org</li>
-    <li>ttslink &lt;link&gt;<br>
-      Link zur TTS-Funktion. Unterst&uumltzt werden: Google, VoiceRSS (API-Key wird ben&oumltigt) und mit Einschr&aumlnkungen Text2Speech.<br><br>
-      Beispiel f&uumlr Google’s TTS:<br>
-      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&tl=&lt;LANG&gt;&q=&lt;TEXT&gt;&client=tw-ob</code></li><br>
-    <li>ttsOptions &lt;Optionen&gt;<br>Verschiedene durch Komma getrennte Optionen f&uumlr die TTS-Ausgabe.
-      <br><br>Optionen:<ul>
-      <li>debug - Schreibt zus&aumltzliche Meldungen zum TTS ins Log.</li>
-      <li>debugsaverestore - Schreibt zus&aumltzliche Meldungen zum Speichern/Laden des Playerzustandes ins Log.</li>
-      <li>nosaverestore - Zustand des Players nicht sichern und wiederherstellen, dadurch stoppt die Wiedergabe nach Abspielen des TTS.</li>
-      <li>forcegroupon - Player in der Gruppe werden eingeschaltet.</li>
-      <li>ignorevolumelimit - Attribut volumeLimit f&uumlr die TTS-Ausgabe ignorieren</li>
-      </ul></li>
+      Hier wird die Granularit&auml;t der Lautst&auml;rkeregelung festgelegt. Default ist 10</li>
   </ul>
 </ul>
 =end html_DE
