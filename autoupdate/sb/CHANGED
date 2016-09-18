@@ -1,11 +1,12 @@
 ﻿97_SB_SERVER:
-  160904 0022 - Dokumentation vervollständigt (Eberhard)
+  160917 0023 - nur auf Änderungen von PRESENCE reagieren
 98_SB_PLAYER:
   160904 0058 - ttsOptions um nouriescape ergänzt
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  160917 0023 - nur auf Änderungen von PRESENCE reagieren
   160904 0022 - Dokumentation vervollständigt (Eberhard)
   160827 0021 - Alivecheck nur ausführen wenn während vorgegebener Zeit keine Daten mehr empfangen wurden
               - optional Alivecheck ohne Ping ausführen (internalPingProtocol none)

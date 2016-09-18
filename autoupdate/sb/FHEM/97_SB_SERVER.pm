@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 9811 beta 0022 CD $
+# $Id: 97_SB_SERVER.pm 9811 beta 0023 CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -306,6 +306,7 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{DeviceName} = "$hash->{IP}:$hash->{CLIPORT}";
 
     $hash->{helper}{pingCounter}=0;     # CD 0004
+    $hash->{helper}{lastPRESENCEstate}='?'; # CD 0023
     
     # CD 0009 set module version, needed for reload
     $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
@@ -2054,7 +2055,16 @@ sub SB_SERVER_Notify( $$ ) {
     # CD 0007 start
     } elsif( $devName eq $hash->{PRESENCENAME} ) {
         if(grep (m/^present$|^absent$/,@{$dev_hash->{CHANGED}})) {
-            Log3( $hash, 2, "SB_SERVER_Notify($name): $devName changed to ". join(" ",@{$dev_hash->{CHANGED}}));
+            Log3( $hash, 3, "SB_SERVER_Notify($name): $devName changed to ". join(" ",@{$dev_hash->{CHANGED}}));    # CD 0023 loglevel 2->3
+            # CD 0023 start
+            if (defined($hash->{helper}{lastPRESENCEstate})) {
+                if($hash->{helper}{lastPRESENCEstate} eq $dev_hash->{CHANGED}[0]) {
+                    # nichts geändert
+                    return( undef );
+                }
+            }
+            $hash->{helper}{lastPRESENCEstate}=$dev_hash->{CHANGED}[0];
+            # CD 0023 end
             RemoveInternalTimer( $hash );
             # do an update of the status, but SB CLI must come up
             # CD 0020 SB_SERVER_tcb_Alive verwenden
