@@ -19,6 +19,7 @@
 # 151228 0017 use readCondition and writeCondition
 # 151231 0018 added delay for readCondition
 # 160305 0019 added serverType, read Wago configuration, apply offset to coils
+# 160922 0020 added queue delay
 # TODO:
 
 package main;
@@ -112,6 +113,7 @@ sub ModbusTCPServer_Initialize($) {
                      "presenceLink " .
                      "combineReads " .
                      "serverType:Wago " . # CD 0019
+                     "queueDelay " .      # CD 0020
                      $readingFnAttributes;
 }
 sub ModbusTCPServer_Define($$) {#########################################################
@@ -328,138 +330,143 @@ sub ModbusTCPServer_Parse($$) {#################################################
   
   # modbus TCP receive
   # decode
-  my ($rx_hd_tr_id, $rx_hd_pr_id, $rx_hd_length, $rx_hd_unit_id, $rx_bd_fc, $f_body) = unpack "nnnCCa*", $rmsg;
-  # check header
-  if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
-        ($rx_hd_length == bytes::length($rmsg)-6) && ($hash->{helper}{fc} == $rx_bd_fc) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
-        
-    if(($rx_hd_tr_id == $hash->{helper}{last_hd_tr_id}) && ($rx_bd_fc == $hash->{helper}{last_fc}) && ($rx_hd_length <= bytes::length($rmsg)-6) ) {
-        ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: got frame for previous request: ",$rmsg,3);
-        my @btmp = unpack('C*',$rmsg);
-        my $n=$rx_hd_length+6;
-        my $act_hd_tr_id=$hash->{helper}{hd_tr_id};
-        my $act_fc=$hash->{helper}{fc};
-        $hash->{helper}{hd_tr_id}=$hash->{helper}{last_hd_tr_id};
-        $hash->{helper}{fc}=$hash->{helper}{last_fc};
-        ModbusTCPServer_Parse($hash,pack("C$n",@btmp));
-        RemoveInternalTimer( "timeout:".$name); # CD 0013
-        InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1) if(!defined($hash->{helper}{badFrame}));
-        $hash->{helper}{hd_tr_id}=$act_hd_tr_id;
-        $hash->{helper}{fc}=$act_fc;
-        $hash->{helper}{badFrame}=1;
-        $hash->{helper}{state}="active";
-        if($#btmp>$n) {
-            ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: trying to parse additional data: ",pack("C*",@btmp[$n..$#btmp]),3);  # CD 0013
-            ModbusTCPServer_Parse($hash,pack("C*",@btmp[$n..$#btmp]));
-        }
-    } else {
-        Log3 $hash, 1,"ModbusTCPServer_Parse: bad frame, sent: $lastFrame";
-        ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: bad frame, received: ",$rmsg,1);
-        $hash->{STATE} = "error";
-        if(!defined($hash->{helper}{badFrame})) {
-            $hash->{helper}{badFrame}=1;
-        } else {
-            delete($hash->{helper}{badFrame});
-        }
-    }
+  # CD 0020
+  if(bytes::length($rmsg)<9) {
+    Log3 $hash, 1,"ModbusTCPServer_Parse: incomplete frame received, sent: $lastFrame, received ".bytes::length($rmsg)." bytes";
   } else {
-    # check except
-    if ($rx_bd_fc > 0x80) {
-      # except code
-      my ($exp_code) = unpack "C", $f_body;
-      $hash->{LAST_ERROR}  = MB_EXCEPT_ERR;
-      $hash->{LAST_EXCEPT} = $exp_code;
-      Log3 $hash, 2,"ModbusTCPServer_Parse: except (code $exp_code)";
-      $hash->{STATE} = "error";
-    } else {
-      $hash->{STATE} = "ok";
-      if($hash->{helper}{state} eq "readdevid") {
-        
-      }
-      if(($rx_bd_fc==READ_HOLDING_REGISTERS)||($rx_bd_fc==READ_INPUT_REGISTERS)) {
-        my $nvals=unpack("x8C", $rmsg)/2;
-        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
-            my $off;
-            for my $r (@{$hash->{helper}{combineReads}{registers}})
-            {
-                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
-                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
-                        $off=9+($r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2])*2;
-                        Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg)), undef); 
-                        #Log 0, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg));
+      my ($rx_hd_tr_id, $rx_hd_pr_id, $rx_hd_length, $rx_hd_unit_id, $rx_bd_fc, $f_body) = unpack "nnnCCa*", $rmsg;
+      # check header
+      if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
+            ($rx_hd_length == bytes::length($rmsg)-6) && ($hash->{helper}{fc} == $rx_bd_fc) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
+            
+        if(($rx_hd_tr_id == $hash->{helper}{last_hd_tr_id}) && ($rx_bd_fc == $hash->{helper}{last_fc}) && ($rx_hd_length <= bytes::length($rmsg)-6) ) {
+            ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: got frame for previous request: ",$rmsg,3);
+            my @btmp = unpack('C*',$rmsg);
+            my $n=$rx_hd_length+6;
+            my $act_hd_tr_id=$hash->{helper}{hd_tr_id};
+            my $act_fc=$hash->{helper}{fc};
+            $hash->{helper}{hd_tr_id}=$hash->{helper}{last_hd_tr_id};
+            $hash->{helper}{fc}=$hash->{helper}{last_fc};
+            ModbusTCPServer_Parse($hash,pack("C$n",@btmp));
+            RemoveInternalTimer( "timeout:".$name); # CD 0013
+            InternalTimer(gettimeofday()+AttrVal($name,"timeout",3), "ModbusTCPServer_Timeout", "timeout:".$name, 1) if(!defined($hash->{helper}{badFrame}));
+            $hash->{helper}{hd_tr_id}=$act_hd_tr_id;
+            $hash->{helper}{fc}=$act_fc;
+            $hash->{helper}{badFrame}=1;
+            $hash->{helper}{state}="active";
+            if($#btmp>$n) {
+                ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: trying to parse additional data: ",pack("C*",@btmp[$n..$#btmp]),3);  # CD 0013
+                ModbusTCPServer_Parse($hash,pack("C*",@btmp[$n..$#btmp]));
+            }
+        } else {
+            Log3 $hash, 1,"ModbusTCPServer_Parse: bad frame, sent: $lastFrame";
+            ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: bad frame, received: ",$rmsg,1);
+            $hash->{STATE} = "error";
+            if(!defined($hash->{helper}{badFrame})) {
+                $hash->{helper}{badFrame}=1;
+            } else {
+                delete($hash->{helper}{badFrame});
+            }
+        }
+      } else {
+        # check except
+        if ($rx_bd_fc > 0x80) {
+          # except code
+          my ($exp_code) = unpack "C", $f_body;
+          $hash->{LAST_ERROR}  = MB_EXCEPT_ERR;
+          $hash->{LAST_EXCEPT} = $exp_code;
+          Log3 $hash, 2,"ModbusTCPServer_Parse: except (code $exp_code)";
+          $hash->{STATE} = "error";
+        } else {
+          $hash->{STATE} = "ok";
+          if($hash->{helper}{state} eq "readdevid") {
+            
+          }
+          if(($rx_bd_fc==READ_HOLDING_REGISTERS)||($rx_bd_fc==READ_INPUT_REGISTERS)) {
+            my $nvals=unpack("x8C", $rmsg)/2;
+            if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+                my $off;
+                for my $r (@{$hash->{helper}{combineReads}{registers}})
+                {
+                    if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                        if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                            $off=9+($r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2])*2;
+                            Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg)), undef); 
+                            #Log 0, "ModbusRegister:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".join(":",unpack("x".$off."n".($r->[3]), $rmsg));
+                        }
                     }
                 }
+                delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+            } else {
+              # CD 0019 start
+              if(defined($hash->{helper}{Wago}) && !defined($hash->{helper}{Wago}{initDone})) {
+                my ($cnt,@v)=unpack "Cn*",$f_body;
+                if(($rx_hd_tr_id==4130) && ($cnt==8)) {
+                  $hash->{helper}{Wago}{AO}=$v[0]/16;
+                  $hash->{helper}{Wago}{AI}=$v[1]/16;
+                  $hash->{helper}{Wago}{DO}=$v[2];
+                  $hash->{helper}{Wago}{DI}=$v[3];
+                  $hash->{helper}{Wago}{DOOffset}=$v[0];
+                  $hash->{helper}{Wago}{DIOffset}=$v[1];
+                  $hash->{helper}{Wago}{initDone}=1;
+                  RemoveInternalTimer( "poll:".$name);
+                  InternalTimer(gettimeofday()+AttrVal($name,"pollInterval",0.5), "ModbusTCPServer_Poll", "poll:".$name, 0);
+                }
+                if(($rx_hd_tr_id==8208) && ($cnt==10)) {
+                  $hash->{helper}{Wago}{INFO_REVISION}=$v[0];
+                  $hash->{helper}{Wago}{INFO_SERIES}=$v[1];
+                  $hash->{helper}{Wago}{INFO_ITEM}=$v[2];
+                  $hash->{helper}{Wago}{INFO_MAJOR}=$v[3];
+                  $hash->{helper}{Wago}{INFO_MINOR}=$v[4];
+                  $hash->{server}="Wago ".$v[1]."-".$v[2] if($v[1]+$v[2]>0);
+                }
+              } else {
+              # CD 0019 end
+                Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9n$nvals", $rmsg)), undef); 
+              }
             }
-            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
-        } else {
-          # CD 0019 start
-          if(defined($hash->{helper}{Wago}) && !defined($hash->{helper}{Wago}{initDone})) {
-            my ($cnt,@v)=unpack "Cn*",$f_body;
-            if(($rx_hd_tr_id==4130) && ($cnt==8)) {
-              $hash->{helper}{Wago}{AO}=$v[0]/16;
-              $hash->{helper}{Wago}{AI}=$v[1]/16;
-              $hash->{helper}{Wago}{DO}=$v[2];
-              $hash->{helper}{Wago}{DI}=$v[3];
-              $hash->{helper}{Wago}{DOOffset}=$v[0];
-              $hash->{helper}{Wago}{DIOffset}=$v[1];
-              $hash->{helper}{Wago}{initDone}=1;
-              RemoveInternalTimer( "poll:".$name);
-              InternalTimer(gettimeofday()+AttrVal($name,"pollInterval",0.5), "ModbusTCPServer_Poll", "poll:".$name, 0);
+          }
+          if($rx_bd_fc==WRITE_SINGLE_REGISTER) {
+            Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+          }
+          if(($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
+            my $nvals=unpack("x8C", $rmsg);
+            if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
+                $nvals*=8;
+                my $off;
+                my @coilvals=split('',unpack('x9b*',$rmsg));
+    #            Log 0,unpack('x9b*',$rmsg);
+                for my $r (@{$hash->{helper}{combineReads}{coils}})
+                {
+                    if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
+                        if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
+                            $off=$r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2];
+    #                        Log 0,"ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off];
+                            Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[4]:$r->[1]:$r->[3]:".$coilvals[$off], undef); # CD 0019 $r->[4] statt $r->[2]
+                        }
+                    }
+                }
+                delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
+            } else {
+                Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9C$nvals", $rmsg)), undef); 
             }
-            if(($rx_hd_tr_id==8208) && ($cnt==10)) {
-              $hash->{helper}{Wago}{INFO_REVISION}=$v[0];
-              $hash->{helper}{Wago}{INFO_SERIES}=$v[1];
-              $hash->{helper}{Wago}{INFO_ITEM}=$v[2];
-              $hash->{helper}{Wago}{INFO_MAJOR}=$v[3];
-              $hash->{helper}{Wago}{INFO_MINOR}=$v[4];
-              $hash->{server}="Wago ".$v[1]."-".$v[2] if($v[1]+$v[2]>0);
+          }
+          if($rx_bd_fc==WRITE_SINGLE_COIL) {
+            # CD 0019 start
+            if(defined($hash->{helper}{wagowritereturnaddress})) {
+              Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".$hash->{helper}{wagowritereturnaddress}.":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+              delete $hash->{helper}{wagowritereturnaddress};
+            } else {
+            # CD 0019 end
+              Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
             }
-          } else {
-          # CD 0019 end
-            Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9n$nvals", $rmsg)), undef); 
+          }
+          if($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
+            ;
           }
         }
+        delete($hash->{helper}{badFrame}) if(defined($hash->{helper}{badFrame}));
       }
-      if($rx_bd_fc==WRITE_SINGLE_REGISTER) {
-        Dispatch($hash, "ModbusRegister:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
-      }
-      if(($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
-        my $nvals=unpack("x8C", $rmsg);
-        if((defined($hash->{helper}{combineReads})) && (defined($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}))) {
-            $nvals*=8;
-            my $off;
-            my @coilvals=split('',unpack('x9b*',$rmsg));
-#            Log 0,unpack('x9b*',$rmsg);
-            for my $r (@{$hash->{helper}{combineReads}{coils}})
-            {
-                if(($r->[0]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[0]) && ($r->[1]==$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[1])) {
-                    if(($r->[2]>=$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]) && (($r->[2]+$r->[3])<=($hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2]+$nvals))) {
-                        $off=$r->[2]-$hash->{helper}{combineReads}{data}{$rx_hd_tr_id}->[2];
-#                        Log 0,"ModbusCoil:$rx_hd_unit_id:$r->[2]:$r->[1]:$r->[3]:".$coilvals[$off];
-                        Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$r->[4]:$r->[1]:$r->[3]:".$coilvals[$off], undef); # CD 0019 $r->[4] statt $r->[2]
-                    }
-                }
-            }
-            delete($hash->{helper}{combineReads}{data}{$rx_hd_tr_id});
-        } else {
-            Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:$rx_hd_tr_id:$rx_bd_fc:$nvals:".join(":",unpack("x9C$nvals", $rmsg)), undef); 
-        }
-      }
-      if($rx_bd_fc==WRITE_SINGLE_COIL) {
-        # CD 0019 start
-        if(defined($hash->{helper}{wagowritereturnaddress})) {
-          Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".$hash->{helper}{wagowritereturnaddress}.":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
-          delete $hash->{helper}{wagowritereturnaddress};
-        } else {
-        # CD 0019 end
-          Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
-        }
-      }
-      if($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
-        ;
-      }
-    }
-    delete($hash->{helper}{badFrame}) if(defined($hash->{helper}{badFrame}));
   }
   if(!defined($hash->{helper}{badFrame})) {
     RemoveInternalTimer( "timeout:".$name);
@@ -918,7 +925,7 @@ ModbusTCPServer_SendFromWQueue($$) #############################################
   if($bstring ne "") {
     ModbusTCPServer_SimpleWrite($hash, $bstring);
   }
-  InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
+  InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
 }
 
 sub
@@ -932,7 +939,7 @@ ModbusTCPServer_AddWQueue($$) ##################################################
     } else {
       $hash->{WQUEUE} = [ $bstring ];
       push(@{$hash->{WQUEUE}}, $bstring);
-      InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
+      InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
     }
   } else {
     Log3 $hash, 5,"adding to WQUEUE - ".scalar(@{$hash->{WQUEUE}});
@@ -961,7 +968,7 @@ ModbusTCPServer_HandleWriteQueue($) ############################################
       }
     }
   } else {
-    InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
+    InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleWriteQueue", $hash, 1);
   }
 } 
 
@@ -981,7 +988,7 @@ ModbusTCPServer_SendFromRQueue($$) #############################################
       ModbusTCPServer_SimpleWrite($hash, $bstring);
     }
   }
-  InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleReadQueue", $hash, 1);
+  InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleReadQueue", $hash, 1);
 }
 
 sub
@@ -996,7 +1003,7 @@ ModbusTCPServer_AddRQueue($$$) #################################################
     } else {
       $hash->{RQUEUE} = [ $bstring ];
       push(@{$hash->{RQUEUE}}, $bstring);
-      InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleReadQueue", $hash, 1);
+      InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleReadQueue", $hash, 1);
     }
   } else {
     my $add=1;
@@ -1033,7 +1040,7 @@ ModbusTCPServer_HandleReadQueue($) #############################################
       }
     }
   } else {
-    InternalTimer(gettimeofday()+0.02, "ModbusTCPServer_HandleReadQueue", $hash, 1);
+    InternalTimer(gettimeofday()+AttrVal($hash->{NAME}, "queueDelay", 20)/1000, "ModbusTCPServer_HandleReadQueue", $hash, 1);
   }
 } 
 
@@ -1042,7 +1049,7 @@ sub ModbusTCPServer_LogFrame($$$$) {
 
   my @dump = map {sprintf "%02X", $_ } unpack("C*", $data);
   $dump[0] = "[".$dump[0];
-  $dump[5] = $dump[5]."]";
+  $dump[5] = $dump[5]."]" if(defined($dump[5]));
 
   $hash->{helper}{lastFrame}=$c." ".join(" ",@dump) if($c eq 'SimpleWrite');
 
@@ -1097,7 +1104,9 @@ sub ModbusTCPServer_UpdateStatistics($$$$$) {###################################
     <li><a href="#attrdummy">dummy</a></li><br>
     <li><a href="#readingFnAttributes">readingFnAttributes</a></li><br>
     <li><a name="">pollInterval</a><br>
-        Intervall in seconds for the reading cycle. Default: 0.5</li><br>
+        Interval in seconds for the reading cycle. Default: 0.5</li><br>
+    <li><a name="">queueDelay</a><br>
+        Delay in milliseconds before sending next request from queue. Default: 20</li><br>
     <li><a name="">combineReads</a><br>
         Combine register reads if possible. The attribute accepts two values separated by a colon. The first value
         defines how many consecutive unused registers will be included (1-118), the second defines the maximum
