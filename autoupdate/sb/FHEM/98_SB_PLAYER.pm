@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0058 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0059 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -253,7 +253,7 @@ sub SB_PLAYER_Attr( @ ) {
                     $hash->{helper}{ttsOptions}{forcegroupon}=1 if($opt=~ m/forcegroupon/);
                     $hash->{helper}{ttsOptions}{internalsave}=1 if($opt=~ m/internalsave/);         # CD 0029
                     $hash->{helper}{ttsOptions}{ignorevolumelimit}=1 if($opt=~ m/ignorevolumelimit/);   # CD 0031
-                    $hash->{helper}{ttsOptions}{nouriescape}=1 if($opt=~ m/nouriescape/);   # CD 0058
+                    $hash->{helper}{ttsOptions}{doubleescape}=1 if($opt=~ m/doubleescape/);   # CD 0059
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -1509,6 +1509,7 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "duration" ) {
         readingsBulkUpdate( $hash, "duration", $args[ 0 ] );
     } elsif( $cmd eq "time" ) {
+        $args[0]=0 unless defined($args[ 0 ]); # CD 0059
         $args[0]=0 if($args[ 0 ] eq '?'); # CD 0050
         $hash->{helper}{elapsedTime}{VAL}=$args[ 0 ];
         $hash->{helper}{elapsedTime}{TS}=gettimeofday();
@@ -2392,13 +2393,8 @@ sub SB_PLAYER_Set( $@ ) {
                     $outstr=encode('utf-8',decode("iso-8859-1",$outstr));
                 }
                 
-                # CD 0057 Test FHEMAN
-                Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: ".(utf8::is_utf8($outstr)?"utf-8":"no utf-8")); # CD 0057
-                utf8::upgrade($outstr);
-                Log3($hash, defined($hash->{helper}{ttsOptions}{debug})?0:6,"SB_PLAYER_Set: $name: ".(utf8::is_utf8($outstr)?"utf-8":"no utf-8")); # CD 0057
-                # CD 0057
-                
-                $outstr = uri_escape( $outstr ) if(!defined($hash->{helper}{ttsOptions}{nouriescape}));  # CD 0058
+                $outstr = uri_escape( $outstr );
+                $outstr = uri_escape( $outstr ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0059
                 
                 # CD 0045
                 my $ttslink=AttrVal( $name, "ttslink", "" );
@@ -4708,6 +4704,7 @@ sub SB_PLAYER_LoadPlayerStates($)
       <li>nosaverestore - Do not save and restore the status of the player, thereby the normal playing stops after using TTS.</li>
       <li>forcegroupon - Switch on all players of the group.</li>
       <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output</li>
+      <li>doubleescape - Alternative encoding for letters with accents</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text prepended to every text to speech output</li>
@@ -4965,6 +4962,7 @@ sub SB_PLAYER_LoadPlayerStates($)
       <li>nosaverestore - Zustand des Players nicht sichern und wiederherstellen, dadurch stoppt die Wiedergabe nach Abspielen des TTS.</li>
       <li>forcegroupon - Player in der Gruppe werden eingeschaltet.</li>
       <li>ignorevolumelimit - Attribut volumeLimit f&uuml;r die TTS-Ausgabe ignorieren</li>
+      <li>doubleescape - alternative Codierung der Sonderzeichen</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text, der vor jede TTS-Ausgabe gehangen wird</li>

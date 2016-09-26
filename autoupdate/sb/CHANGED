@@ -1,7 +1,8 @@
 ﻿97_SB_SERVER:
   160917 0023 - nur auf Änderungen von PRESENCE reagieren
 98_SB_PLAYER:
-  160904 0058 - ttsOptions um nouriescape ergänzt
+  160926 0059 - Fehlermeldung bei leerer time-Rückmeldung behoben
+              - nouriescape aus ttsOptions entfernt, doubleescape hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -60,6 +61,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  160926 0059 - Fehlermeldung bei leerer time-Rückmeldung behoben
+              - nouriescape aus ttsOptions entfernt, doubleescape hinzugefügt
   160904 0058 - ttsOptions um nouriescape ergänzt
   160904 0057 - Dokumentation vervollständigt (Eberhard)
               - Encoding für TTS geändert (Test FHMAN)
