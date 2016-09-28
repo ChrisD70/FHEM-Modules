@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0059 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 9752 beta 0060 CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2339,6 +2339,7 @@ sub SB_PLAYER_Set( $@ ) {
                     $w =~ s/\s+/ /g;
                     $w =~ s/^\s|\s$//g;
                     $w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g if(AttrVal( $name, "ttslink", "x" ) !~ m/voicerss/i);    # CD 0045 Sonderzeichen für VoiceRSS nicht ersetzen
+                    $w = uri_escape( $w ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0060
                 # CD 0032 end
                     if((length($tl)+length($w)+1)<100) {
                         $tl.=' ' if(length($tl)>0);
@@ -2394,7 +2395,7 @@ sub SB_PLAYER_Set( $@ ) {
                 }
                 
                 $outstr = uri_escape( $outstr );
-                $outstr = uri_escape( $outstr ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0059
+                #$outstr = uri_escape( $outstr ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0059 # CD 0060 zu spät nach oben verschoben
                 
                 # CD 0045
                 my $ttslink=AttrVal( $name, "ttslink", "" );
