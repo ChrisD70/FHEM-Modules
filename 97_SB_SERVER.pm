@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 9811 beta 0023 CD $
+# $Id: 97_SB_SERVER.pm 0024 2016-10-31 21:40:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -65,7 +65,9 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0022';
+use constant SB_SERVER_VERSION => '0024';
+
+my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
@@ -101,6 +103,9 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     $hash->{AttrList} .= $readingFnAttributes;
 
+    # CD 0024
+    eval "use Data::Dumper";
+    $SB_SERVER_hasDataDumper = 0 if($@); 
 }
 
 # ----------------------------------------------------------------------------
@@ -310,6 +315,10 @@ sub SB_SERVER_Define( $$ ) {
     
     # CD 0009 set module version, needed for reload
     $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
+
+    if (!defined($hash->{OLDDEF})) {    # CD 0024
+        SB_SERVER_LoadSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
+    }
     
     # open the IO device
     my $ret;
@@ -533,7 +542,8 @@ sub SB_SERVER_Set( $@ ) {
 	my $res = "Unknown argument ?, choose one of " . 
 	    "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
 	$res .= "rescan:full,playlists ";
-    $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg";  # CD 0019
+    $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg ";  # CD 0019
+    $res .= "syncGroup";  # CD 0024
 
 	return( $res );
 
@@ -581,6 +591,168 @@ sub SB_SERVER_Set( $@ ) {
     } elsif( $cmd eq "removeFromFHEMUpdate" ) {
         fhem("update delete https://raw.githubusercontent.com/ChrisD70/FHEM-Modules/master/autoupdate/sb/controls_squeezebox.txt");
     # CD 0018 end
+    # CD 0024 start
+    } elsif( $cmd eq "syncGroup" ) {
+        return( "at least one parameter is needed" ) if( @a < 2 );
+        
+        my $subcmd=shift( @a );
+                
+        if($subcmd eq 'addp') {
+            return( "not enough parameters" ) if( @a < 2 );
+            my $players=shift( @a );
+            my $statename=join( " ", @a );
+
+            SB_SERVER_BuildPlayerList($hash) if(!defined($hash->{helper}{players}));
+    
+            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+                $hash->{helper}{syncGroups}{$statename}{0}{fhemname}='';
+                $hash->{helper}{syncGroups}{$statename}{0}{lmsname}='';
+                $hash->{helper}{syncGroups}{$statename}{0}{mac}='';
+                $hash->{helper}{syncGroups}{$statename}{0}{c}=1;
+            }
+
+            for my $pl (split(",",$players)) {
+                my $found=0;
+
+                foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                    if($e ne '') {
+                        if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                            if(($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{fhemname})
+                                or ($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{lmsname})) {
+                                $found=1;
+                                last;
+                            }
+                        }
+                    }
+                }
+
+                if($found==0) {
+                    if(defined($hash->{helper}{players}) && defined($hash->{helper}{players}{$pl})) {
+                        my $c=$hash->{helper}{syncGroups}{$statename}{0}{c};
+                        
+                        $hash->{helper}{syncGroups}{$statename}{$c}{fhemname}=$hash->{helper}{players}{$pl}{fhemname};
+                        $hash->{helper}{syncGroups}{$statename}{$c}{lmsname}=$hash->{helper}{players}{$pl}{lmsname};
+                        $hash->{helper}{syncGroups}{$statename}{$c}{mac}=$hash->{helper}{players}{$pl}{mac};
+                        
+                        if($hash->{helper}{syncGroups}{$statename}{0}{fhemname} eq '') {
+                            $hash->{helper}{syncGroups}{$statename}{0}{fhemname}=$hash->{helper}{players}{$pl}{fhemname};
+                            $hash->{helper}{syncGroups}{$statename}{0}{lmsname}=$hash->{helper}{players}{$pl}{lmsname};
+                            $hash->{helper}{syncGroups}{$statename}{0}{mac}=$hash->{helper}{players}{$pl}{mac};
+                        }
+                        $hash->{helper}{syncGroups}{$statename}{0}{c}+=1;
+                    }
+                }
+            }
+        } elsif($subcmd eq 'removep') {
+            return( "not enough parameters" ) if( @a < 2 );
+            my $players=shift( @a );
+            my $statename=join( " ", @a );
+   
+            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+                return( "sync group $statename not found" );
+            }
+
+            SB_SERVER_BuildPlayerList($hash) if(!defined($hash->{helper}{players}));
+
+            for my $pl (split(",",$players)) {
+                foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                    if($e ne '') {
+                        if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                            if(($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{fhemname})
+                                or ($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{lmsname})) {
+
+                                if($e eq '0') {
+                                    # master ?
+                                    $hash->{helper}{syncGroups}{$statename}{0}{fhemname}='';
+                                    $hash->{helper}{syncGroups}{$statename}{0}{lmsname}='';
+                                    $hash->{helper}{syncGroups}{$statename}{0}{mac}='';
+                                } else {
+                                    delete($hash->{helper}{syncGroups}{$statename}{$e});
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            # neuen Master suchen ?
+            if($hash->{helper}{syncGroups}{$statename}{0}{fhemname} eq '') {
+                foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                    if(($e ne '')&&($e ne '0')) {
+                        $hash->{helper}{syncGroups}{$statename}{0}{fhemname}=$hash->{helper}{syncGroups}{$statename}{$e}{fhemname};
+                        $hash->{helper}{syncGroups}{$statename}{0}{lmsname}=$hash->{helper}{syncGroups}{$statename}{$e}{lmsname};
+                        $hash->{helper}{syncGroups}{$statename}{0}{mac}=$hash->{helper}{syncGroups}{$statename}{$e}{mac};
+                        last;
+                    }
+                }
+            }
+        } elsif($subcmd eq 'masterp') {
+            return( "not enough parameters" ) if( @a < 2 );
+            my $pl=shift( @a );
+            my $statename=join( " ", @a );
+   
+            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+                return( "sync group $statename not found" );
+            }
+
+            foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                if(($e ne '')&&($e ne '0')) {
+                    if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                        if(($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{fhemname})
+                            or ($pl eq $hash->{helper}{syncGroups}{$statename}{$e}{lmsname})) {
+
+                            $hash->{helper}{syncGroups}{$statename}{0}{fhemname}=$hash->{helper}{syncGroups}{$statename}{$e}{fhemname};
+                            $hash->{helper}{syncGroups}{$statename}{0}{lmsname}=$hash->{helper}{syncGroups}{$statename}{$e}{lmsname};
+                            $hash->{helper}{syncGroups}{$statename}{0}{mac}=$hash->{helper}{syncGroups}{$statename}{$e}{mac};
+                        }
+                    }
+                }
+            }
+        } elsif($subcmd eq 'load') {
+            my $poweron=0;
+            
+            if($a[0] eq 'poweron') {
+                $poweron=1;
+                shift(@a);
+            }
+
+            return( "not enough parameters" ) if( @a == 0 );
+        
+            my $statename=join( " ", @a );
+   
+            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+                return( "sync group $statename not found" );
+            }
+            
+            # unsync all
+            foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                if(($e ne '')&&($e ne '0')) {
+                    if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                        SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." sync -\n", "" );
+                    }
+                }
+            }
+            
+            # sync with new master
+            foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                if(($e ne '')&&($e ne '0')) {
+                    if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                        if($hash->{helper}{syncGroups}{$statename}{$e}{mac} ne $hash->{helper}{syncGroups}{$statename}{0}{mac}) {
+                            SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{0}{mac}." sync ".$hash->{helper}{syncGroups}{$statename}{$e}{mac}."\n", "" );
+                        }
+                        SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." power 1\n", "" ) if($poweron==1);
+                    }
+                }
+            }
+        } elsif($subcmd eq 'delete') {
+            my $statename=join( " ", @a );
+
+            delete($hash->{helper}{syncGroups}{$statename}) if(defined($hash->{helper}{syncGroups}{$statename}));
+        } else {
+            return( "unknown command $subcmd" );
+        }
+        
+    
+    # CD 0024 end
     } else {
 	;
     }
@@ -1540,7 +1712,8 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
                      "$players{$player}{MAC} $uniqueid", undef );
     }
 
-
+    SB_SERVER_BuildPlayerList($hash);   # CD 0024
+    
     return;
 }
 
@@ -2005,6 +2178,12 @@ sub SB_SERVER_Notify( $$ ) {
     #Log3( $hash, 4, "SB_SERVER_Notify($name): called" . 
     #    "Own:" . $name . " Device:" . $devName );
 
+    # CD 0024 start
+    if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
+        SB_SERVER_SaveSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
+    }
+    # CD 0024 end
+
     # CD 0008 start
     if($devName eq $name ) {
         if (grep (m/^DISCONNECTED$/,@{$dev_hash->{CHANGED}})) {
@@ -2127,6 +2306,119 @@ sub SB_SERVER_setStates($$)
 }
 # CD 0006 end
 
+# ----------------------------------------------------------------------------
+#  load/save sync groups
+#
+#  CD 0024
+# ----------------------------------------------------------------------------
+sub SB_SERVER_StatefileName($)
+{
+  my( $name ) = @_;
+
+  my $statefile = $attr{global}{statefile};
+  $statefile = substr $statefile,0,rindex($statefile,'/')+1;
+  return $statefile ."sbsg_$name.dd.save";
+} 
+
+sub SB_SERVER_SaveSyncGroups($)
+{
+  my( $hash ) = @_;
+  my $name = $hash->{NAME};
+
+  return "No saved syncgroups found" unless(defined($hash->{helper}{syncGroups}));
+  return "No statefile specified" if(!$attr{global}{statefile});
+  my $statefile = SB_SERVER_StatefileName($name);
+
+  if(open(FH, ">$statefile")) {
+    my $t = localtime;
+    print FH "#$t\n";
+
+    my $dumper = Data::Dumper->new([]);
+    $dumper->Terse(1);
+
+    $dumper->Values([$hash->{helper}{syncGroups}]);
+    print FH $dumper->Dump;
+
+    close(FH);
+  } else {
+
+    my $msg = "SB_SERVER_SaveSyncGroups: Cannot open $statefile: $!";
+    Log3 $hash, 1, $msg;
+  }
+
+  return undef;
+} 
+
+sub SB_SERVER_LoadSyncGroups($)
+{
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+  return "No statefile specified" if(!$attr{global}{statefile});
+  my $statefile = SB_SERVER_StatefileName($name);
+
+  if(open(FH, "<$statefile")) {
+    my $encoded;
+    while (my $line = <FH>) {
+      chomp $line;
+      next if($line =~ m/^#.*$/);
+      $encoded .= $line;
+    }
+    close(FH);
+
+    return if( !defined($encoded) );
+
+    my $decoded = eval $encoded;
+    $hash->{helper}{syncGroups} = $decoded;
+  } else {
+    my $msg = "SB_SERVER_LoadSyncGroups: no syncgroups file found";
+    Log3 undef, 4, $msg;
+  }
+  return undef;
+} 
+
+sub SB_SERVER_BuildPlayerList($)
+{
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    delete( $hash->{helper}{players} ) if (defined($hash->{helper}{players}));
+
+    # build player list
+    foreach my $mydev ( keys %defs ) {
+        my $iodevhash;
+        
+        if( defined( $defs{$mydev}{IODev} ) ) {
+            $iodevhash = $defs{$mydev}{IODev};
+            if( ( defined( $defs{$mydev}{TYPE} ) ) && 
+                ( defined( $iodevhash->{NAME} ) ) ) {
+
+                if( ( $defs{$mydev}{TYPE} eq "SB_PLAYER" ) &&
+                    ( $iodevhash->{NAME} eq $name ) ) {
+                    # we found a valid entry
+                    my $chash = $defs{$mydev};
+                    my $fn = $chash->{NAME};
+                    my $ln = $chash->{PLAYERNAME};
+                    
+                    if($ln ne '?') {
+                        if(!defined($hash->{helper}{players}{$fn})) {
+                            $hash->{helper}{players}{$fn}{fhemname}=$fn;
+                            $hash->{helper}{players}{$fn}{lmsname}=$ln;
+                            $hash->{helper}{players}{$fn}{mac}=$chash->{PLAYERMAC};
+                            $hash->{helper}{players}{$fn}{type}='FHEM';
+                        }
+                        if(!defined($hash->{helper}{players}{$ln})) {
+                            $hash->{helper}{players}{$ln}{fhemname}=$fn;
+                            $hash->{helper}{players}{$ln}{lmsname}=$ln;
+                            $hash->{helper}{players}{$ln}{mac}=$chash->{PLAYERMAC};
+                            $hash->{helper}{players}{$ln}{type}='LMS';
+                        }
+                    }
+                }
+            }
+        } 
+    }
+}
 
 # ############################################################################
 #  No PERL code beyond this line
