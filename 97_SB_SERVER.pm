@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0024 2016-10-31 21:40:00Z CD $
+# $Id: 97_SB_SERVER.pm 0025 2016-11-01 17:14:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -24,7 +24,7 @@
 #  we have the following readings
 #  power            on|off
 #  version          the version of the SB Server
-#  serversecure     is the CLI port protected with a passowrd?
+#  serversecure     is the CLI port protected with a password?
 #
 # ############################################################################
 #
@@ -65,7 +65,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0024';
+use constant SB_SERVER_VERSION => '0025';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -318,6 +318,7 @@ sub SB_SERVER_Define( $$ ) {
 
     if (!defined($hash->{OLDDEF})) {    # CD 0024
         SB_SERVER_LoadSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
+        SB_SERVER_LoadServerStates($hash) if($SB_SERVER_hasDataDumper==1);
     }
     
     # open the IO device
@@ -538,45 +539,50 @@ sub SB_SERVER_Set( $@ ) {
     my $cmd = shift( @a );
 
     if( $cmd eq "?" ) {
-	# this one should give us a drop down list
-	my $res = "Unknown argument ?, choose one of " . 
-	    "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
-	$res .= "rescan:full,playlists ";
-    $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg ";  # CD 0019
-    $res .= "syncGroup";  # CD 0024
+        # this one should give us a drop down list
+        my $res = "Unknown argument ?, choose one of " . 
+            "on renew:noArg abort:noArg cliraw statusRequest:noArg ";
+        $res .= "rescan:full,playlists ";
+        $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg ";  # CD 0019
+        $res .= "syncGroup ";  # CD 0024
+        $res .= "save ";  # CD 0025
+        my $out="";
+        if (defined($hash->{helper}{savedServerStates})) {
+            foreach my $pl ( keys %{$hash->{helper}{savedServerStates}} ) {
+                $out.=$pl.",";
+            }
+            $out=~s/,$//;
+        }
+        $res .= "recall:$out ";
 
-	return( $res );
-
+        return( $res );
     } elsif( $cmd eq "on" ) {
 	if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
-	    # the server is off, try to reactivate it
-	    if( $hash->{WOLNAME} ne "none" ) {
-		fhem( "set $hash->{WOLNAME} on" );
-        $hash->{helper}{WOLFastReconnectUntil}=time()+120;   # CD 0007
-        $hash->{helper}{WOLFastReconnectNext}=time()+30;    # CD 0007
-	    }
-	    if( $hash->{RCCNAME} ne "none" ) {
-		fhem( "set $hash->{RCCNAME} on" );
-	    }
+        # the server is off, try to reactivate it
+        if( $hash->{WOLNAME} ne "none" ) {
+            fhem( "set $hash->{WOLNAME} on" );
+            $hash->{helper}{WOLFastReconnectUntil}=time()+120;   # CD 0007
+            $hash->{helper}{WOLFastReconnectNext}=time()+30;    # CD 0007
+        }
+        if( $hash->{RCCNAME} ne "none" ) {
+            fhem( "set $hash->{RCCNAME} on" );
+        }
 	}
 
     } elsif( $cmd eq "renew" ) {
-	Log3( $hash, 5, "SB_SERVER_Set: renew" );
-	DevIo_SimpleWrite( $hash, "listen 1\n", 0 );
-	
+        Log3( $hash, 5, "SB_SERVER_Set: renew" );
+        DevIo_SimpleWrite( $hash, "listen 1\n", 0 );
     } elsif( $cmd eq "abort" ) {
-	DevIo_SimpleWrite( $hash, "listen 0\n", 0 );
-	
+        DevIo_SimpleWrite( $hash, "listen 0\n", 0 );
     } elsif( $cmd eq "statusRequest" ) {
-	Log3( $hash, 5, "SB_SERVER_Set: statusRequest" );
-	DevIo_SimpleWrite( $hash, "version ?\n", 0 );
-	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
-	DevIo_SimpleWrite( $hash, "favorites items 0 " .
-			   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
-			   0 );
-	DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
-    DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
-	
+        Log3( $hash, 5, "SB_SERVER_Set: statusRequest" );
+        DevIo_SimpleWrite( $hash, "version ?\n", 0 );
+        DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "favorites items 0 " .
+                   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
+                   0 );
+        DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
     } elsif( $cmd eq "cliraw" ) {
         # write raw messages to the CLI interface per player
         my $v = join( " ", @a );
@@ -595,6 +601,8 @@ sub SB_SERVER_Set( $@ ) {
     } elsif( $cmd eq "syncGroup" ) {
         return( "at least one parameter is needed" ) if( @a < 2 );
         
+        my $updateReadings=0;
+        
         my $subcmd=shift( @a );
                 
         if($subcmd eq 'addp') {
@@ -609,6 +617,7 @@ sub SB_SERVER_Set( $@ ) {
                 $hash->{helper}{syncGroups}{$statename}{0}{lmsname}='';
                 $hash->{helper}{syncGroups}{$statename}{0}{mac}='';
                 $hash->{helper}{syncGroups}{$statename}{0}{c}=1;
+                $updateReadings=1;
             }
 
             for my $pl (split(",",$players)) {
@@ -747,12 +756,42 @@ sub SB_SERVER_Set( $@ ) {
             my $statename=join( " ", @a );
 
             delete($hash->{helper}{syncGroups}{$statename}) if(defined($hash->{helper}{syncGroups}{$statename}));
+            $updateReadings=1;
         } else {
             return( "unknown command $subcmd" );
         }
         
-    
+        # CD 0025 start
+        if($updateReadings==1) {
+            my $sg;
+        
+            foreach my $e ( keys %{$hash->{helper}{syncGroups}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{syncGroups}{$e})) {
+                        $sg.="$e,";
+                    }
+                }
+            }
+            $sg='-' if ($sg eq '');
+            $sg =~ s/,$//;
+            readingsSingleUpdate( $hash, "syncGroups", $sg, 1 );
+        }
+        # CD 0025 end
     # CD 0024 end
+    # CD 0025 start
+    } elsif( $cmd eq "save" ) {
+        if(defined($a[0])) {
+            SB_SERVER_Save($hash, $a[0]);
+        } else {
+            SB_SERVER_Save($hash, "");
+        }
+    } elsif( $cmd eq "recall" ) {
+        if(defined($a[0])) {
+            SB_SERVER_Recall($hash, join(" ", @a));
+        } else {
+            SB_SERVER_Recall($hash, "");
+        }
+    # CD 0025 end
     } else {
 	;
     }
@@ -2181,6 +2220,7 @@ sub SB_SERVER_Notify( $$ ) {
     # CD 0024 start
     if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
         SB_SERVER_SaveSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
+        SB_SERVER_SaveServerStates($hash) if($SB_SERVER_hasDataDumper==1);
     }
     # CD 0024 end
 
@@ -2311,13 +2351,13 @@ sub SB_SERVER_setStates($$)
 #
 #  CD 0024
 # ----------------------------------------------------------------------------
-sub SB_SERVER_StatefileName($)
+sub SB_SERVER_StatefileName($$)
 {
-  my( $name ) = @_;
+  my( $name,$prefix ) = @_;
 
   my $statefile = $attr{global}{statefile};
   $statefile = substr $statefile,0,rindex($statefile,'/')+1;
-  return $statefile ."sbsg_$name.dd.save";
+  return $statefile . $prefix . "_$name.dd.save";
 } 
 
 sub SB_SERVER_SaveSyncGroups($)
@@ -2327,7 +2367,7 @@ sub SB_SERVER_SaveSyncGroups($)
 
   return "No saved syncgroups found" unless(defined($hash->{helper}{syncGroups}));
   return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name);
+  my $statefile = SB_SERVER_StatefileName($name,'sbsg');
 
   if(open(FH, ">$statefile")) {
     my $t = localtime;
@@ -2355,7 +2395,7 @@ sub SB_SERVER_LoadSyncGroups($)
   my $name = $hash->{NAME};
 
   return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name);
+  my $statefile = SB_SERVER_StatefileName($name,'sbsg');
 
   if(open(FH, "<$statefile")) {
     my $encoded;
@@ -2417,6 +2457,190 @@ sub SB_SERVER_BuildPlayerList($)
                 }
             }
         } 
+    }
+}
+
+# ----------------------------------------------------------------------------
+#  load/save server state
+#
+#  CD 0025
+# ----------------------------------------------------------------------------
+
+sub SB_SERVER_SaveServerStates($)
+{
+  my( $hash ) = @_;
+  my $name = $hash->{NAME};
+
+  return "No server states found" unless(defined($hash->{helper}{savedServerStates}));
+  return "No statefile specified" if(!$attr{global}{statefile});
+  my $statefile = SB_SERVER_StatefileName($name,'sbst');
+
+  if(open(FH, ">$statefile")) {
+    my $t = localtime;
+    print FH "#$t\n";
+
+    my $dumper = Data::Dumper->new([]);
+    $dumper->Terse(1);
+
+    $dumper->Values([$hash->{helper}{savedServerStates}]);
+    print FH $dumper->Dump;
+
+    close(FH);
+  } else {
+
+    my $msg = "SB_SERVER_SaveServerState: Cannot open $statefile: $!";
+    Log3 $hash, 1, $msg;
+  }
+
+  return undef;
+} 
+
+sub SB_SERVER_LoadServerStates($)
+{
+  my ($hash) = @_;
+  my $name = $hash->{NAME};
+
+  return "No statefile specified" if(!$attr{global}{statefile});
+  my $statefile = SB_SERVER_StatefileName($name,'sbst');
+
+  if(open(FH, "<$statefile")) {
+    my $encoded;
+    while (my $line = <FH>) {
+      chomp $line;
+      next if($line =~ m/^#.*$/);
+      $encoded .= $line;
+    }
+    close(FH);
+
+    return if( !defined($encoded) );
+
+    my $decoded = eval $encoded;
+    $hash->{helper}{savedServerStates} = $decoded;
+  } else {
+    my $msg = "SB_SERVER_LoadServerState: no server state file found";
+    Log3 undef, 4, $msg;
+  }
+  return undef;
+} 
+
+sub SB_SERVER_Save($$) {
+    my ( $hash, $statename ) = @_;
+    my $name = $hash->{NAME};
+
+    $statename='default' unless defined($statename);
+
+    delete($hash->{helper}{savedServerStates}{$statename}) if(defined($hash->{helper}{savedServerStates}) && defined($hash->{helper}{savedServerStates}{$statename}));
+
+    SB_SERVER_BuildPlayerList($hash) if(!defined($hash->{helper}{players}));
+
+    foreach my $e ( keys %{$hash->{helper}{players}} ) {
+        if($e ne '') {
+            if(defined($hash->{helper}{players}{$e})) {
+                if($hash->{helper}{players}{$e}{type} eq 'FHEM') {
+                    if( defined( $defs{$e} ) ) {
+                        my $phash = $defs{$e};
+                    
+                        $hash->{helper}{savedServerStates}{$statename}{players}{$e}{mac}=$hash->{helper}{players}{$e}{mac};
+                        $hash->{helper}{savedServerStates}{$statename}{players}{$e}{power}=ReadingsVal($e,"power","off");
+                        $hash->{helper}{savedServerStates}{$statename}{players}{$e}{volume}=ReadingsVal($e,"volume","0");
+                        
+                        my $sm=InternalVal($e,"SYNCMASTER","none");
+                        $hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster}=$sm;
+                        if(($sm eq 'none') || ($sm eq $hash->{helper}{players}{$e}{mac})) {
+                            SB_PLAYER_Save($phash,"xxx_sss_".$statename);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+sub SB_SERVER_Recall($$) {
+    my ( $hash, $arg ) = @_;   # CD 0036
+    my $name = $hash->{NAME};
+
+    my $del=0;
+    my $delonly=0;
+
+    my $statename;
+    my @args=split " ",$arg;
+    
+    if(defined($args[0])) {
+        $statename=$args[0];
+    } else {
+        $statename='default';
+    }
+
+    # Optionen auswerten
+    for my $opt (@args) {
+        $del=1 if($opt=~ m/^del$/);
+        $delonly=1 if($opt=~ m/^delonly$/);
+    }
+
+    if(defined($hash->{helper}{savedServerStates}) && defined($hash->{helper}{savedServerStates}{$statename})) {
+        if($delonly==0) {
+            # unsync all & set power
+            foreach my $e ( keys %{$hash->{helper}{savedServerStates}{$statename}{players}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{savedServerStates}{$statename}{players}{$e})) {
+                        my $mac=$hash->{helper}{savedServerStates}{$statename}{players}{$e}{mac};
+                        SB_SERVER_Write( $hash, $mac." sync -\n", "" );
+                        if($hash->{helper}{savedServerStates}{$statename}{players}{$e}{power} eq 'on') {
+                            SB_SERVER_Write( $hash, $mac." power 1\n", "" );
+                        } else {
+                            SB_SERVER_Write( $hash, $mac." power 0\n", "" );
+                        }
+                    }
+                }
+            }
+
+            # sync slaves & set volume
+            foreach my $e ( keys %{$hash->{helper}{savedServerStates}{$statename}{players}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{savedServerStates}{$statename}{players}{$e})) {
+                        my $mac=$hash->{helper}{savedServerStates}{$statename}{players}{$e}{mac};
+                        if (($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} ne 'none')
+                            && ($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} ne $mac)) {
+                            SB_SERVER_Write( $hash, $hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster}." sync $mac\n", "" );
+                            SB_SERVER_Write( $hash, "$mac mixer volume ". $hash->{helper}{savedServerStates}{$statename}{players}{$e}{volume}. "\n", "" );
+                        }
+                    }
+                }
+            }
+
+            # reload player states
+            foreach my $e ( keys %{$hash->{helper}{savedServerStates}{$statename}{players}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{savedServerStates}{$statename}{players}{$e})) {
+                        my $mac=$hash->{helper}{savedServerStates}{$statename}{players}{$e}{mac};
+                        if (($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} eq 'none')
+                            || ($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} ne $mac)) {
+                            if( defined( $defs{$e} ) ) {
+                                my $phash = $defs{$e};
+                                
+                                SB_PLAYER_Recall($phash,"xxx_sss_".$statename);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if(($del==1)||($delonly==1)) {
+            # delete
+            foreach my $e ( keys %{$hash->{helper}{savedServerStates}{$statename}{players}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{savedServerStates}{$statename}{players}{$e})) {
+                        if( defined( $defs{$e} ) ) {
+                            my $phash = $defs{$e};
+                            
+                            SB_PLAYER_Recall($phash,"xxx_sss_".$statename." delonly");
+                        }
+                    }
+                }
+            }
+            delete($hash->{helper}{savedServerStates}{$statename});
+        }
     }
 }
 
