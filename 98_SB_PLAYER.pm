@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 9752 beta 0060 CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0061 2016-11-01 17:14:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -254,6 +254,7 @@ sub SB_PLAYER_Attr( @ ) {
                     $hash->{helper}{ttsOptions}{internalsave}=1 if($opt=~ m/internalsave/);         # CD 0029
                     $hash->{helper}{ttsOptions}{ignorevolumelimit}=1 if($opt=~ m/ignorevolumelimit/);   # CD 0031
                     $hash->{helper}{ttsOptions}{doubleescape}=1 if($opt=~ m/doubleescape/);   # CD 0059
+                    $hash->{helper}{ttsOptions}{eventondone}=1 if($opt=~ m/eventondone/);   # CD 0061
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -2003,7 +2004,7 @@ sub SB_PLAYER_Set( $@ ) {
         my $out="";
         if (defined($hash->{helper}{savedPlayerState})) {
           foreach my $pl ( keys %{$hash->{helper}{savedPlayerState}} ) {
-            $out.=$pl."," unless ($pl=~/xxTTSxx/);
+            $out.=$pl."," unless (($pl=~/xxTTSxx/)||($pl=~/^xxx_sss_.*/));  # CD 0061 xxx_sss_ hinzugefügt
           }
           $out=~s/,$//;
         }
@@ -2943,6 +2944,14 @@ sub SB_PLAYER_SetTTSState($$$$) {
     my $name = $hash->{NAME};
 
     return if($state eq $hash->{helper}{ttsstate});
+    
+    # CD 0061 start
+    if(defined($hash->{helper}{ttsOptions}{eventondone})) {
+        if(($state==TTS_IDLE)&&($hash->{helper}{ttsstate}!=TTS_IDLE)) {
+            DoTrigger($name,"ttsdone");
+        }
+    }
+    # CD 0061 end
     
     $hash->{helper}{ttsstate}=$state;
     Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_SetTTSState: $name: ttsstate: ".$ttsstates{$hash->{helper}{ttsstate}} );
