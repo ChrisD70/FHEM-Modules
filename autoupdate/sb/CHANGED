@@ -1,5 +1,5 @@
 ﻿97_SB_SERVER:
-  161101 0025 - Reading syncGroups hinzugefügt
+  161101 0026 - Reading syncGroups hinzugefügt
               - save und recall hinzugefügt
 98_SB_PLAYER:
   161101 0061 - eventondone für TTS hinzugefügt
@@ -7,7 +7,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
-  161101 0025 - Reading syncGroups hinzugefügt
+  161101 0026 - recall korrigiert
+         0025 - Reading syncGroups hinzugefügt
               - save und recall hinzugefügt
   161031 0024 - Sync-Gruppen hinzugefügt
   160917 0023 - nur auf Änderungen von PRESENCE reagieren
