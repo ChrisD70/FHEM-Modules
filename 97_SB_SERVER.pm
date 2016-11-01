@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0025 2016-11-01 17:14:00Z CD $
+# $Id: 97_SB_SERVER.pm 0026 2016-11-01 17:14:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -65,7 +65,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0025';
+use constant SB_SERVER_VERSION => '0026';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -2615,7 +2615,7 @@ sub SB_SERVER_Recall($$) {
                     if(defined($hash->{helper}{savedServerStates}{$statename}{players}{$e})) {
                         my $mac=$hash->{helper}{savedServerStates}{$statename}{players}{$e}{mac};
                         if (($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} eq 'none')
-                            || ($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} ne $mac)) {
+                            || ($hash->{helper}{savedServerStates}{$statename}{players}{$e}{syncMaster} eq $mac)) { # CD 0026 ne durch eq ersetzt
                             if( defined( $defs{$e} ) ) {
                                 my $phash = $defs{$e};
                                 
