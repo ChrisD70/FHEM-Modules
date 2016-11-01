@@ -1,11 +1,14 @@
 ﻿97_SB_SERVER:
-  161031 0024 - Sync-Gruppen hinzugefügt
+  161101 0025 - Reading syncGroups hinzugefügt
+              - save und recall hinzugefügt
 98_SB_PLAYER:
-  160928 0060 - doubleescape korrigiert
+  161101 0061 - eventondone für TTS hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  161101 0025 - Reading syncGroups hinzugefügt
+              - save und recall hinzugefügt
   161031 0024 - Sync-Gruppen hinzugefügt
   160917 0023 - nur auf Änderungen von PRESENCE reagieren
   160904 0022 - Dokumentation vervollständigt (Eberhard)
@@ -61,6 +64,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  161101 0061 - eventondone für TTS hinzugefügt
   160928 0060 - doubleescape korrigiert
   160926 0059 - Fehlermeldung bei leerer time-Rückmeldung behoben
               - nouriescape aus ttsOptions entfernt, doubleescape hinzugefügt
