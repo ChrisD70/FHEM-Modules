@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0061 2016-11-01 17:14:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0062 2016-11-05 18:59:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -142,7 +142,7 @@ sub SB_PLAYER_Initialize( $ ) {
     # the form name:default1,default2
     $hash->{AttrList}  = "IODev ignore:1,0 do_not_notify:1,0 ";
     $hash->{AttrList}  .= "volumeStep volumeLimit "; 
-    $hash->{AttrList}  .= "ttslanguage:de,en,fr ttslink ";
+    $hash->{AttrList}  .= "ttslanguage:de,en,fr ttslink:multiple,Google,VoiceRSS ";
     $hash->{AttrList}  .= "donotnotify:true,false ";
     $hash->{AttrList}  .= "idismac:true,false ";
     $hash->{AttrList}  .= "serverautoon:true,false ";
@@ -152,7 +152,8 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "coverartwidth:50,100,200 ";
     # CD 0028
     $hash->{AttrList}  .= "ttsVolume ";
-    $hash->{AttrList}  .= "ttsOptions ";
+    $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone "; # CD 0062 Auswahl vorgeben
+
     # CD 0030
     $hash->{AttrList}  .= "ttsDelay ";
     # CD 0032
@@ -2802,7 +2803,7 @@ sub SB_PLAYER_PrepareTalk($) {
 sub SB_PLAYER_Recall($$) {
     my ( $hash, $arg ) = @_;   # CD 0036
     my $name = $hash->{NAME};
-    
+
     # CD 0036 start
     my $del=0;
     my $delonly=0;
@@ -2939,20 +2940,24 @@ sub SB_PLAYER_Recall($$) {
     }
 }
 
+# CD 0062 start
+sub SB_PLAYER_tcb_TriggerTTSDone($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    DoTrigger($name,"ttsdone");
+}
+# CD 0062 end
+
 sub SB_PLAYER_SetTTSState($$$$) {
     my ( $hash, $state, $bulk, $broadcast ) = @_;
     my $name = $hash->{NAME};
 
     return if($state eq $hash->{helper}{ttsstate});
     
-    # CD 0061 start
-    if(defined($hash->{helper}{ttsOptions}{eventondone})) {
-        if(($state==TTS_IDLE)&&($hash->{helper}{ttsstate}!=TTS_IDLE)) {
-            DoTrigger($name,"ttsdone");
-        }
-    }
-    # CD 0061 end
-    
+    my $oldstate=$hash->{helper}{ttsstate}; # CD 0062
+
     $hash->{helper}{ttsstate}=$state;
     Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "SB_PLAYER_SetTTSState: $name: ttsstate: ".$ttsstates{$hash->{helper}{ttsstate}} );
     if($bulk==1) {
@@ -2975,6 +2980,19 @@ sub SB_PLAYER_SetTTSState($$$$) {
     }
     delete($hash->{helper}{ttsqueue}) if(defined($hash->{helper}{ttsqueue}) && ($state==TTS_IDLE));
     delete($hash->{helper}{ttsPowerWasOff}) if (defined($hash->{helper}{ttsPowerWasOff}) && ($state==TTS_IDLE));
+
+    # CD 0062 start
+    if(($state==TTS_IDLE)&&($oldstate!=TTS_IDLE)) {
+        if(defined($hash->{helper}{ttsOptions}{eventondone})) {
+            RemoveInternalTimer( "TriggerTTSDone:$name");
+            InternalTimer( gettimeofday() + 0.5, 
+               "SB_PLAYER_tcb_TriggerTTSDone",
+               "TriggerTTSDone:$name", 
+               0 );
+        }
+        IOWrite( $hash, "$name fhemrelay ttsdone" );
+    }
+    # CD 0062 end
 }
 
 # ----------------------------------------------------------------------------
