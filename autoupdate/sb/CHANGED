@@ -1,12 +1,19 @@
 ﻿97_SB_SERVER:
-  161101 0026 - Reading syncGroups hinzugefügt
-              - save und recall hinzugefügt
+  161105 0027 - [ ,;:] nicht in Gruppennamen zulassen
+              - syncgroup deleteall, talk und resettts hinzugefügt
+              - Readings pro Sync-Gruppe hinzugefügt
+              - Reading syncGroups beim Start korrigiert
 98_SB_PLAYER:
-  161101 0061 - eventondone für TTS hinzugefügt
+  161105 0062 - Event ttsdone wurde zu früh geschickt
+              - Auswahlboxen für ttsOptions und ttslink
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  161105 0027 - [ ,;:] nicht in Gruppennamen zulassen
+              - syncgroup deleteall, talk und resettts hinzugefügt
+              - Readings pro Sync-Gruppe hinzugefügt
+              - Reading syncGroups beim Start korrigiert
   161101 0026 - recall korrigiert
          0025 - Reading syncGroups hinzugefügt
               - save und recall hinzugefügt
@@ -65,6 +72,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  161105 0062 - Event ttsdone wurde zu früh geschickt
+              - Auswahlboxen für ttsOptions und ttslink
   161101 0061 - eventondone für TTS hinzugefügt
   160928 0060 - doubleescape korrigiert
   160926 0059 - Fehlermeldung bei leerer time-Rückmeldung behoben

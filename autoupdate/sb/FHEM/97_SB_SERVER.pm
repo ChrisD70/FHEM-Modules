@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0026 2016-11-01 17:14:00Z CD $
+# $Id: 97_SB_SERVER.pm 0027 2016-11-05 18:59:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -65,7 +65,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0026';
+use constant SB_SERVER_VERSION => '0027';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -319,6 +319,8 @@ sub SB_SERVER_Define( $$ ) {
     if (!defined($hash->{OLDDEF})) {    # CD 0024
         SB_SERVER_LoadSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
         SB_SERVER_LoadServerStates($hash) if($SB_SERVER_hasDataDumper==1);
+        SB_SERVER_FixSyncGroupNames($hash);  # CD 0027
+        SB_SERVER_UpdateSgReadings($hash);  # CD 0027
     }
     
     # open the IO device
@@ -549,7 +551,7 @@ sub SB_SERVER_Set( $@ ) {
         my $out="";
         if (defined($hash->{helper}{savedServerStates})) {
             foreach my $pl ( keys %{$hash->{helper}{savedServerStates}} ) {
-                $out.=$pl.",";
+                $out.=$pl."," unless ($pl=~/xxxSgTalkxxx/);  # CD 0027 xxxSgTalkxxx hinzugefügt
             }
             $out=~s/,$//;
         }
@@ -599,7 +601,7 @@ sub SB_SERVER_Set( $@ ) {
     # CD 0018 end
     # CD 0024 start
     } elsif( $cmd eq "syncGroup" ) {
-        return( "at least one parameter is needed" ) if( @a < 2 );
+        return( "at least one parameter is needed" ) if( @a < 1 );
         
         my $updateReadings=0;
         
@@ -607,8 +609,10 @@ sub SB_SERVER_Set( $@ ) {
                 
         if($subcmd eq 'addp') {
             return( "not enough parameters" ) if( @a < 2 );
-            my $players=shift( @a );
-            my $statename=join( " ", @a );
+            return( "too many parameters" ) if( @a > 2 );   # CD 0027
+            my $players=$a[0];
+            my $statename=$a[1];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
 
             SB_SERVER_BuildPlayerList($hash) if(!defined($hash->{helper}{players}));
     
@@ -654,10 +658,12 @@ sub SB_SERVER_Set( $@ ) {
             }
         } elsif($subcmd eq 'removep') {
             return( "not enough parameters" ) if( @a < 2 );
-            my $players=shift( @a );
-            my $statename=join( " ", @a );
-   
-            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+            return( "too many parameters" ) if( @a > 2 );   # CD 0027
+            my $players=$a[0];
+            my $statename=$a[1];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
+
+            if((!defined($hash->{helper}{syncGroups}))||(!defined($hash->{helper}{syncGroups}{$statename}))) {
                 return( "sync group $statename not found" );
             }
 
@@ -696,10 +702,12 @@ sub SB_SERVER_Set( $@ ) {
             }
         } elsif($subcmd eq 'masterp') {
             return( "not enough parameters" ) if( @a < 2 );
-            my $pl=shift( @a );
-            my $statename=join( " ", @a );
-   
-            if(!defined($hash->{helper}{syncGroups}{$statename})) {
+            return( "too many parameters" ) if( @a > 2 );   # CD 0027
+            my $pl=$a[0];
+            my $statename=$a[1];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
+            
+            if((!defined($hash->{helper}{syncGroups}))||(!defined($hash->{helper}{syncGroups}{$statename}))) {
                 return( "sync group $statename not found" );
             }
 
@@ -726,55 +734,77 @@ sub SB_SERVER_Set( $@ ) {
 
             return( "not enough parameters" ) if( @a == 0 );
         
-            my $statename=join( " ", @a );
+            my $statename=$a[0];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
    
-            if(!defined($hash->{helper}{syncGroups}{$statename})) {
-                return( "sync group $statename not found" );
-            }
-            
-            # unsync all
-            foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
-                if(($e ne '')&&($e ne '0')) {
-                    if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
-                        SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." sync -\n", "" );
-                    }
-                }
-            }
-            
-            # sync with new master
-            foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
-                if(($e ne '')&&($e ne '0')) {
-                    if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
-                        if($hash->{helper}{syncGroups}{$statename}{$e}{mac} ne $hash->{helper}{syncGroups}{$statename}{0}{mac}) {
-                            SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{0}{mac}." sync ".$hash->{helper}{syncGroups}{$statename}{$e}{mac}."\n", "" );
-                        }
-                        SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." power 1\n", "" ) if($poweron==1);
-                    }
-                }
-            }
+            SB_SERVER_LoadSyncGroup($hash, $statename, $poweron);   # CD 0027
         } elsif($subcmd eq 'delete') {
-            my $statename=join( " ", @a );
+            my $statename=$a[0];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
 
             delete($hash->{helper}{syncGroups}{$statename}) if(defined($hash->{helper}{syncGroups}{$statename}));
+            delete($defs{$name}{READINGS}{"sg$statename"}) if(defined($defs{$name}{READINGS}{"sg$statename"})); # CD 0027
             $updateReadings=1;
+        # CD 0027 start
+        } elsif($subcmd eq 'deleteall') {
+            foreach my $e ( keys %{$hash->{helper}{syncGroups}} ) {
+                if($e ne '') {
+                    if(defined($hash->{helper}{syncGroups}{$e})) {
+                        delete($hash->{helper}{syncGroups}{$e});
+                        delete($defs{$name}{READINGS}{"sg$e"}) if(defined($defs{$name}{READINGS}{"sg$e"}));
+                        $updateReadings=1;
+                    }
+                }
+            }
+        } elsif($subcmd eq 'talk') {
+            return "talk already in progress" if(defined($hash->{helper}{sgTalkActivePlayer}));
+
+            my $poweron=0;
+            
+            if($a[0] eq 'poweron') {
+                $poweron=1;
+                shift(@a);
+            }
+
+            return( "not enough parameters" ) if( @a < 2 );
+        
+            my $statename=shift(@a);
+            $statename =~ s/[,;:]/_/g;
+
+            if((!defined($hash->{helper}{syncGroups}))||(!defined($hash->{helper}{syncGroups}{$statename}))) {
+                return( "sync group $statename not found" );
+            }
+
+            # Zustand speichern, Gruppe laden, talk verzögert an Player absetzen
+            SB_SERVER_Save($hash, 'xxxSgTalkxxx');
+            SB_SERVER_LoadSyncGroup($hash, $statename, $poweron);
+            $hash->{helper}{sgTalkPlayers}=ReadingsVal($name,"sg$statename","-");
+            if($hash->{helper}{sgTalkPlayers} eq '-') {
+                Log3( $hash, 2, "SB_SERVER_Set($name): sgtalk: no players found for group $statename"); 
+                return "no players found";
+            }
+            $hash->{helper}{sgTalkActivePlayer}='waiting for power on';
+            $hash->{helper}{sgTalkData}=join(' ', @a);
+            $hash->{helper}{sgTalkTimeoutPowerOn}=time()+3;
+            RemoveInternalTimer( "StartTalk:$name");
+            InternalTimer( gettimeofday() + 0.01, 
+               "SB_SERVER_tcb_StartTalk",
+               "StartTalk:$name", 
+               0 );
+        } elsif($subcmd eq 'resettts') {
+            SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
+            delete $hash->{helper}{sgTalkActivePlayer};
+        } elsif($subcmd eq 'fixnames') {
+            SB_SERVER_FixSyncGroupNames($hash);
+            SB_SERVER_UpdateSgReadings($hash);
+        # CD 0027 end
         } else {
             return( "unknown command $subcmd" );
         }
         
         # CD 0025 start
         if($updateReadings==1) {
-            my $sg;
-        
-            foreach my $e ( keys %{$hash->{helper}{syncGroups}} ) {
-                if($e ne '') {
-                    if(defined($hash->{helper}{syncGroups}{$e})) {
-                        $sg.="$e,";
-                    }
-                }
-            }
-            $sg='-' if ($sg eq '');
-            $sg =~ s/,$//;
-            readingsSingleUpdate( $hash, "syncGroups", $sg, 1 );
+            SB_SERVER_UpdateSgReadings($hash);
         }
         # CD 0025 end
     # CD 0024 end
@@ -787,7 +817,7 @@ sub SB_SERVER_Set( $@ ) {
         }
     } elsif( $cmd eq "recall" ) {
         if(defined($a[0])) {
-            SB_SERVER_Recall($hash, join(" ", @a));
+            SB_SERVER_Recall($hash, $a[0]);
         } else {
             SB_SERVER_Recall($hash, "");
         }
@@ -799,6 +829,135 @@ sub SB_SERVER_Set( $@ ) {
     return( undef );
 }
 
+# CD 0027 start
+sub SB_SERVER_tcb_StartTalk($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    return unless defined($hash->{helper}{sgTalkActivePlayer});
+
+    # eingeschalteten Player suchen
+    my @pls=split(',',$hash->{helper}{sgTalkPlayers});
+    foreach my $pl (@pls) {
+        if(ReadingsVal($pl,'power','0') eq 'on') {
+            $hash->{helper}{sgTalkActivePlayer}=$pl;
+            fhem "set $pl talk " . $hash->{helper}{sgTalkData};
+            last;
+        }
+    }
+
+    # keinen eingeschalteten Player gefunden
+    if($hash->{helper}{sgTalkTimeoutPowerOn}<time()) {
+        # kein Player eingeschaltet, abbrechen
+        Log3( $hash, 1, "SB_SERVER_tcb_StartTalk($name): timeout waiting for player power on, aborting"); 
+        SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
+        delete $hash->{helper}{sgTalkActivePlayer};
+    } else {
+        # warten...
+        if($hash->{helper}{sgTalkActivePlayer} eq 'waiting for power on') {
+            RemoveInternalTimer( "StartTalk:$name");
+            InternalTimer( gettimeofday() + 0.2, 
+               "SB_SERVER_tcb_StartTalk",
+               "StartTalk:$name", 
+               0 );
+        }
+    }
+}
+                  
+sub SB_SERVER_LoadSyncGroup($$$) {
+    my ($hash,$statename,$poweron) = @_;
+    my $name = $hash->{NAME};
+
+    Log3( $hash, 3, "SB_SERVER_LoadSyncGroup($name): load: $statename, poweron: $poweron"); 
+
+    if((!defined($hash->{helper}{syncGroups}))||(!defined($hash->{helper}{syncGroups}{$statename}))) {
+        return( "sync group $statename not found" );
+    }
+    
+    # unsync all
+    foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+        if(($e ne '')&&($e ne '0')) {
+            if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." sync -\n", "" );
+            }
+        }
+    }
+    
+    # sync with new master
+    foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+        if(($e ne '')&&($e ne '0')) {
+            if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                if($hash->{helper}{syncGroups}{$statename}{$e}{mac} ne $hash->{helper}{syncGroups}{$statename}{0}{mac}) {
+                    SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{0}{mac}." sync ".$hash->{helper}{syncGroups}{$statename}{$e}{mac}."\n", "" );
+                }
+                SB_SERVER_Write( $hash, $hash->{helper}{syncGroups}{$statename}{$e}{mac}." power 1\n", "" ) if($poweron==1);
+            }
+        }
+    }
+}
+
+sub SB_SERVER_FixSyncGroupNames($) {
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    foreach my $e ( keys %{$hash->{helper}{syncGroups}} ) {
+        if($e ne '') {
+            if(defined($hash->{helper}{syncGroups}{$e})) {
+                if($e =~ /[,;:\s]/) {
+                    my $n=$e;
+                    $n =~ s/[,;:\s]/_/g;
+                    $hash->{helper}{syncGroups}{$n}=$hash->{helper}{syncGroups}{$e};
+                    delete $hash->{helper}{syncGroups}{$e};
+                }
+            }
+        }
+    }
+}
+
+sub SB_SERVER_UpdateSgReadings($) {
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    my $sg='';
+
+    readingsBeginUpdate( $hash );
+
+    foreach my $e ( keys %{$hash->{helper}{syncGroups}} ) {
+        if($e ne '') {
+            if(defined($hash->{helper}{syncGroups}{$e})) {
+                $sg.="$e,";
+                
+                my $sgd='';
+                
+                foreach my $p ( keys %{$hash->{helper}{syncGroups}{$e}} ) {
+                    if(($p ne '')&&($p ne '0')) {
+                        if(defined($hash->{helper}{syncGroups}{$e}{$p})) {
+                            $sgd.=$hash->{helper}{syncGroups}{$e}{$p}{fhemname} . ",";
+                        }
+                    }
+                }
+                $sgd =~ s/,$//;
+                
+                if($sgd eq '') {
+                    delete($defs{$name}{READINGS}{"sg$e"}) if(defined($defs{$name}{READINGS}{"sg$e"}));
+                } else {
+                    if(ReadingsVal($name,"sg$e","x") ne $sgd) {
+                        readingsBulkUpdate( $hash, "sg$e", $sgd );
+                    }                
+                }
+            }
+        }
+    }
+    $sg =~ s/,$//;
+    if($sg eq '') {
+        delete($defs{$name}{READINGS}{"syncGroups"}) if(defined($defs{$name}{READINGS}{"syncGroups"}));
+    } else {
+        readingsBulkUpdate( $hash, "syncGroups", $sg );
+    }
+    readingsEndUpdate( $hash, 1 );
+}
+# CD 0027 end
 
 # ----------------------------------------------------------------------------
 # Read
@@ -919,6 +1078,19 @@ sub SB_SERVER_Read( $ ) {
     return( undef );
 }
 
+# CD 0027 start
+sub SB_SERVER_tcb_RecallAfterTalk($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    return unless defined($hash->{helper}{sgTalkActivePlayer});
+
+    SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
+
+    delete $hash->{helper}{sgTalkActivePlayer};
+}
+# CD 0027 end
 
 # ----------------------------------------------------------------------------
 # called by the clients to send data
@@ -939,7 +1111,25 @@ sub SB_SERVER_Write( $$$ ) {
 
     # CD 0012 fhemrelay Meldungen nicht an den LMS schicken sondern direkt an Dispatch übergeben
     if($fn =~ m/fhemrelay/) {
-    	SB_SERVER_DispatchCommandLine( $hash, $fn );
+        # CD 0027 start
+        if ($fn =~ m/ttsdone/) {
+            my @a=split(' ',$fn);
+            
+            # sg talk auf Player aktiv ?
+            if(defined($hash->{helper}{sgTalkActivePlayer})) {
+                if($a[0] eq $hash->{helper}{sgTalkActivePlayer}) {
+                    # recall auslösen
+                    RemoveInternalTimer( "RecallAfterTalk:$name");
+                    InternalTimer( gettimeofday() + 0.01, 
+                       "SB_SERVER_tcb_RecallAfterTalk",
+                       "RecallAfterTalk:$name", 
+                       0 );
+                }
+            }
+        } else {
+        # CD 0027 end
+            SB_SERVER_DispatchCommandLine( $hash, $fn );
+        }
         return( undef );
     }
     
@@ -2529,6 +2719,8 @@ sub SB_SERVER_Save($$) {
 
     $statename='default' unless defined($statename);
 
+    Log3( $hash, 3, "SB_SERVER_Save($name): name: $statename"); 
+
     delete($hash->{helper}{savedServerStates}{$statename}) if(defined($hash->{helper}{savedServerStates}) && defined($hash->{helper}{savedServerStates}{$statename}));
 
     SB_SERVER_BuildPlayerList($hash) if(!defined($hash->{helper}{players}));
@@ -2571,6 +2763,8 @@ sub SB_SERVER_Recall($$) {
     } else {
         $statename='default';
     }
+
+    Log3( $hash, 3, "SB_SERVER_Recall($name): name: $statename"); 
 
     # Optionen auswerten
     for my $opt (@args) {
