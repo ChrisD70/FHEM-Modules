@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0027 2016-11-05 18:59:00Z CD $
+# $Id: 97_SB_SERVER.pm 0028 2016-11-07 21:22:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -65,7 +65,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0027';
+use constant SB_SERVER_VERSION => '0028';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -653,6 +653,7 @@ sub SB_SERVER_Set( $@ ) {
                             $hash->{helper}{syncGroups}{$statename}{0}{mac}=$hash->{helper}{players}{$pl}{mac};
                         }
                         $hash->{helper}{syncGroups}{$statename}{0}{c}+=1;
+                        $updateReadings=1;  # CD 0028
                     }
                 }
             }
@@ -684,6 +685,7 @@ sub SB_SERVER_Set( $@ ) {
                                 } else {
                                     delete($hash->{helper}{syncGroups}{$statename}{$e});
                                 }
+                                $updateReadings=1;  # CD 0028
                             }
                         }
                     }
