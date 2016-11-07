@@ -1,8 +1,5 @@
 ﻿97_SB_SERVER:
-  161105 0027 - [ ,;:] nicht in Gruppennamen zulassen
-              - syncgroup deleteall, talk und resettts hinzugefügt
-              - Readings pro Sync-Gruppe hinzugefügt
-              - Reading syncGroups beim Start korrigiert
+  161107 0028 - Aktualisierung der Readings korrigiert
 98_SB_PLAYER:
   161105 0062 - Event ttsdone wurde zu früh geschickt
               - Auswahlboxen für ttsOptions und ttslink
@@ -10,6 +7,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  161107 0028 - Aktualisierung der Readings korrigiert
   161105 0027 - [ ,;:] nicht in Gruppennamen zulassen
               - syncgroup deleteall, talk und resettts hinzugefügt
               - Readings pro Sync-Gruppe hinzugefügt
