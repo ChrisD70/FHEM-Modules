@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0028 2016-11-07 21:22:00Z CD $
+# $Id: 97_SB_SERVER.pm 0029 2016-12-03 16:38:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -11,7 +11,7 @@
 #
 #  Written by bugster_de
 #
-#  Contributions from: Siggi85, Oliv06, ChrisD
+#  Contributions from: Siggi85, Oliv06, ChrisD, Eberhard
 #
 # ############################################################################
 #
@@ -60,12 +60,17 @@ my $favsetstring = "favorites: ";
 # this is the buffer for commands, we queue up when server is power=off
 my %SB_SERVER_CmdStack;
 
+my @SB_SERVER_AL_PLS;
+my @SB_SERVER_FAVS;
+my @SB_SERVER_PLS;
+my @SB_SERVER_SM;
+
 # include this for the self-calling timer we use later on
 use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0028';
+use constant SB_SERVER_VERSION => '0029';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -722,6 +727,8 @@ sub SB_SERVER_Set( $@ ) {
                             $hash->{helper}{syncGroups}{$statename}{0}{fhemname}=$hash->{helper}{syncGroups}{$statename}{$e}{fhemname};
                             $hash->{helper}{syncGroups}{$statename}{0}{lmsname}=$hash->{helper}{syncGroups}{$statename}{$e}{lmsname};
                             $hash->{helper}{syncGroups}{$statename}{0}{mac}=$hash->{helper}{syncGroups}{$statename}{$e}{mac};
+
+                            $updateReadings=1;
                         }
                     }
                 }
@@ -844,6 +851,8 @@ sub SB_SERVER_tcb_StartTalk($) {
     foreach my $pl (@pls) {
         if(ReadingsVal($pl,'power','0') eq 'on') {
             $hash->{helper}{sgTalkActivePlayer}=$pl;
+            my $phash = $defs{$pl}; # CD 0029
+            $phash->{helper}{sgTalkActive}=1;   # CD 0029
             fhem "set $pl talk " . $hash->{helper}{sgTalkData};
             last;
         }
@@ -933,9 +942,11 @@ sub SB_SERVER_UpdateSgReadings($) {
                 my $sgd='';
                 
                 foreach my $p ( keys %{$hash->{helper}{syncGroups}{$e}} ) {
-                    if(($p ne '')&&($p ne '0')) {
+                    if($p ne '') {
                         if(defined($hash->{helper}{syncGroups}{$e}{$p})) {
-                            $sgd.=$hash->{helper}{syncGroups}{$e}{$p}{fhemname} . ",";
+                            if(($hash->{helper}{syncGroups}{$e}{$p}{fhemname} ne $hash->{helper}{syncGroups}{$e}{0}{fhemname})||($p eq '0')) { # CD 0029
+                                $sgd.=$hash->{helper}{syncGroups}{$e}{$p}{fhemname} . ",";
+                            }
                         }
                     }
                 }
@@ -1043,7 +1054,7 @@ sub SB_SERVER_Read( $ ) {
         my $lastchar = substr( $_, -1);
         SB_SERVER_DispatchCommandLine( $hash, $_  );
         # CD 0020 start
-        #if((time-$t31)>0.3) {
+        #if((time-$t31)>0.2) {
         #    Log3($hash,0,"SB_SERVER_Read($name), time:".int((time-$t31)*1000)." cmd: ".$_);
         #}
         # CD 0020 end
@@ -1636,29 +1647,27 @@ sub SB_SERVER_Broadcast( $$@ ) {
     }
 
     foreach my $mydev ( keys %defs ) {
-	# the hash to the IODev as defined at the client
-	if( defined( $defs{$mydev}{IODev} ) ) {
-	    $iodevhash = $defs{$mydev}{IODev};
-	} else {
-	    $iodevhash = undef;
-	}
+        # the hash to the IODev as defined at the client
+        if( defined( $defs{$mydev}{IODev} ) ) {
+            $iodevhash = $defs{$mydev}{IODev};
+        } else {
+            $iodevhash = undef;
+        }
 
-	if( defined( $iodevhash ) ) {
-	    if( ( defined( $defs{$mydev}{TYPE} ) ) && 
-		( defined( $iodevhash->{NAME} ) ) ){
-
-		if( ( $defs{$mydev}{TYPE} eq "SB_PLAYER" ) &&
-		    ( $iodevhash->{NAME} eq $name ) ) {
-		    # we found a valid entry
-		    my $clienthash = $defs{$mydev};
-		    my $namebuf = $clienthash->{NAME};
-		    
-		    SB_PLAYER_RecBroadcast( $clienthash, $cmd, $msg, $bin );
-		}
-	    }
-	} 
+        if( defined( $iodevhash ) ) {
+            if( ( defined( $defs{$mydev}{TYPE} ) ) &&
+            ( $defs{$mydev}{TYPE} eq "SB_PLAYER" )){       # CD 0029 umsortiert
+                if( ( defined( $iodevhash->{NAME} ) ) &&   # CD 0029 umsortiert
+                    ( $iodevhash->{NAME} eq $name ) ) {
+                    # we found a valid entry
+                    my $clienthash = $defs{$mydev};
+                    my $namebuf = $clienthash->{NAME};
+                    
+                    SB_PLAYER_RecBroadcast( $clienthash, $cmd, $msg, $bin );
+                }
+            }
+        } 
     }
-    
     return;
 }
 
@@ -1668,7 +1677,6 @@ sub SB_SERVER_Broadcast( $$@ ) {
 # ----------------------------------------------------------------------------
 sub SB_SERVER_ParseServerStatus( $$ ) {
     my( $hash, $dataptr ) = @_;
-   
     my $name = $hash->{NAME};
 
     Log3( $hash, 4, "SB_SERVER_ParseServerStatus($name): called " );
@@ -1858,73 +1866,84 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     my @ignoredMACs=split(',',AttrVal($name,'ignoredMACs',''));   # CD 0017
     
     foreach my $player ( keys %players ) {
-	if( defined( $players{$player}{isplayer} ) ) {
-	    if( $players{$player}{isplayer} eq "0" ) {
-		Log3( $hash, 1, "not a player" );
-		next;
-	    }
-	}
-
-    # CD 0017 check ignored IPs
-	if( defined( $players{$player}{IP} ) ) {
-        my @ip=split(':',$players{$player}{IP});
-        if ($ip[0] ~~ @ignoredIPs) {
-            $players{$player}{ignore}=1;
-            next;
-        }
-    }
+        my $playerdata;     # CD 0029
     
-    # CD 0017 check ignored MACs
-	if( defined( $players{$player}{MAC} ) ) {
-        if ($players{$player}{MAC} ~~ @ignoredMACs) {
-            $players{$player}{ignore}=1;
+        if( defined( $players{$player}{isplayer} ) ) {
+            if( $players{$player}{isplayer} eq "0" ) {
+            Log3( $hash, 1, "not a player" );
+            next;
+            }
+        }
+
+        # CD 0017 check ignored IPs
+        if( defined( $players{$player}{IP} ) ) {
+            my @ip=split(':',$players{$player}{IP});
+            if ($ip[0] ~~ @ignoredIPs) {
+                $players{$player}{ignore}=1;
+                next;
+            }
+        }
+    
+        # CD 0017 check ignored MACs
+        if( defined( $players{$player}{MAC} ) ) {
+            if ($players{$player}{MAC} ~~ @ignoredMACs) {
+                $players{$player}{ignore}=1;
+                next;
+            }
+        }
+
+        # if the player is not yet known, it will be created
+        if( defined( $players{$player}{ID} ) ) {
+            Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:NONE", undef );
+        } else {
+            Log3( $hash, 1, "not defined" );
             next;
         }
-    }
 
-	# if the player is not yet known, it will be created
-	if( defined( $players{$player}{ID} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:NONE", undef );
-	} else {
-	    Log3( $hash, 1, "not defined" );
-	    next;
-	}
+        if( defined( $players{$player}{name} ) ) {
+            Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
+                  "name $players{$player}{name}", undef );
+        }
 
-	if( defined( $players{$player}{name} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "name $players{$player}{name}", undef );
-	}
+        # CD 0029 start
+        if( defined( $players{$player}{model} ) ) {
+            $playerdata=$players{$player}{model}." ";
+        } else {
+            $playerdata="unknown ";
+        }
 
-	if( defined( $players{$player}{IP} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "player ip $players{$player}{IP}", undef );
-	}
+        if( defined( $players{$player}{canpoweroff} ) ) {
+            $playerdata.=$players{$player}{canpoweroff}." ";
+        } else {
+            $playerdata.="unknown ";
+        }
 
-	if( defined( $players{$player}{model} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "player model $players{$player}{model}", undef );
-	}
+        if( defined( $players{$player}{displaytype} ) ) {
+            $playerdata.=$players{$player}{displaytype}." ";
+        } else {
+            $playerdata.="unknown ";
+        }
+        
+        if( defined( $players{$player}{connected} ) ) {
+            $playerdata.=$players{$player}{connected}." ";
+        } else {
+            $playerdata.="unknown";
+        }
 
-	if( defined( $players{$player}{canpoweroff} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "player canpoweroff $players{$player}{canpoweroff}", 
-		      undef );
-	}
+        if( defined( $players{$player}{IP} ) ) {
+            $playerdata.=$players{$player}{IP};
+        } else {
+            $playerdata.="unknown";
+        }
+        Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
+              "playerdata $playerdata", undef );
 
-	if( defined( $players{$player}{power} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "power $players{$player}{power}", undef );
-	}
+        # CD 0029 end
 
-	if( defined( $players{$player}{connected} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "connected $players{$player}{connected}", undef );
-	}
-
-	if( defined( $players{$player}{displaytype} ) ) {
-	    Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
-		      "displaytype $players{$player}{displaytype}", undef );
-	}
+        if( defined( $players{$player}{power} ) ) {
+            Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" . 
+                  "power $players{$player}{power}", undef );
+        }
     }
 
     # the list for the sync masters
@@ -1933,21 +1952,58 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 			 "FLUSH dont care", undef );
 
     # now send the list for the sync masters
+    @SB_SERVER_SM=();
     foreach my $player ( keys %players ) {
         next if defined($players{$player}{ignore});
         my $uniqueid = join( "", split( ":", $players{$player}{MAC} ) );
         Log3( $hash, 1, "SB_SERVER_ParseServerStatus($name): player has no name") unless defined($players{$player}{name});
         Log3( $hash, 1, "SB_SERVER_ParseServerStatus($name): player has no MAC") unless defined($players{$player}{MAC});
-        SB_SERVER_Broadcast( $hash, "SYNCMASTER",  
-                     "ADD $players{$player}{name} " . 
-                     "$players{$player}{MAC} $uniqueid", undef );
+        push @SB_SERVER_SM, "ADD $players{$player}{name} " . 
+                      "$players{$player}{MAC} $uniqueid" # CD 0029 aufteilen wenn Hardware zu schwach
     }
+    # CD 0029 start
+    if(scalar(@SB_SERVER_SM)>0) {
+        RemoveInternalTimer( "SB_SERVER_tcb_SendSyncMasters:$name");
+        InternalTimer( gettimeofday() + 0.01,
+                   "SB_SERVER_tcb_SendSyncMasters",
+                   "SB_SERVER_tcb_SendSyncMasters:$name", 
+                   0 );
+    }
+    # CD 0029 end
 
     SB_SERVER_BuildPlayerList($hash);   # CD 0024
-    
+
     return;
 }
 
+# CD 0029 start
+# für schwache Hardware Übertragung aufteilen
+sub SB_SERVER_tcb_SendSyncMasters( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    RemoveInternalTimer( "SB_SERVER_tcb_SendSyncMasters:$name");
+
+    my $a;
+    my $t=time();
+    
+    do {
+        $a=pop @SB_SERVER_SM;
+        if (defined($a)) {
+            SB_SERVER_Broadcast( $hash, "SYNCMASTER", $a, undef );
+        }
+    } while ((time()<$t+0.05) && defined($a));
+
+    if(scalar(@SB_SERVER_SM)>0) {
+    Log 0,"SB_SERVER_tcb_SendSyncMasters: ".scalar(@SB_SERVER_SM)." entries remaining";
+        InternalTimer( gettimeofday() + 0.05,
+                   "SB_SERVER_tcb_SendSyncMasters",
+                   "SB_SERVER_tcb_SendSyncMasters:$name", 
+                   0 );
+    }
+}
+# CD 0029 end
 
 # ----------------------------------------------------------------------------
 #  Parse the return values of the favorites items
@@ -2129,19 +2185,56 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 
     # find all the names and broadcast to our clients
     $favsetstring = "favorites:";
+    @SB_SERVER_FAVS=(); # CD 0029
     foreach my $titi ( keys %{$favorites{$name}} ) {
-	Log3( $hash, 5, "SB_SERVER_ParseFavorites($name): " . 
-	      "ID:" .  $favorites{$name}{$titi}{ID} . 
-	      " Name:" . $favorites{$name}{$titi}{Name} . " $titi" );
-	$favsetstring .= "$titi,";
-	SB_SERVER_Broadcast( $hash, "FAVORITES",  
-			     "ADD $name $favorites{$name}{$titi}{ID} " . 
-			     "$titi $favorites{$name}{$titi}{URL} $favorites{$name}{$titi}{Name}", undef );     # CD 0009 URL an Player schicken
+        Log3( $hash, 5, "SB_SERVER_ParseFavorites($name): " . 
+              "ID:" .  $favorites{$name}{$titi}{ID} . 
+              " Name:" . $favorites{$name}{$titi}{Name} . " $titi" );
+        $favsetstring .= "$titi,";
+        push @SB_SERVER_FAVS, "ADD $name $favorites{$name}{$titi}{ID} " . 
+                     "$titi $favorites{$name}{$titi}{URL} $favorites{$name}{$titi}{Name}";     # CD 0009 URL an Player schicken # CD 0029 aufteilen wenn Hardware zu schwach
     }
+    # CD 0029 start
+    if(scalar(@SB_SERVER_FAVS)>0) {
+        RemoveInternalTimer( "SB_SERVER_tcb_SendFavorites:$name");
+        InternalTimer( gettimeofday() + 0.01,
+                   "SB_SERVER_tcb_SendFavorites",
+                   "SB_SERVER_tcb_SendFavorites:$name", 
+                   0 );
+    }
+    # CD 0029 end
     #chop( $favsetstring );
     #$favsetstring .= " ";
 }
 
+# CD 0029 start
+# für schwache Hardware Übertragung aufteilen
+sub SB_SERVER_tcb_SendFavorites( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    RemoveInternalTimer( "SB_SERVER_tcb_SendFavorites:$name");
+
+    my $a;
+    my $t=time();
+    
+    do {
+        $a=pop @SB_SERVER_FAVS;
+        if (defined($a)) {
+            SB_SERVER_Broadcast( $hash, "FAVORITES", $a, undef );     # CD 0009 URL an Player schicken
+        }
+    } while ((time()<$t+0.05) && defined($a));
+
+    if(scalar(@SB_SERVER_FAVS)>0) {
+    #Log 0,"SB_SERVER_tcb_SendFavorites: ".scalar(@SB_SERVER_FAVS)." entries remaining";
+        InternalTimer( gettimeofday() + 0.05,
+                   "SB_SERVER_tcb_SendFavorites",
+                   "SB_SERVER_tcb_SendFavorites:$name", 
+                   0 );
+    }
+}
+# CD 0029 end
 
 # ----------------------------------------------------------------------------
 #  generate a UID for the hash entry from the name
@@ -2260,25 +2353,59 @@ sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
     SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
 			 "FLUSH dont care", undef );
 
-    my @r=split("category:",join(" ",@{$dataptr}));
-    foreach my $a (@r){
-        my $i1=index($a," title:");
-        my $i2=index($a," url:");
-        my $i3=index($a," singleton:");
-        if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
-            my $url=substr($a,$i2+5,$i3-$i2-5);
-            $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
-            my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));
-            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
-                        "ADD $pn category ".substr($a,0,$i1), undef );
-            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
-                        "ADD $pn title ".substr($a,$i1+7,$i2-$i1-7), undef );
-            SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
-                        "ADD $pn url $url", undef );
-        }
+    @SB_SERVER_AL_PLS=split("category:",join(" ",@{$dataptr}));
+    # CD 0029 Übertragung an Player aufteilen
+    if(scalar(@SB_SERVER_AL_PLS)>0) {
+        RemoveInternalTimer( "SB_SERVER_tcb_SendAlarmPlaylists:$name");
+        InternalTimer( gettimeofday() + 0.01,
+                   "SB_SERVER_tcb_SendAlarmPlaylists",
+                   "SB_SERVER_tcb_SendAlarmPlaylists:$name", 
+                   0 );
     }
 }
 # CD 0011 end
+
+# CD 0029 start
+# für schwache Hardware Übertragung aufteilen
+sub SB_SERVER_tcb_SendAlarmPlaylists( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    RemoveInternalTimer( "SB_SERVER_tcb_SendAlarmPlaylists:$name");
+
+    my $a;
+    my $t=time();
+    
+    do {
+        $a=pop @SB_SERVER_AL_PLS;
+        if (defined($a)) {
+            my $i1=index($a," title:");
+            my $i2=index($a," url:");
+            my $i3=index($a," singleton:");
+            if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
+                my $url=substr($a,$i2+5,$i3-$i2-5);
+                $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
+                my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));
+                SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                            "ADD $pn category ".substr($a,0,$i1), undef );
+                SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                            "ADD $pn title ".substr($a,$i1+7,$i2-$i1-7), undef );
+                SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
+                            "ADD $pn url $url", undef );
+            }
+        }
+    } while ((time()<$t+0.05) && defined($a));
+
+    if(scalar(@SB_SERVER_AL_PLS)>0) {
+    #Log 0,"SB_SERVER_tcb_SendAlarmPlaylists: ".scalar(@SB_SERVER_AL_PLS)." entries remaining";
+        InternalTimer( gettimeofday() + 0.05,
+                   "SB_SERVER_tcb_SendAlarmPlaylists",
+                   "SB_SERVER_tcb_SendAlarmPlaylists:$name", 
+                   0 );
+    }
+}
+# CD 0029 end
 
 # ----------------------------------------------------------------------------
 #  parse the list of known Playlists
@@ -2323,40 +2450,76 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 
     my @data1 = split( " ", $datastr );
 
+    @SB_SERVER_PLS=();
+    
     foreach( @data1 ) {
-	if( $_ =~ /^(id:)(.*)/ ) {
-	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
-		  "id:$idbuf name:$namebuf " );
-	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
-				     "ADD $namebuf $idbuf $uniquename", undef );
-	    }
-	    $idbuf = $2;
-	    $namebuf = "";
-	    $uniquename = "";
-	    next;
-	} elsif( $_ =~ /^(playlist:)(.*)/ ) {
-	    $namebuf = $2;
-	    next;
-	} elsif( $_ =~ /^(count:)([0-9]*)/ ) {
-	    # the last entry of the return
-	    Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
-		  "id:$idbuf name:$namebuf " );
-	    if( $idbuf != -1 ) {
-		$uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-		SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
-				     "ADD $namebuf $idbuf $uniquename", undef );
-	    }
-	    
-	} else {
-	    $namebuf .= "_" . $_;
-	    next;
-	}
+        if( $_ =~ /^(id:)(.*)/ ) {
+            Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
+              "id:$idbuf name:$namebuf " );
+            if( $idbuf != -1 ) {
+                $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename";         # CD 0029
+            }
+            $idbuf = $2;
+            $namebuf = "";
+            $uniquename = "";
+            next;
+        } elsif( $_ =~ /^(playlist:)(.*)/ ) {
+            $namebuf = $2;
+            next;
+        } elsif( $_ =~ /^(count:)([0-9]*)/ ) {
+            # the last entry of the return
+            Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
+              "id:$idbuf name:$namebuf " );
+            if( $idbuf != -1 ) {
+                $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename";         # CD 0029
+            }
+            
+        } else {
+            $namebuf .= "_" . $_;
+            next;
+        }
     }
-
+    # CD 0029 start
+    if(scalar(@SB_SERVER_PLS)>0) {
+        InternalTimer( gettimeofday() + 0.01,
+                   "SB_SERVER_tcb_SendPlaylists",
+                   "SB_SERVER_tcb_SendPlaylists:$name", 
+                   0 );
+    }
+    # CD 0029 end
     return;
 }
+
+# CD 0029 start
+# für schwache Hardware Übertragung aufteilen
+sub SB_SERVER_tcb_SendPlaylists( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    RemoveInternalTimer( "SB_SERVER_tcb_SendPlaylists:$name");
+
+    my $a;
+    my $t=time();
+    
+    do {
+        $a=pop @SB_SERVER_PLS;
+        if (defined($a)) {
+            SB_SERVER_Broadcast( $hash, "PLAYLISTS", $a, undef );
+        }
+    } while ((time()<$t+0.05) && defined($a));
+
+    if(scalar(@SB_SERVER_PLS)>0) {
+    #Log 0,"SB_SERVER_tcb_SendPlaylists: ".scalar(@SB_SERVER_PLS)." entries remaining";
+        InternalTimer( gettimeofday() + 0.05,
+                   "SB_SERVER_tcb_SendPlaylists",
+                   "SB_SERVER_tcb_SendPlaylists:$name", 
+                   0 );
+    }
+}
+# CD 0029 end
 
 # CD 0008 start
 sub SB_SERVER_CheckConnection($) {
@@ -2522,6 +2685,7 @@ sub SB_SERVER_LMS_Status( $ ) {
 		       AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
     DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
+    DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );  # CD 0029
 
     return( true );
 }
@@ -2623,9 +2787,8 @@ sub SB_SERVER_BuildPlayerList($)
         if( defined( $defs{$mydev}{IODev} ) ) {
             $iodevhash = $defs{$mydev}{IODev};
             if( ( defined( $defs{$mydev}{TYPE} ) ) && 
-                ( defined( $iodevhash->{NAME} ) ) ) {
-
-                if( ( $defs{$mydev}{TYPE} eq "SB_PLAYER" ) &&
+                ( $defs{$mydev}{TYPE} eq "SB_PLAYER" )){       # CD 0029 umsortiert
+                if( ( defined( $iodevhash->{NAME} ) ) &&    # CD 0029 umsortiert
                     ( $iodevhash->{NAME} eq $name ) ) {
                     # we found a valid entry
                     my $chash = $defs{$mydev};
@@ -2648,7 +2811,7 @@ sub SB_SERVER_BuildPlayerList($)
                     }
                 }
             }
-        } 
+        }
     }
 }
 

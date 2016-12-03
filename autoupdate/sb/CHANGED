@@ -1,15 +1,24 @@
 ﻿97_SB_SERVER:
-  161107 0028 - Aktualisierung der Readings korrigiert
+  161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
+              - Master als ersten Player in den sync-Group-Readings anzeigen
+              - Serverstatus wenn nötig aufteilen und an Player verteilen
+              - bei syncGroup talk Zustand nicht beim Player abspeichern
 98_SB_PLAYER:
-  161105 0062 - Event ttsdone wurde zu früh geschickt
-              - Auswahlboxen für ttsOptions und ttslink
+  161203 0063 - Event bei Ende Playlist (playlistStop)
+              - Übertragung Serverstatus angepasst
+              - Zustand bei talk über Server nicht zwischenspeichern
+              - Dokumentation ergänzt (Eberhard)
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
+              - Master als ersten Player in den sync-Group-Readings anzeigen
+              - Serverstatus wenn nötig aufteilen und an Player verteilen
+              - bei syncGroup talk Zustand nicht beim Player abspeichern
   161107 0028 - Aktualisierung der Readings korrigiert
   161105 0027 - [ ,;:] nicht in Gruppennamen zulassen
-              - syncgroup deleteall, talk und resettts hinzugefügt
+              - syncGroup deleteall, talk und resettts hinzugefügt
               - Readings pro Sync-Gruppe hinzugefügt
               - Reading syncGroups beim Start korrigiert
   161101 0026 - recall korrigiert
@@ -70,6 +79,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  161203 0063 - Event bei Ende Playlist (playlistStop)
+              - Übertragung Serverstatus angepasst
+              - Zustand bei talk über Server nicht zwischenspeichern
+              - Dokumentation ergänzt (Eberhard)
   161105 0062 - Event ttsdone wurde zu früh geschickt
               - Auswahlboxen für ttsOptions und ttslink
   161101 0061 - eventondone für TTS hinzugefügt

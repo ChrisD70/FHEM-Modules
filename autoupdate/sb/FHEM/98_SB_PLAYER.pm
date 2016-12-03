@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0062 2016-11-05 18:59:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0063 2016-12-03 16:38:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -609,6 +609,8 @@ sub SB_PLAYER_Define( $$ ) {
 
     $hash->{helper}{ttsstate}=TTS_IDLE;  # CD 0028
 
+    $hash->{helper}{noStopEventUntil}=0; # CD 0063
+    
     if (!defined($hash->{OLDDEF})) {    # CD 0044
         SB_PLAYER_LoadPlayerStates($hash) if($SB_PLAYER_hasDataDumper==1);   # CD 0036
         
@@ -699,11 +701,12 @@ sub SB_PLAYER_tcb_TTSRestore( $ ) {
         SB_PLAYER_LoadTalk($hash);
     } else {
     # CD 0033 end
-        if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
+        if(!defined($hash->{helper}{ttsOptions}{nosaverestore}) && !defined($hash->{helper}{sgTalkActive})) {   # CD 0063 sgTalkActive hinzugefügt
             SB_PLAYER_SetTTSState($hash,TTS_RESTORE,0,0);
             SB_PLAYER_Recall( $hash, "xxTTSxx del" );
         } else {
             SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
+            delete $hash->{helper}{sgTalkActive} if defined($hash->{helper}{sgTalkActive}); # CD 0063
         }
     }
 }
@@ -722,7 +725,7 @@ sub SB_PLAYER_Parse( $$ ) {
     
     Log3( $iohash, 5, "SB_PLAYER_Parse: called with $msg" ); 
 
-    # storing the last in an array is necessery, for tagged responses
+    # storing the last in an array is necessary, for tagged responses
     my ( $modtype, $id, @data ) = split(":", $msg, 3 );
     
     Log3( $iohash, 5, "SB_PLAYER_Parse: type:$modtype, ID:$id CMD:@data" ); 
@@ -733,7 +736,7 @@ sub SB_PLAYER_Parse( $$ ) {
     }
 
     # let's see what we got. Split the data at the space
-    # necessery, for tagged responses
+    # necessary, for tagged responses
     my @args = split( " ", join( " ", @data ) );
     my $cmd = shift( @args );
 
@@ -1094,6 +1097,7 @@ sub SB_PLAYER_Parse( $$ ) {
                     }
                 }
             }
+            $hash->{helper}{noStopEventUntil}=time()+2.0;   # CD 0063
         # CD 0021 end
         } elsif( $args[ 0 ] eq "clear" ) {
             readingsBulkUpdate( $hash, "currentPlaylistName", "none" );
@@ -1108,6 +1112,13 @@ sub SB_PLAYER_Parse( $$ ) {
         } elsif( $args[ 0 ] eq "stop" ) {
             readingsBulkUpdate( $hash, "playStatus", "stopped" );                # CD 0012 'power off' durch 'playStatus stopped' ersetzt
             SB_PLAYER_Amplifier( $hash );
+            # CD 0063 start
+            RemoveInternalTimer( "TriggerPlaylistStop:$name");
+            InternalTimer( gettimeofday() + 1.0, 
+               "SB_PLAYER_tcb_TriggerPlaylistStop",
+               "TriggerPlaylistStop:$name", 
+               0 );
+            # CD 0063 stop
         # CD 0014 start
         } elsif( $args[ 0 ] eq "index" ) {
             readingsBulkUpdate( $hash, "playlistCurrentTrack", $args[ 1 ] eq '?' ? 0 : $args[ 1 ]+1 );  # Heppel 0056
@@ -1215,7 +1226,21 @@ sub SB_PLAYER_Parse( $$ ) {
             
         } else {
         }
-
+    # CD 0063 start
+    } elsif( $cmd eq "playerdata" ) {
+        $hash->{MODEL} = $args[ 0 ] unless $args[ 0 ] eq 'unknown';
+        $hash->{CANPOWEROFF} = $args[ 1 ] unless $args[ 1 ] eq 'unknown';
+        $hash->{DISPLAYTYPE} = $args[ 2 ] unless $args[ 2 ] eq 'unknown';
+        if( $args[ 3 ] ne 'unknown' ) {
+            readingsBulkUpdate( $hash, "connected", $args[ 3 ] );
+            readingsBulkUpdate( $hash, "presence", "present" );
+        }
+        
+        $hash->{PLAYERIP} = "$args[ 4 ]" unless $args[ 4 ] eq 'unknown';
+        if( defined( $args[ 5 ] ) ) {
+            $hash->{PLAYERIP} .= ":$args[ 5 ]";
+        }
+    # CD 0063 end
     } elsif( $cmd eq "power" ) {
         if( !( @args ) ) {
             # no arguments were send with the Power command
@@ -2702,6 +2727,7 @@ sub SB_PLAYER_Set( $@ ) {
         }
     } elsif( $cmd eq "resetTTS" ) {
         delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));  # CD 0056
+        delete $hash->{helper}{sgTalkActive} if defined($hash->{helper}{sgTalkActive}); # CD 0063
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
     # CD 0047 start
     } elsif( lc($cmd) eq "currenttrackposition" ) {
@@ -2777,7 +2803,7 @@ sub SB_PLAYER_PrepareTalk($) {
     my $name = $hash->{NAME};
 
     # talk ist nicht aktiv
-    if(!defined($hash->{helper}{ttsOptions}{nosaverestore})) {
+    if(!defined($hash->{helper}{ttsOptions}{nosaverestore}) && !defined($hash->{helper}{sgTalkActive})) {   # CD 0063 sgTalkActive hinzugefügt
         SB_PLAYER_SetTTSState($hash,TTS_SAVE,0,0);
         SB_PLAYER_Save( $hash, "xxTTSxx" ) if(!defined($hash->{helper}{saveLocked}));
     }
@@ -2949,6 +2975,20 @@ sub SB_PLAYER_tcb_TriggerTTSDone($) {
     DoTrigger($name,"ttsdone");
 }
 # CD 0062 end
+
+# CD 0063 start
+sub SB_PLAYER_tcb_TriggerPlaylistStop($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    $hash->{helper}{noStopEventUntil}=0 unless defined($hash->{helper}{noStopEventUntil});
+
+    if ((ReadingsVal($name,"playStatus","x") eq "stopped")&&(time()>$hash->{helper}{noStopEventUntil})&&($hash->{helper}{ttsstate}==TTS_IDLE)) {
+        DoTrigger($name,"playlistStop");
+    }
+}
+# CD 0063 end
 
 sub SB_PLAYER_SetTTSState($$$$) {
     my ( $hash, $state, $bulk, $broadcast ) = @_;
@@ -4585,10 +4625,11 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>next|channelUp</b> -  next track</li>
      <li><b>prev|channelDown</b> -  previous track or the beginning of the current track.</li>
      <li><b>mute</b> -  toggle mute.</li>
-     <li><b>volume &lt;n&gt;</b> -  set volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100</li>
+     <li><b>volume &lt;n&gt;</b> -  set volume to &lt;n&gt;. &lt;n&gt; must be a number between 0 and 100.</li>
+     <li><b>volume +|-&lt;n&gt;</b> - increase|decrease volume by a value given with +|-&lt;n&gt;. &lt;n&gt; must be a number between 0 and 100.</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  same as volume</li>
-     <li><b>volumeDown</b> - reduce the volume by a number of steps given with the attribute volumeStep; default 10 steps</li>
-     <li><b>volumeUp</b> - increase the volume by a number of steps given with the attribute volumeStep; default 10 steps</li>
+     <li><b>volumeDown</b> - reduce the volume by a number of steps given with the attribute volumeStep; default 10 steps.</li>
+     <li><b>volumeUp</b> - increase the volume by a number of steps given with the attribute volumeStep; default 10 steps.</li>
      <li><b>on</b> -  turn player on if possible. Issue play command otherwise.</li>
      <li><b>off</b> -  turn player off if possible. Issue stop command otherwise.</li>
      <li><b>shuffle off|song|album</b> -  enable/disable shuffle mode.</li>
@@ -4795,6 +4836,8 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>mute</b> -  Toggelt die Lautst&auml;rke stumm und wieder zur&uuml;ck.</li>
      <li><b>volume &lt;n&gt;</b> -  Stellt die Lautst&auml;rke auf einen Wert &lt;n&gt; ein. Dabei muss &lt;n&gt;
      eine Zahl zwischen 0 und 100 sein.</li>
+     <li><b>volume +|-&lt;n&gt;</b> - Erh&ouml;ht oder vermindert die Lautst&auml;rke um den Wert, der durch +|-&lt;n&gt;
+     vorgegeben wird. Dabei muss &lt;n&gt; eine Zahl zwischen 0 und 100 sein.</li>
      <li><b>volumeStraight &lt;n&gt;</b> -  mit volume identisch</li>
      <li><b>volumeDown</b> -  Verringert die Lautst&auml;rke um eine bestimmte Anzahl von Schritten die mit dem Attribut
      <a href="#SBplayervolumeStep">volumeStep</a> vorgegeben werden. Wird nichts vorgegeben, werden 10 Schritte verwendet</li>
