@@ -4,6 +4,7 @@
               - Serverstatus wenn nötig aufteilen und an Player verteilen
               - bei syncGroup talk Zustand nicht beim Player abspeichern
 98_SB_PLAYER:
+  161204 0064 - Attribute trackPositionQueryInterval, sortFavorites und sortPlaylists hinzugefügt
   161203 0063 - Event bei Ende Playlist (playlistStop)
               - Übertragung Serverstatus angepasst
               - Zustand bei talk über Server nicht zwischenspeichern
@@ -79,6 +80,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  161204 0064 - Attribute trackPositionQueryInterval, sortFavorites und sortPlaylists hinzugefügt
   161203 0063 - Event bei Ende Playlist (playlistStop)
               - Übertragung Serverstatus angepasst
               - Zustand bei talk über Server nicht zwischenspeichern

@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0063 2016-12-03 16:38:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0064 2016-12-04 20:20:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -12,7 +12,7 @@
 #  Written by bugster_de
 #
 #  Contributions from: Siggi85, Oliv06, ChrisD, Markus M., Matthew, KernSani,
-#                      Heppel, Eberhard
+#                      Heppel, Eberhard, Elektrolurch
 #
 # ##############################################################################
 #
@@ -154,6 +154,10 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "ttsVolume ";
     $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone "; # CD 0062 Auswahl vorgeben
 
+    $hash->{AttrList}  .= "trackPositionQueryInterval "; # CD 0064
+    $hash->{AttrList}  .= "sortFavorites:1,0 sortPlaylists:1,0 "; # CD 0064
+    #$hash->{AttrList}  .= "volumeOffset "; # CD 0064
+    
     # CD 0030
     $hash->{AttrList}  .= "ttsDelay ";
     # CD 0032
@@ -306,6 +310,35 @@ sub SB_PLAYER_Attr( @ ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" ) if ($init_done>0);
     }
     # CD 0055 end
+    # CD 0064 start
+    elsif( $args[ 0 ] eq "trackPositionQueryInterval" ) {
+      if( $cmd eq "set" ) {
+        RemoveInternalTimer( "QueryElapsedTime:$name");
+        if ((ReadingsVal($name,"playStatus","x") eq "playing")&&($args[1]>0)) {
+          InternalTimer( gettimeofday() + $args[1], 
+             "SB_PLAYER_tcb_QueryElapsedTime", 
+             "QueryElapsedTime:$name", 
+             0 );
+        }
+      }    
+    }
+    elsif( $args[ 0 ] eq "sortPlaylists" ) {
+      if( $cmd eq "set" ) {
+        if ($args[1] eq "1") {
+          my @radios = split(',',$hash->{SERVERPLAYLISTS});
+          $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+        }
+      }
+    }
+    elsif( $args[ 0 ] eq "sortFavorites" ) {
+      if( $cmd eq "set" ) {
+        if ($args[1] eq "1") {
+          my @radios = split(',',$hash->{FAVSTR});
+          $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+        }
+      }
+    }
+    # CD 0064 end
     return;
     # CD 0012
 }
@@ -664,7 +697,9 @@ sub SB_PLAYER_tcb_DeleteRecallPause($) {
 sub SB_PLAYER_QueryElapsedTime($) {
     my ($hash) = @_;
 
-    if(!defined($hash->{helper}{lastTimeQuery})||($hash->{helper}{lastTimeQuery}<gettimeofday()-5)) {
+    my $qi=AttrVal($hash->{NAME}, "trackPositionQueryInterval", 5); # CD 0064
+    
+    if(!defined($hash->{helper}{lastTimeQuery})||($hash->{helper}{lastTimeQuery}<gettimeofday()-$qi)) {
     #Log 0,"Querying time, last: $hash->{helper}{lastTimeQuery}, now: ".gettimeofday();
         $hash->{helper}{lastTimeQuery}=gettimeofday();
         IOWrite( $hash, "$hash->{PLAYERMAC} time ?\n" );
@@ -678,10 +713,12 @@ sub SB_PLAYER_tcb_QueryElapsedTime( $ ) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
+    my $qi=AttrVal($hash->{NAME}, "trackPositionQueryInterval", 5); # CD 0064
+
     SB_PLAYER_QueryElapsedTime($hash);
     RemoveInternalTimer( "QueryElapsedTime:$name");
-    if (ReadingsVal($name,"playStatus","x") eq "playing") {
-      InternalTimer( gettimeofday() + 5, 
+    if ((ReadingsVal($name,"playStatus","x") eq "playing")&&($qi>0)) {
+      InternalTimer( gettimeofday() + $qi, 
          "SB_PLAYER_tcb_QueryElapsedTime", 
          "QueryElapsedTime:$name", 
          0 );
@@ -844,11 +881,14 @@ sub SB_PLAYER_Parse( $$ ) {
                 SB_PLAYER_QueryElapsedTime( $hash );    # CD 0014
                 # CD 0047 start
                 RemoveInternalTimer( "QueryElapsedTime:$name");
-                InternalTimer( gettimeofday() + 5, 
-                  "SB_PLAYER_tcb_QueryElapsedTime", 
-                  "QueryElapsedTime:$name", 
-                0 );
-                # CD 0047 end
+                my $qi=AttrVal($hash->{NAME}, "trackPositionQueryInterval", 5); # CD 0064
+                if($qi>0) { # CD 0064
+                    InternalTimer( gettimeofday() + $qi, 
+                      "SB_PLAYER_tcb_QueryElapsedTime", 
+                      "QueryElapsedTime:$name", 
+                    0 );
+                    # CD 0047 end
+                }
             } # CD 0014
             # CD 0029 start
             if(defined($hash->{helper}{ttsOptions}{logplay})) {
@@ -3540,6 +3580,12 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             } else {
                 $hash->{FAVSTR} .= "," . $args[ 3 ];    # CD Test für Leerzeichen join("&nbsp;",@args[ 4..$#args ]);
             }
+            # CD 0064 start
+            if( AttrVal( $name, "sortFavorites", "0" ) eq "1" ) {
+                my @radios = split(',',$hash->{FAVSTR});    # CD0064 Elektrolurch
+                $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);   # CD0064 Elektrolurch
+            }
+            # CD 0064
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
             RemoveInternalTimer( $hash );   # CD 0016
             InternalTimer( gettimeofday() + 3, 
@@ -3611,6 +3657,12 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                     $hash->{SERVERPLAYLISTS} .= "," . $args[ 3 ];
                 }
             }   # CD 0014
+            # CD 0064 start
+            if( AttrVal( $name, "sortPlaylists", "0" ) eq "1" ) {
+                my @radios = split(',',$hash->{SERVERPLAYLISTS});
+                $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+            }
+            # CD 0064
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
             RemoveInternalTimer( $hash );   # CD 0016
             InternalTimer( gettimeofday() + 3, 
@@ -4746,12 +4798,18 @@ sub SB_PLAYER_LoadPlayerStates($)
       Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
     <li>idismac true|false<br>
       Determines if the MAC-adress should be the unique identifier</li>
+    <li>sortFavorites 0|1<br>
+      If set to 1 the favorites will be sorted alphabetically.</li>
+    <li>sortPlaylists 0|1<br>
+      If set to 1 the playlists will be sorted alphabetically.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Interval in seconds for automatic status requests. Default: 300</li>
     <li>syncedNamesSource FHEM|LMS<br>
       Determines if the synced reading contains the LMS or FHEM names of the players</li>
     <li>syncVolume 0|1<br>
       Defines whether the loudness of this player is synchronized with the other players of its group</li>
+    <li>trackPositionQueryInterval &lt;sec&gt;<br>
+      Interval in seconds for querying the current track position, 0 disables the periodic update of the track position</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
       For the use of T2Speech from the company VoiceRSS (voicerss.org) an API-key is needed. Not needed with Google’s T2Speech.</li>
     <li>ttsDelay &lt;sec1&gt;[,&lt;sec2&gt;]<br>
@@ -5003,10 +5061,16 @@ sub SB_PLAYER_LoadPlayerStates($)
       Soll die MAC-Adresse des Players als ID genommen werden, muss true (default) eingetragen werden, sonst false.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Aktualisierungsintervall der automatischen Status-Abfrage. Default: 300</li>
+    <li>sortFavorites 0|1<br>
+      Wenn das Attribut den Wert 1 hat wird die Liste der Favoriten alphabetisch sortiert</li>
+    <li>sortPlaylists 0|1<br>
+      Wenn das Attribut den Wert 1 hat wird die Liste der Wiedergabelisten alphabetisch sortiert</li>
     <li>syncedNamesSource FHEM|LMS<br>
       Legt fest ob die FHEM-Ger&auml;tenamen oder die LMS-Namen der Player im synced-Reading verwendet werden.</li>
     <li>syncVolume 0|1<br>
       Legt fest ob die Lautst&auml;rke des Players mit anderen Playern aus der Gruppe synchronisiert wird.</li>
+    <li>trackPositionQueryInterval &lt;sec&gt;<br>
+      Legt fest wie häufig die abgespielte Zeit abgefragt wird, 0 deaktiviert das Abfragen.</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
       F&uuml;r die Benutzung von T2Speech der Firma VoiceRSS (voicerss.org) ist ein API-Key erforderlich.
       F&uuml;r Googles T2Speech ist kein Key notwendig.</li>
