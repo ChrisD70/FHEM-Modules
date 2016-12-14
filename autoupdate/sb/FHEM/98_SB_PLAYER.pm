@@ -5140,7 +5140,7 @@ sub SB_PLAYER_LoadPlayerStates($)
      an das Ende der aktuellen Playlist an.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uuml;gt die angegebene Datei oder Playlist
      hinter der aktuellen Datei oder Playlist in der aktuellen Playlist ein.</li>
-     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Aktiviert den angebenen Titel der aktuellen Abspielliste.
+     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Aktiviert den angegebenen Titel der aktuellen Abspielliste.
      Ein explizit positiver oder negativer Wert kann verwendet werden um relativ zum aktuellen Titel zu springen.</li>
      <li><b>statusRequest</b> -  Aktualisierung aller Readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - F&uuml;gt den/die Player mit dem/den Namen
