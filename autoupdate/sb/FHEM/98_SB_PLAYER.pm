@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0064 2016-12-04 20:20:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0065 2016-12-14 18:42:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -156,7 +156,7 @@ sub SB_PLAYER_Initialize( $ ) {
 
     $hash->{AttrList}  .= "trackPositionQueryInterval "; # CD 0064
     $hash->{AttrList}  .= "sortFavorites:1,0 sortPlaylists:1,0 "; # CD 0064
-    #$hash->{AttrList}  .= "volumeOffset "; # CD 0064
+    $hash->{AttrList}  .= "volumeOffset "; # CD 0065
     
     # CD 0030
     $hash->{AttrList}  .= "ttsDelay ";
@@ -171,6 +171,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
+    $hash->{AttrList}  .= "ftuiSupport:1,0 ";                       # CD 0065
     $hash->{AttrList}  .= $readingFnAttributes;
     
     # CD 0036 aus 37_sonosBookmarker
@@ -339,6 +340,26 @@ sub SB_PLAYER_Attr( @ ) {
       }
     }
     # CD 0064 end
+    # CD 0065 start
+    elsif( $args[ 0 ] eq "ftuiSupport" ) {
+      if( $cmd eq "set" ) {
+        if ($args[1] eq "0") {
+            delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+        } elsif ($args[1] eq "1") {
+            if(defined($hash->{helper}{playlistIds})) {
+                my @ids=split(',',$hash->{helper}{playlistIds});
+                foreach(@ids) {
+                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                }
+                IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+            }
+        }
+      } else {
+        delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+      }
+    }
+    # CD 0065 end
+    
     return;
     # CD 0012
 }
@@ -653,6 +674,7 @@ sub SB_PLAYER_Define( $$ ) {
         $hash->{helper}{amplifierDelayOffStop}=0;   # CD 0043
         $hash->{helper}{amplifierDelayOffPower}=0;  # CD 0043
         $hash->{helper}{amplifierDelayOffPause}=0;  # CD 0043
+        $hash->{helper}{lmsvolume}=0;               # CD 0065
     }
 
     # do and update of the status
@@ -832,7 +854,7 @@ sub SB_PLAYER_Parse( $$ ) {
                     SB_PLAYER_UpdateVolumeReadings( $hash, $args[ 1 ], true );
                     # CD 0007 start
                     if((defined($hash->{helper}{setSyncVolume}) && ($hash->{helper}{setSyncVolume} != $args[ 1 ]))|| (!defined($hash->{helper}{setSyncVolume}))) {
-                        SB_PLAYER_SetSyncedVolume($hash,$args[ 1 ]);
+                        SB_PLAYER_SetSyncedVolume($hash,$args[ 1 ],0);
                     }
                     delete $hash->{helper}{setSyncVolume};
                     # CD 0007 end
@@ -1456,7 +1478,7 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0000 end
             # CD 0010 start prefset server mute
             } elsif( $args[ 1 ] eq "mute" ) {
-                SB_PLAYER_SetSyncedVolume($hash, -1) if ($args[ 2 ] == 1);
+                SB_PLAYER_SetSyncedVolume($hash, -1, 0) if ($args[ 2 ] == 1);
                 IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" ) if ($args[ 2 ] == 0);
             # CD 0010 end
             # CD 0016 start
@@ -1616,7 +1638,7 @@ sub SB_PLAYER_Parse( $$ ) {
                         $hash->{helper}{ttsRestoreVolumeAfterStop}=ReadingsVal($name,"volumeStraight","?");
                         my $vol=$hash->{helper}{ttsVolume};
                         $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit}));
-                        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
+                        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $vol)."\n" );   # CD 0065 SB_PLAYER_FHEM2LMSVolume
                     }
                 }
                 # CD 0031 end
@@ -1655,7 +1677,7 @@ sub SB_PLAYER_Parse( $$ ) {
                 # CD 0030 end
                 # CD 0031 Lautstärke zurücksetzen
                 if(defined($hash->{helper}{ttsRestoreVolumeAfterStop})) {
-                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".($hash->{helper}{ttsRestoreVolumeAfterStop})."\n" );
+                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $hash->{helper}{ttsRestoreVolumeAfterStop})."\n" ); # CD 0065 SB_PLAYER_FHEM2LMSVolume
                     delete($hash->{helper}{ttsRestoreVolumeAfterStop});
                 }
                 # CD 0031 end
@@ -1675,6 +1697,110 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0030 end
         }
     # CD 0022 end
+    # CD 0065 start
+    } elsif( $cmd eq "songinfo" ) {
+        my $trackid=0;
+        my $title="";
+        my $artist="";
+        my $album="";
+        my $flush=0;
+   
+        foreach( @args ) {
+            $flush=0;
+            if( $_ =~ /^(id:)(-?[0-9]*)/ ) {
+                $trackid=$2;
+                # bereits bekannt -> abbrechen
+                if(defined($hash->{helper}{playlistInfo}{$2}) && ($trackid>0)) {
+                    last;
+                }
+                $hash->{helper}{playlistInfo}{$trackid}{title}='-';
+                $hash->{helper}{playlistInfo}{$trackid}{artist}='-';
+                $hash->{helper}{playlistInfo}{$trackid}{album}='-';
+                $hash->{helper}{playlistInfo}{$trackid}{coverid}=0;
+                $hash->{helper}{playlistInfo}{$trackid}{duration}=0;
+                $hash->{helper}{playlistInfo}{$trackid}{tracknum}=0;
+                $hash->{helper}{playlistInfo}{$trackid}{url}='-';
+                next;
+            } elsif( $_ =~ /^(title:)(.*)/ ) {
+                $title=$2;
+                $flush=6;
+            } elsif( $_ =~ /^(artist:)(.*)/ ) {
+                $artist=$2;
+                $flush=5;
+            } elsif( $_ =~ /^(coverid:)(.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{coverid}=$2;
+                $flush=7;
+            } elsif( $_ =~ /^(remote:)(.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{remote}=1;
+                $flush=7;
+            } elsif( $_ =~ /^(duration:)(.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{duration}=$2;
+                $flush=7;
+            } elsif( $_ =~ /^(tracknum:)(.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{tracknum}=$2;
+                $flush=7;
+            } elsif( $_ =~ /^(album:)(.*)/ ) {
+                $album=$2;
+                $flush=3;
+            } elsif( $_ =~ /^(url:)(.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{url}=$2;
+                $flush=7;
+            } elsif( $_ =~ /^(.*:)(.*)/ ) {
+                $flush=7;
+            } else {
+                $title.=" ".$_ if($title ne "");
+                $album.=" ".$_ if($album ne "");
+                $artist.=" ".$_ if($artist ne "");
+                next;
+            }
+            if(($flush&1)&&($title ne "")) {
+                $hash->{helper}{playlistInfo}{$trackid}{title}=$title;
+                $title="";
+            }
+            if(($flush&2)&&($artist ne "")) {
+                $hash->{helper}{playlistInfo}{$trackid}{artist}=$artist;
+                $artist="";
+            }
+            if(($flush&4)&&($album ne "")) {
+                $hash->{helper}{playlistInfo}{$trackid}{album}=$album;
+                $album="";
+            }
+        }
+        $hash->{helper}{playlistInfo}{$trackid}{title}=$title if($title ne "");
+        $hash->{helper}{playlistInfo}{$trackid}{artist}=$artist if($artist ne "");
+        $hash->{helper}{playlistInfo}{$trackid}{album}=$album if($album ne "");
+    } elsif( $cmd eq "FHEMupdatePlaylistInfoDone" ) {
+            my $coverbase="http://" . $hash->{SBSERVER} . "/music/";
+
+            my @ids=split(',',$hash->{helper}{playlistIds});
+            my $ftuimedialist="[";
+            # [ {"Artist":"abc", "Title":"def", "Album":"yxz", "Time":"123", "File":"spotify:track:123456", "Track":"1", "Cover":"https://...." }, {"Artist":"abc", ... ]
+            foreach(@ids) {
+                if(defined($hash->{helper}{playlistInfo}{$_})) {
+                    $hash->{helper}{playlistInfo}{$_}{artist}=~s/\"//g;
+                    $hash->{helper}{playlistInfo}{$_}{title}=~s/\"//g;
+                    $hash->{helper}{playlistInfo}{$_}{album}=~s/\"//g;
+                    $ftuimedialist.="{\"Artist\":\"".$hash->{helper}{playlistInfo}{$_}{artist}."\",";
+                    $ftuimedialist.="\"Title\":\"".$hash->{helper}{playlistInfo}{$_}{title}."\",";
+                    $ftuimedialist.="\"Album\":\"".$hash->{helper}{playlistInfo}{$_}{album}."\",";
+                    $ftuimedialist.="\"Time\":\"".(int($hash->{helper}{playlistInfo}{$_}{duration}))."\",";
+                    $ftuimedialist.="\"File\":\"".$hash->{helper}{playlistInfo}{$_}{url}."\",";
+                    $ftuimedialist.="\"Track\":\"".$hash->{helper}{playlistInfo}{$_}{tracknum}."\",";
+                    $ftuimedialist.="\"Cover\":\"".$coverbase.$hash->{helper}{playlistInfo}{$_}{coverid}."/cover_50x50_o\"},";
+                } else {
+                    $ftuimedialist.="{\"Artist\":\"-\",";
+                    $ftuimedialist.="\"Title\":\"-\",";
+                    $ftuimedialist.="\"Album\":\"-\",";
+                    $ftuimedialist.="\"Time\":\"0\",";
+                    $ftuimedialist.="\"File\":\"-\",";
+                    $ftuimedialist.="\"Track\":\"0\",";
+                    $ftuimedialist.="\"Cover\":\"-\"},";
+                }
+            }
+            $ftuimedialist=~s/,$/]/;
+            #Log 0,$ftuimedialist;
+            readingsBulkUpdate( $hash, "ftuiMedialist", $ftuimedialist );
+    # CD 0065 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for 
         # autocreate
@@ -2055,11 +2181,14 @@ sub SB_PLAYER_Set( $@ ) {
             "shuffle:off,song,album next:noArg prev:noArg playlist sleep " . # CD 0017 song und album hinzugefügt # CD 0052 shuffle on entfernt
             "allalarms:enable,disable,statusRequest,delete,add " .              # CD 0015 alarm1 alarm2 entfernt
             "alarmsSnooze:slider,0,1,30 alarmsTimeout:slider,0,5,90  alarmsDefaultVolume:slider,0,1,100 alarmsFadeIn:on,off alarmsEnabled:on,off " . # CD 0016, von MM übernommen, Namen geändert
-            "cliraw talk sayText " .     # CD 0014 sayText hinzugefügt
+            "cliraw talk sayText " .    # CD 0014 sayText hinzugefügt
             "unsync:noArg " .
             "currentTrackPosition " .   # CD 0047 hinzugefügt
             "snooze:noArg " .           # CD 0052 hinzugefügt
-            "resetTTS:noArg ";          # CD 0028 hinzugefügt
+            "resetTTS:noArg " .         # CD 0028 hinzugefügt
+            "updateFTUImedialist:noArg " .  # CD 0065 hinzugefügt
+            "clearFTUIcache:noArg " .   # CD 0065 hinzugefügt
+            "track ";                   # CD 0065 hinzugefügt
         # add the favorites
         $res .= $hash->{FAVSET} . ":-," . $hash->{FAVSTR} . " ";    # CD 0014 '-' hinzugefügt
         # add the syncmasters
@@ -2164,14 +2293,14 @@ sub SB_PLAYER_Set( $@ ) {
         # set the volume to the desired level. Needs to be 0..100
         # no error checking here, as the server does this
         if( $arg[ 0 ] <= AttrVal( $name, "volumeLimit", 100 ) ) {
-            IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume $arg[ 0 ]\n" );
+            IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $arg[ 0 ])."\n" );  # CD 0065 SB_PLAYER_FHEM2LMSVolume
             # CD 0007
-            SB_PLAYER_SetSyncedVolume($hash,$arg[0]) if (!defined($arg[1]));
+            SB_PLAYER_SetSyncedVolume($hash,$arg[0],1) if (!defined($arg[1]));
         } else {
             IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume " . 
-                     AttrVal( $name, "volumeLimit", 50 ) . "\n" );
+                     SB_PLAYER_FHEM2LMSVolume($hash, AttrVal( $name, "volumeLimit", 50 )) . "\n" );  # CD 0065 SB_PLAYER_FHEM2LMSVolume
             # CD 0007
-            SB_PLAYER_SetSyncedVolume($hash,AttrVal( $name, "volumeLimit", 50 )) if (!defined($arg[1]));
+            SB_PLAYER_SetSyncedVolume($hash,AttrVal( $name, "volumeLimit", 50 ),1) if (!defined($arg[1]));
         }
 
     } elsif( $cmd eq $hash->{FAVSET} ) {
@@ -2195,12 +2324,12 @@ sub SB_PLAYER_Set( $@ ) {
             my $volstr = sprintf( "+%02d", AttrVal( $name, "volumeStep", 10 ) );
             IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume $volstr\n" );
             # CD 0007
-            SB_PLAYER_SetSyncedVolume($hash,$volstr);
+            #SB_PLAYER_SetSyncedVolume($hash,$volstr); # CD 0065 deaktiviert, auf Rückmeldung warten
         } else {
             IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume " . 
-                     AttrVal( $name, "volumeLimit", 50 ) . "\n" );
+                     SB_PLAYER_FHEM2LMSVolume($hash, AttrVal( $name, "volumeLimit", 50 )) . "\n" );    # CD 0065 SB_PLAYER_FHEM2LMSVolume
             # CD 0007
-            SB_PLAYER_SetSyncedVolume($hash,AttrVal( $name, "volumeLimit", 50 ));
+            SB_PLAYER_SetSyncedVolume($hash,AttrVal( $name, "volumeLimit", 50 ),1);
         }
 
     } elsif( ( $cmd eq "volumeDown" ) || ( $cmd eq "VOLUMEDOWN" ) || 
@@ -2208,7 +2337,7 @@ sub SB_PLAYER_Set( $@ ) {
         my $volstr = sprintf( "-%02d", AttrVal( $name, "volumeStep", 10 ) );
         IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume $volstr\n" );
         # CD 0007
-        SB_PLAYER_SetSyncedVolume($hash,$volstr);
+        #SB_PLAYER_SetSyncedVolume($hash,$volstr); # CD 0065 deaktiviert, auf Rückmeldung warten
     } elsif( ( $cmd eq "mute" ) || ( $cmd eq "MUTE" ) || ( $cmd eq "Mute" ) ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} mixer muting toggle\n" );
 
@@ -2779,6 +2908,29 @@ sub SB_PLAYER_Set( $@ ) {
     } elsif( lc($cmd) eq "snooze" ) {
         IOWrite( $hash, "$hash->{PLAYERMAC} jivealarm snooze:1\n" );
     # CD 0052 end
+    # CD 0065 start
+    } elsif( $cmd eq "updateFTUImedialist" ) {
+        if(defined($hash->{helper}{playlistIds})) {
+            my @ids=split(',',$hash->{helper}{playlistIds});
+            foreach(@ids) {
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+            }
+            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+        }
+    } elsif( $cmd eq "clearFTUIcache" ) {
+        delete $hash->{helper}{playlistInfo} if defined($hash->{helper}{playlistInfo});
+    } elsif( $cmd eq "track" ) {
+        if( @arg != 1 ) {
+            my $msg = "SB_PLAYER_Set: no arguments for track given.";
+            Log3( $hash, 3, $msg );
+            return( $msg );
+        }
+        if($arg[0]=~/^\d+$/) {
+            IOWrite( $hash, $hash->{PLAYERMAC}." playlist index ".($arg[0]-1)."\n" );
+        } else {
+            IOWrite( $hash, $hash->{PLAYERMAC}." playlist index ".$arg[0]."\n" );
+        }
+    # CD 0065 end
     } else {
         my $msg = "SB_PLAYER_Set: unsupported command given";
         Log3( $hash, 3, $msg );
@@ -2854,8 +3006,8 @@ sub SB_PLAYER_PrepareTalk($) {
         SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0);
         my $vol=$hash->{helper}{ttsVolume};
         $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
-        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".$vol."\n" );
-        SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume});
+        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $vol)."\n" );   # CD 0065 SB_PLAYER_FHEM2LMSVolume
+        SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume},1);
     }
     SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
 }
@@ -2946,8 +3098,8 @@ sub SB_PLAYER_Recall($$) {
                 }
             }
             if ($hash->{helper}{savedPlayerState}{$statename}{volumeStraight} ne '?') {
-                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume $hash->{helper}{savedPlayerState}{$statename}{volumeStraight}\n" );
-                SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{savedPlayerState}{$statename}{volumeStraight});
+                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $hash->{helper}{savedPlayerState}{$statename}{volumeStraight})."\n" ); # CD 0065 SB_PLAYER_FHEM2LMSVolume
+                SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{savedPlayerState}{$statename}{volumeStraight},1);
             }
             if ($hash->{helper}{savedPlayerState}{$statename}{repeat} ne ReadingsVal($name,"repeat","?")) {
                 if( $hash->{helper}{savedPlayerState}{$statename}{repeat} eq "off" ) {
@@ -4123,7 +4275,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
     # set default values for stuff not always send
     my $oldsyncmaster=$hash->{SYNCMASTER};  # CD 0056
-    my $oldsyncgroup=$hash->{SYNCGROUP};  # CD 0056
+    my $oldsyncgroup="";
+    $oldsyncgroup=$hash->{SYNCGROUP} if defined($hash->{SYNCGROUP});  # CD 0065
     
     $hash->{SYNCMASTER} = "none";
     $hash->{SYNCGROUP} = "none";
@@ -4316,7 +4469,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
                 SB_PLAYER_UpdateVolumeReadings( $hash, $2, true );
                 # CD 0007 start
                 if((defined($hash->{helper}{setSyncVolume}) && ($hash->{helper}{setSyncVolume} != $2))|| (!defined($hash->{helper}{setSyncVolume}))) {
-                    SB_PLAYER_SetSyncedVolume($hash,$2);
+                    SB_PLAYER_SetSyncedVolume($hash,$2,0);
                 }
                 delete $hash->{helper}{setSyncVolume};
                 # CD 0007 end
@@ -4408,6 +4561,18 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     }
     $hash->{helper}{playerStatusOK}=1;  # CD 0042
     
+    # CD 0065 start
+    if(AttrVal($name,"ftuiSupport","") eq "1") {
+        if(defined($hash->{helper}{playlistIds})) {
+            my @ids=split(',',$hash->{helper}{playlistIds});
+            foreach(@ids) {
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+            }
+            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+        }
+    }
+    # CD 0065 end
+    
     # Matthew 0019 start
     if( $hash->{SYNCED} ne "yes") {
         readingsBulkUpdate( $hash, "synced", "none" );
@@ -4477,6 +4642,28 @@ sub SB_PLAYER_EstimateElapsedTime( $ ) {
 }
 # CD 0014 end
 
+# CD 0065 start
+# ----------------------------------------------------------------------------
+#  convert volume from FHEM to LMS
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_FHEM2LMSVolume( $$ ) {
+    my( $hash, $fhemvol ) = @_;
+    
+    my $name = $hash->{NAME};
+
+    $fhemvol = int($fhemvol);
+        
+    my $offset=AttrVal($name,'volumeOffset',0);
+    my $lmsvol=$fhemvol+$offset;
+        
+    $lmsvol=0 if(($lmsvol<0) && ($fhemvol>=0));
+    $lmsvol=100 if($lmsvol>100);
+    $lmsvol=-100 if($lmsvol<-100);
+
+    return $lmsvol;
+}
+# CD 0065 end
+
 # ----------------------------------------------------------------------------
 #  update the volume readings
 # ----------------------------------------------------------------------------
@@ -4486,18 +4673,27 @@ sub SB_PLAYER_UpdateVolumeReadings( $$$ ) {
     my $name = $hash->{NAME};
 
     $vol = int($vol);       # MM 0016, Fix wegen AirPlay-Plugin
-
+    
+    # CD 0065 start
+    $hash->{helper}{lmsvolume}=$vol;
+    my $offset=AttrVal($name,'volumeOffset',0);
+    my $fhemvol=$vol-$offset;
+    $fhemvol=0 if(($fhemvol<0) && ($vol>=0));
+    $fhemvol=100 if($fhemvol>100);
+    $fhemvol=-100 if($fhemvol<-100);
+    # CD 0065 end
+    
     if( $bulk == true ) {    
-        readingsBulkUpdate( $hash, "volumeStraight", $vol );
+        readingsBulkUpdate( $hash, "volumeStraight", $fhemvol );    # CD 0065 $fhemvol verwenden
         if( $vol > 0 ) {
-            readingsBulkUpdate( $hash, "volume", $vol );
+            readingsBulkUpdate( $hash, "volume", $fhemvol );    # CD 0065 $fhemvol verwenden
         } else {
             readingsBulkUpdate( $hash, "volume", "muted" );
         }
     } else {
-        readingsSingleUpdate( $hash, "volumeStraight", $vol, 0 );
+        readingsSingleUpdate( $hash, "volumeStraight", $fhemvol, 0 );    # CD 0065 $fhemvol verwenden
         if( $vol > 0 ) {
-            readingsSingleUpdate( $hash, "volume", $vol, 0 );
+            readingsSingleUpdate( $hash, "volume", $fhemvol, 0 );    # CD 0065 $fhemvol verwenden
         } else {
             readingsSingleUpdate( $hash, "volume", "muted", 0 );
         }
@@ -4509,8 +4705,8 @@ sub SB_PLAYER_UpdateVolumeReadings( $$$ ) {
 # ----------------------------------------------------------------------------
 #  set volume of synced players
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_SetSyncedVolume( $$ ) {
-    my( $hash, $vol ) = @_;
+sub SB_PLAYER_SetSyncedVolume( $$$ ) {
+    my( $hash, $vol, $isFHEMvol ) = @_;
     
     my $name = $hash->{NAME};
 
@@ -4527,6 +4723,17 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
         my @pl=split(",",$t);
         my @chlds=devspec2array("TYPE=SB_PLAYER");
 
+        # CD 0065 start
+        if($isFHEMvol==0) {
+            my $fhemvol=$vol-AttrVal($name,'volumeOffset',0);
+            $fhemvol=0 if(($fhemvol<0) && ($vol>=0));
+            $fhemvol=100 if($fhemvol>100);
+            $fhemvol=-100 if($fhemvol<-100);
+            #Log 0,$name.": convert volume from ".$vol." to ".$fhemvol;
+            $vol=$fhemvol;
+        }
+        # CD 0065 end
+
         foreach (@pl) {
             if (($_ ne "?") && ($_ ne $hash->{PLAYERMAC})) {
                 my $mac=$_;
@@ -4536,7 +4743,7 @@ sub SB_PLAYER_SetSyncedVolume( $$ ) {
                         my $sva2=AttrVal($chash->{NAME}, "syncVolume", undef);
                         if (defined($sva2) && ($sva eq $sva2)) {
                             if ($vol>0) {   # CD 0010
-                                if(ReadingsVal($chash->{NAME}, "volumeStraight", $vol)!=$vol) {
+                                if(ReadingsVal($chash->{NAME}, "volumeStraight", $vol) ne $vol) {
                                     #Log 0,$chash->{NAME}." setting volume to ".$vol." (from ".$hash->{NAME}.")";
                                     $chash->{helper}{setSyncVolume}=$vol;
                                     fhem "set ".$chash->{NAME}." volumeStraight ".$vol." x";
@@ -4699,6 +4906,8 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>playlist add &lt;filename|playlistname&gt;</b> -  Add the specified file or playlist at the end of the current playlist.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   Insert specified file or playlist after the current track into
      the current playlist.</li>
+     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Sets the track with the given tracknumber as the current title. An explicitly
+     positive or negative number may be used to jump to a song relative to the currently playing song..</li>
      <li><b>statusRequest</b> -  Update all readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - Put playerName(s) into this player's multiroom group. Remove playerName(s) from their existing group(s) if necessary. Options:</li>
         <ul>
@@ -4931,6 +5140,8 @@ sub SB_PLAYER_LoadPlayerStates($)
      an das Ende der aktuellen Playlist an.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uuml;gt die angegebene Datei oder Playlist
      hinter der aktuellen Datei oder Playlist in der aktuellen Playlist ein.</li>
+     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Aktiviert den angebenen Titel der aktuellen Abspielliste.
+     Ein explizit positiver oder negativer Wert kann verwendet werden um relativ zum aktuellen Titel zu springen.</li>
      <li><b>statusRequest</b> -  Aktualisierung aller Readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - F&uuml;gt den/die Player mit dem/den Namen
      &lt;playerName&gt; der Multiroom-Gruppe desjenigen Players hinzu, der diesen Befehl aufgerufen hat;
