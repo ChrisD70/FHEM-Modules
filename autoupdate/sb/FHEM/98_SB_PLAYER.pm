@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0065 2016-12-14 18:42:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0066 2016-12-18 18:28:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -92,6 +92,7 @@ use constant TTS_SYNC                                    => 100;
 use constant TTS_SYNCGROUPACTIVE                         => 1000;
 use constant TTS_EXT_TEXT2SPEECH_BUSY                    => 2004;
 use constant TTS_EXT_TEXT2SPEECH_ACTIVE                  => 2006;
+
 
 my %ttsstates = (   0   =>'idle',
                     4   =>'Text2Speech busy, waiting',
@@ -2819,7 +2820,7 @@ sub SB_PLAYER_Set( $@ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} sync -\n" );
             # CD 0028 start
             if($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) {
-                SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,0);            
+                SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);  # CD 0066 single statt bulk update
             }
             # CD 0028 end
         }
@@ -2869,7 +2870,7 @@ sub SB_PLAYER_Set( $@ ) {
         SB_PLAYER_GetStatus( $hash );
         # CD 0028 start
         if($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) {
-            SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,0);            
+            SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);  # CD 0066 single statt bulk update
         }
         # CD 0028 end
     } elsif( $cmd eq "playlists" ) {

@@ -4,6 +4,7 @@
               - Serverstatus wenn nötig aufteilen und an Player verteilen
               - bei syncGroup talk Zustand nicht beim Player abspeichern
 98_SB_PLAYER:
+  161218 0066 - ReadingsUpdate für TTS_IDLE bei sync/unsync korrigiert
   161214 0065 - Attribute volumeOffset und ftuiSupport hinzugefügt
               - Befehl 'track' hinzugefügt
   161204 0064 - Attribute trackPositionQueryInterval, sortFavorites und sortPlaylists hinzugefügt
@@ -78,6 +79,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  161218 0066 - ReadingsUpdate für TTS_IDLE bei sync/unsync korrigiert
   161214 0065 - Attribute volumeOffset und ftuiSupport hinzugefügt
               - Befehl 'track' hinzugefügt
   161204 0064 - Attribute trackPositionQueryInterval, sortFavorites und sortPlaylists hinzugefügt
