@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0066 2016-12-18 18:28:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0067 2016-12-27 20:08:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -4443,12 +4443,15 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
                 my @players=devspec2array("TYPE=SB_PLAYER");
                 $syncgroup=undef;
                 
-                foreach(@players) {
-                    my $pn=$_;
-                    my $phash=$defs{$_};
-                    if($phash->{PLAYERNAME} ~~ @pn) {
-                        $syncgroup.="," if(defined($syncgroup));
-                        $syncgroup.=$pn;
+                foreach my $lmsn (@pn) {   # CD 0067
+                    foreach(@players) {
+                        my $pn=$_;
+                        my $phash=$defs{$_};
+                        if($phash->{PLAYERNAME} eq $lmsn) { # CD 0067
+                            $syncgroup.="," if(defined($syncgroup));
+                            $syncgroup.=$pn;
+                            last;
+                        }
                     }
                 }
                 readingsBulkUpdate( $hash, "synced", $syncgroup );
@@ -4907,7 +4910,7 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>playlist add &lt;filename|playlistname&gt;</b> -  Add the specified file or playlist at the end of the current playlist.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   Insert specified file or playlist after the current track into
      the current playlist.</li>
-     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Sets the track with the given tracknumber as the current title. An explicitly
+     <li><b>track &lt;n|+n|-n&gt;</b> -   Sets the track with the given tracknumber as the current title. An explicitly
      positive or negative number may be used to jump to a song relative to the currently playing song..</li>
      <li><b>statusRequest</b> -  Update all readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - Put playerName(s) into this player's multiroom group. Remove playerName(s) from their existing group(s) if necessary. Options:</li>
@@ -5141,8 +5144,9 @@ sub SB_PLAYER_LoadPlayerStates($)
      an das Ende der aktuellen Playlist an.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uuml;gt die angegebene Datei oder Playlist
      hinter der aktuellen Datei oder Playlist in der aktuellen Playlist ein.</li>
-     <li><b>track &lt;tracknumber|+tracks|-tracks&gt;</b> -   Aktiviert den angegebenen Titel der aktuellen Abspielliste.
-     Ein explizit positiver oder negativer Wert kann verwendet werden um relativ zum aktuellen Titel zu springen.</li>
+     <li><b>track &lt;n|+n|-n&gt;</b> -   Aktiviert einen bestimmten Titel der aktiven Playliste. Mit &lt;n&gt; ist
+     die laufende Nummer des Titels innerhalb dieser Playliste anzugeben. Ein explizierter Wert mit Vorzeichen,
+     springt in der momentanen Playliste um &lt;+n&gt; oder &lt;-n&gt; Titel vor oder zurück.</li>
      <li><b>statusRequest</b> -  Aktualisierung aller Readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - F&uuml;gt den/die Player mit dem/den Namen
      &lt;playerName&gt; der Multiroom-Gruppe desjenigen Players hinzu, der diesen Befehl aufgerufen hat;
