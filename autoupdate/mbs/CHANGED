@@ -1,0 +1,3 @@
+36_ModbusTCP_CC:
+    160207 0002 added FC 6 and 16, modified for FHEM 5.7
+    140221 0001 initial release
