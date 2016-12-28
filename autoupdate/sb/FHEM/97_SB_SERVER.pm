@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0029 2016-12-03 16:38:00Z CD $
+# $Id: 97_SB_SERVER.pm 0030 2016-12-28 22:09:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -553,6 +553,7 @@ sub SB_SERVER_Set( $@ ) {
         $res .= "addToFHEMUpdate:noArg removeFromFHEMUpdate:noArg ";  # CD 0019
         $res .= "syncGroup ";  # CD 0024
         $res .= "save ";  # CD 0025
+        #$res .= "getData ";  # CD 0030
         my $out="";
         if (defined($hash->{helper}{savedServerStates})) {
             foreach my $pl ( keys %{$hash->{helper}{savedServerStates}} ) {
@@ -831,6 +832,16 @@ sub SB_SERVER_Set( $@ ) {
             SB_SERVER_Recall($hash, "");
         }
     # CD 0025 end
+    # CD 0030 start
+    } elsif( $cmd eq "getData" ) {
+        return( "not enough parameters" ) if( @a < 3 );
+        $hash->{helper}{getData}{$a[2]}{format}=$a[0];
+        $hash->{helper}{getData}{$a[2]}{reading}=$a[1];
+
+        if($a[2] eq 'artists') {
+            DevIo_SimpleWrite( $hash, "artists 0 5000\n", 0 );
+        }
+    # CD 0030 end
     } else {
 	;
     }
@@ -1417,6 +1428,58 @@ sub SB_SERVER_ParseCmds( $$ ) {
         	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
         }
     # CD 0016 end
+    # CD 0030 start
+    } elsif( $cmd eq "artists" ) {
+        if(defined($hash->{helper}{getData}) && defined($hash->{helper}{getData}{artists})) {
+            my ($dev,$reading)=split(':',$hash->{helper}{getData}{artists}{reading});
+            if ($hash->{helper}{getData}{artists}{format} eq 'raw') {
+                if(defined($defs{$dev})) {
+                    readingsSingleUpdate( $defs{$dev}, $reading, $instr, 1 );
+                }
+            } else {
+                my $artistname="";
+                my $jout="[";
+                my $lout="";
+                my $iout="";
+                my $artistid=0;
+
+                foreach( @args ) {
+                    if( $_ =~ /^(artist:)(.*)/ ) {
+                        $artistname=$2;
+                        next;
+                    } elsif( $_ =~ /^(id:)([0-9]*)/ ) {
+                        # start new entry
+                        if($artistname ne "") {
+                            $artistname=~s/\"/\\\"/g;
+                            $jout.="{\"Artist\":\"".$artistname."\",\"Id\":\"".$artistid."\"},";
+                            $lout.="\"".$artistname."\":";
+                            $iout.=$artistid.":";
+                        }
+                        $artistid=$2;
+                        next;
+                    } elsif( $_ =~ /^(count:)([0-9]*)/ ) {
+                        next;
+                    } elsif( $artistname ne "" ) {
+                        $artistname=~s/\"/\\\"/g;
+                        $artistname.=" ".$_;
+                        next;
+                    }
+                }
+                if($artistname ne "") {
+                    $jout.="{\"Artist\":\"".$artistname."\"}";
+                    $lout.="\"".$artistname."\"";
+                    $iout.=$artistid;
+                }
+                $jout.="]";
+                if(defined($defs{$dev})) {
+                    readingsSingleUpdate( $defs{$dev}, $reading, $jout, 1 ) if ($hash->{helper}{getData}{artists}{format} eq 'json');
+                    readingsSingleUpdate( $defs{$dev}, $reading, $lout, 1 ) if ($hash->{helper}{getData}{artists}{format} eq 'delimited');
+                    readingsSingleUpdate( $defs{$dev}, $reading."_index", $iout, 1 ) if ($hash->{helper}{getData}{artists}{format} eq 'delimited');
+                }
+            }
+            delete $hash->{helper}{getData}{artists};
+        }
+    # CD 0030 end
     } else {
 	# unkown
     }
@@ -1735,6 +1798,8 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     # needed for scanning the IP adress
     my $e = "[0-9]";
     my $ee = "$e$e";
+    
+    my $nameactive=0;
 
     foreach( @data1 ) {
 	if( $_ =~ /^(lastscan:)([0-9]*)/ ) {
@@ -1790,70 +1855,100 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 		$players{$id}{MAC} = $2;
 		$currentplayerid = $id;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(name:)(.*)/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{name} = $2;
+        $nameactive=1;  # CD 0030
 	    }
 	    next;
 	} elsif( $_ =~ /^(displaytype:)(.*)/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{displaytype} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(model:)(.*)/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{model} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(power:)([0|1])/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{power} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(canpoweroff:)([0|1])/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{canpoweroff} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(connected:)([0|1])/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{connected} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(isplayer:)([0|1])/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{isplayer} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(ip:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{3,5})/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{IP} = $2;
 	    }
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(seq_no:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
     # CD 0017 start
 	} elsif( $_ =~ /^(isplaying:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(snplayercount:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(otherplayercount:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(server:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
 	} elsif( $_ =~ /^(serverurl:)(.*)/ ) {
 	    # just to take care of the keyword
+        $nameactive=0;  # CD 0030
 	    next;
     # CD 0017 end
+    # CD 0030 firmware und modelname
+	} elsif( $_ =~ /^(modelname:)(.*)/ ) {
+	    if( $currentplayerid ne "none" ) {
+		$players{$currentplayerid}{model} = $2;
+	    }
+        $nameactive=0;
+	    next;
+	} elsif( $_ =~ /^(firmware:)(.*)/ ) {
+	    # just to take care of the keyword
+        $nameactive=0;
+	    next;
+    } elsif( $_ =~ /:/ ) {
+        $nameactive=0;
+    # CD 0030 Ende
 	} else {
 	    # no keyword found, so let us assume it is part of the player name
-	    if( $currentplayerid ne "none" ) {
+        # CD 0030 aber nur wenn 'name' noch aktiv ist
+	    if(( $currentplayerid ne "none" )&&($nameactive==1)) {
 		$players{$currentplayerid}{name} .= $_;
 	    }
 

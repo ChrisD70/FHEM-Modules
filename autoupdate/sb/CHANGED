@@ -1,4 +1,5 @@
 ﻿97_SB_SERVER:
+  161228 0030 - unbekannte Tags im Serverstatus nicht zum Playernamen hinzufügen
   161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
               - Master als ersten Player in den sync-Group-Readings anzeigen
               - Serverstatus wenn nötig aufteilen und an Player verteilen
@@ -12,6 +13,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  161228 0030 - unbekannte Tags im Serverstatus nicht zum Playernamen hinzufügen
   161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
               - Master als ersten Player in den sync-Group-Readings anzeigen
               - Serverstatus wenn nötig aufteilen und an Player verteilen
