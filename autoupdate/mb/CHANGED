@@ -6,7 +6,7 @@
               added combineReads
               added support for coils
 36_ModbusTCPServer:
-  160922 0020 added queueDelay
+  161231 0021 fixed error handling
 37_ModbusCoil:
   160416 0012 added alignUpdateInterval
 37_ModbusRegister:
@@ -30,6 +30,7 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
+  161231 0021 fixed error handling
   160922 0020 added queueDelay
   160305 0019 added serverType, read Wago configuration, apply offset to coils
   151231 0018 added delay for readCondition
