@@ -1,7 +1,8 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0002 $
+# $Id: 36_ModbusTCP_CC.pm 0003 $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
+# 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
 
 package main;
 
@@ -152,7 +153,13 @@ sub ModbusTCP_CC_Parse($$) {####################################################
       if (@regs>0) {
         my @v;
         my $found=0;
+        my $skipnext=0;
         for (my $r=$start;$r<$start+$num;$r++) {
+          if ($skipnext>0) {
+            $skipnext--;
+#            Log 0,"skipping $r";
+            next;
+          }
           $v[$r-$start]=0;
           foreach(@regs) {
             my $n=$_;
@@ -165,19 +172,72 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                 if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
                   if ($mbd[1] eq $r+1) {
                     if ((($mbd[2] eq 'H')&&($rx_bd_fc==READ_HOLDING_REGISTERS))||(($mbd[2] eq 'I')&&($rx_bd_fc==READ_INPUT_REGISTERS))||($mbd[2] eq '*')) {
+                      my $rv;
+                      my $rvx=0;
+                      my $ext=0;
                       if(defined($mbd[3]) && ($mbd[3] ne "")) {
-                        $v[$r-$start]=ReadingsVal($n,$mbd[3],0)+0;
+                        $rv=ReadingsVal($n,$mbd[3],0);
                       } else {
-                        $v[$r-$start]=ReadingsVal($n,"state",0)+0;
+                        $rv=ReadingsVal($n,"state",0);
                       }
-                      $found=1;
-                      $v[$r-$start]*=$mbd[5] if(defined($mbd[5]));
-                      $v[$r-$start]+=$mbd[6] if(defined($mbd[6]));
                       if (defined($mbd[4])) {
-                        # Zweikomplement für negative Zahlen bilden
-                        $v[$r-$start]+=65536 if(($v[$r-$start]<0) && ($mbd[4] eq 'T'));
+                        if($mbd[4] =~ /^B(\d+)$/) {
+                          if(($1>=0) && ($1<16)) {
+                            if(defined($mbd[6])) {
+                              $rvx=1 if($rv eq $mbd[6]);
+                            } else {
+                              $rvx=1 if($rv eq 'on');
+                            }
+                            if ($rvx) {
+                              $v[$r-$start]=$v[$r-$start] | (1<<$1);
+                            } else {
+                              $v[$r-$start]=$v[$r-$start] & ~(1<<$1);
+                            }
+                            $ext=1;
+                            $found=1;
+                          } else {
+                            $ext=1;
+                            Log3 $hash, 2, "invalid bit $1 in $n";
+                          }
+                        }
+                        elsif($mbd[4] eq 'F') {
+                          $rvx=unpack "L", pack "f", $rv;
+                          # genug Platz ?
+                          if($r<$start+$num-1) {
+                            $v[$r-$start]=$rvx%65536;
+                            $v[$r-$start+1]=$rvx>>16;
+                            $skipnext=1;
+                            $ext=1;
+                            $found=1;
+                          }
+                        }
+                        elsif($mbd[4] eq 'FB') {
+                          $rvx=unpack "L", pack "f", $rv;
+                          # genug Platz ?
+                          if($r<$start+$num-1) {
+                            $v[$r-$start]=$rvx>>16;
+                            $v[$r-$start+1]=$rvx%65536;
+                            $skipnext=1;
+                            $ext=1;
+                            $found=1;
+                          }
+                        }
                       }
-                      $v[$r-$start]=0 if (($v[$r-$start]>65535)||($v[$r-$start]<0));
+                      if($ext==0) {
+                        if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                          $v[$r-$start]=ReadingsVal($n,$mbd[3],0)+0;
+                        } else {
+                          $v[$r-$start]=ReadingsVal($n,"state",0)+0;
+                        }
+                        $found=1;
+                        $v[$r-$start]*=$mbd[5] if(defined($mbd[5]));
+                        $v[$r-$start]+=$mbd[6] if(defined($mbd[6]));
+                        if (defined($mbd[4])) {
+                          # Zweikomplement für negative Zahlen bilden
+                          $v[$r-$start]+=65536 if(($v[$r-$start]<0) && ($mbd[4] eq 'T'));
+                        }
+                        $v[$r-$start]=0 if (($v[$r-$start]>65535)||($v[$r-$start]<0));
+                      }
                     }
                   }
                 }
@@ -211,20 +271,54 @@ sub ModbusTCP_CC_Parse($$) {####################################################
               if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
                 if ($mbd[1] eq $adr+1) {
                   if (($mbd[2] eq 'H')||($mbd[2] eq '*')) {
-                    $val-=65536 if(defined($mbd[4]) && ($val>32767) && ($mbd[4] eq 'T'));
-                    $val/=$mbd[5] if(defined($mbd[5]) && ($mbd[5]!=0));
-                    $val-=$mbd[6] if(defined($mbd[6]));
-                    if(defined($mbd[3]) && ($mbd[3] ne "")) {
-                      my $s=getAllSets($n);
-                      if ($s=~$mbd[3]) {
-                        fhem "set $n $mbd[3] $val";
-                      } else {
-                        fhem "setreading $n $mbd[3] $val";
+                    my $ext=0;
+                    my $sval=0;
+                    my $set=0;
+                    if (defined($mbd[4])) {
+                      if($mbd[4] =~ /^B(\d+)$/) {
+                        if(($1>=0) && ($1<16)) {
+                          if(($val & (1<<$1))>0) {
+                            $sval=defined($mbd[6])?$mbd[6]:'on';
+                          } else {
+                            $sval=defined($mbd[5])?$mbd[5]:'off';
+                          }
+                          $ext=1;
+                          $set=1;
+                          $found=1;
+                        } else {
+                          $ext=1;
+                          Log3 $hash, 2, "invalid bit $1 in $n";
+                        }
                       }
-                    } else {
-                      fhem "set $n $val";
+                      elsif($mbd[4] eq 'F') {
+                        # ignorieren
+                        $ext=1;
+                      }
+                      elsif($mbd[4] eq 'FB') {
+                        # ignorieren
+                        $ext=1;
+                      }
                     }
-                    $found=1;
+                    if($ext==0) {
+                      $sval-=65536 if(defined($mbd[4]) && ($val>32767) && ($mbd[4] eq 'T'));
+                      $sval/=$mbd[5] if(defined($mbd[5]) && ($mbd[5]!=0));
+                      $sval-=$mbd[6] if(defined($mbd[6]));
+                      $set=1;
+                      $found=1;
+                    }
+
+                    if($set==1) {
+                      if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                        my $s=getAllSets($n);
+                        if ($s=~$mbd[3]) {
+                          fhem "set $n $mbd[3] $sval";
+                        } else {
+                          fhem "setreading $n $mbd[3] $sval";
+                        }
+                      } else {
+                        fhem "set $n $sval";
+                      }
+                    }
                   }
                 }
               }
@@ -247,6 +341,7 @@ sub ModbusTCP_CC_Parse($$) {####################################################
           my @v;
           my $found=0;
           for (my $r=$start;$r<$start+$num;$r++) {
+            my $val=$data[$r-$start];
             foreach(@regs) {
               my $n=$_;
               my $c=AttrVal($n,"comment","");
@@ -258,20 +353,64 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                   if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
                     if ($mbd[1] eq $r+1) {
                       if (($mbd[2] eq 'H')||($mbd[2] eq '*')) {
-                        $data[$r-$start]-=65536 if(defined($mbd[4]) && ($data[$r-$start]>32767) && ($mbd[4] eq 'T'));
-                        $data[$r-$start]/=$mbd[5] if(defined($mbd[5]) && ($mbd[5]!=0));
-                        $data[$r-$start]-=$mbd[6] if(defined($mbd[6]));
-                        if(defined($mbd[3]) && ($mbd[3] ne "")) {
-                          my $s=getAllSets($n);
-                          if ($s=~$mbd[3]) {
-                            fhem "set $n $mbd[3] ".$data[$r-$start];
-                          } else {
-                            fhem "setreading $n $mbd[3] ".$data[$r-$start];
+                        my $ext=0;
+                        my $sval=0;
+                        my $set=0;
+                        if (defined($mbd[4])) {
+                          if($mbd[4] =~ /^B(\d+)$/) {
+                            if(($1>=0) && ($1<16)) {
+                              if(($val & (1<<$1))>0) {
+                                $sval=defined($mbd[6])?$mbd[6]:'on';
+                              } else {
+                                $sval=defined($mbd[5])?$mbd[5]:'off';
+                              }
+                              $ext=1;
+                              $set=1;
+                              $found=1;
+                            } else {
+                              $ext=1;
+                              Log3 $hash, 2, "invalid bit $1 in $n";
+                            }
                           }
-                        } else {
-                          fhem "set $n ".$data[$r-$start];
+                          elsif($mbd[4] eq 'F') {
+                            # genug Daten ?
+                            if($r<$start+$num-1) {
+                              $sval=unpack "f", pack "L", ($data[$r-$start+1]<<16)+$val;
+                              $set=1;
+                              $found=1;
+                            }
+                            $ext=1;
+                          }
+                          elsif($mbd[4] eq 'FB') {
+                            # genug Daten ?
+                            if($r<$start+$num-1) {
+                              $sval=unpack "f", pack "L", ($val<<16)+$data[$r-$start+1];
+                              $set=1;
+                              $found=1;
+                            }
+                            $ext=1;
+                          }
                         }
-                        $found=1;
+                        if($ext==0) {
+                          $sval-=65536 if(defined($mbd[4]) && ($val>32767) && ($mbd[4] eq 'T'));
+                          $sval/=$mbd[5] if(defined($mbd[5]) && ($mbd[5]!=0));
+                          $sval-=$mbd[6] if(defined($mbd[6]));
+                          $set=1;
+                          $found=1;
+                        }
+
+                        if($set==1) {
+                          if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                            my $s=getAllSets($n);
+                            if ($s=~$mbd[3]) {
+                              fhem "set $n $mbd[3] $sval";
+                            } else {
+                              fhem "setreading $n $mbd[3] $sval";
+                            }
+                          } else {
+                            fhem "set $n $sval";
+                          }
+                        }
                       }
                     }
                   }
@@ -328,6 +467,9 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
 1;
 
 =pod
+=item device 
+=item summary    access FHEM from a SCADA system using ModbusTCP
+=item summary_DE Anbindung von FHEM an ein PLS über ModbusTCP 
 =begin html
 
 <a name="ModbusTCP_CC"></a>
