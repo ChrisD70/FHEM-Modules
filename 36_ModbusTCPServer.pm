@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0020 $
+# $Id: 36_ModbusTCPServer.pm 0021 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -20,6 +20,7 @@
 # 151231 0018 added delay for readCondition
 # 160305 0019 added serverType, read Wago configuration, apply offset to coils
 # 160922 0020 added queue delay
+# 161231 0021 fixed error handling
 # TODO:
 
 package main;
@@ -337,7 +338,7 @@ sub ModbusTCPServer_Parse($$) {#################################################
       my ($rx_hd_tr_id, $rx_hd_pr_id, $rx_hd_length, $rx_hd_unit_id, $rx_bd_fc, $f_body) = unpack "nnnCCa*", $rmsg;
       # check header
       if (!(($rx_hd_tr_id == $hash->{helper}{hd_tr_id}) && ($rx_hd_pr_id == 0) &&
-            ($rx_hd_length == bytes::length($rmsg)-6) && ($hash->{helper}{fc} == $rx_bd_fc) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
+            ($rx_hd_length == bytes::length($rmsg)-6) && ($hash->{helper}{fc} == ($rx_bd_fc & 0x7f)) )) { #&& ($rx_hd_unit_id == $hash->{helper}{hd_unit_id}))) {
             
         if(($rx_hd_tr_id == $hash->{helper}{last_hd_tr_id}) && ($rx_bd_fc == $hash->{helper}{last_fc}) && ($rx_hd_length <= bytes::length($rmsg)-6) ) {
             ModbusTCPServer_LogFrame($hash,"ModbusTCPServer_Parse: got frame for previous request: ",$rmsg,3);
