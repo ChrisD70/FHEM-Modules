@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0012 $
+﻿# $Id: 37_ModbusCoil.pm 0013 $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -11,6 +11,7 @@
 # 160227 0010 added duration for writeMode impulse
 # 160305 0011 changes for Wago I/O addressing
 # 160416 0012 added alignUpdateInterval
+# 170106 0013 added writeMode redirect
 # TODO:
 
 package main;
@@ -224,6 +225,11 @@ ModbusCoil_Set($@)
           $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255,0);
           $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");  # CD 0011
         }
+      # CD 0013 start
+      } elsif($hash->{helper}{writeMode}{type} eq 'RD') {
+        $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, $v,0);
+        $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");
+      # CD 0013 end
       }
     }
     if(defined($msg)) {
@@ -493,7 +499,7 @@ ModbusCoil_Attr(@)
   elsif($attrName eq "writeMode") {
     if ($cmd eq "set") {
       my @args=split(":",$attrVal);
-      if($args[0] eq 'Impulse') {
+      if(($args[0] eq 'Impulse')||($args[0] eq 'Redirect')) {
         my ($type,$coil);
         if (defined($hash->{helper}{wago})) {
           ($type,$coil)=ModbusCoil_ParseWagoAddress($hash,$args[1]);
@@ -515,7 +521,8 @@ ModbusCoil_Attr(@)
         delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
         $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
         $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
-        $hash->{helper}{writeMode}{type}='IM';
+        $hash->{helper}{writeMode}{type}='IM' if($args[0] eq 'Impulse');
+        $hash->{helper}{writeMode}{type}='RD' if($args[0] eq 'Redirect');
       }
       else {
         return "unknown writeMode $args[0]";
@@ -585,6 +592,8 @@ sub ModbusCoil_is_float {
 1;
 
 =pod
+=item device 
+=item summary    Modbus Coil
 =begin html
 
 <a name="ModbusCoil"></a>
@@ -648,6 +657,15 @@ sub ModbusCoil_is_float {
     <li><a name="">writeCondition &lt;device&gt;:&lt;reading&gt;:&lt;value&gt;[:&lt;force&gt;]</a><br>
         Data is only written if the reading of the device has the specified value. If the parameter &lt;force&gt; is 1 and the type of the
         specified device is ModbusRegister or ModbusCoil the indicated value will be written before the write is started.
+    </li><br>
+    <li><a name="">writeMode Impulse|Redirect:&lt;address&gt;[:&lt;options&gt;]</a><br>
+        This attribute changes the normal write behaviour. Instead of writing to the address given in the definiton the write is
+        redirected to a different address. Two modes are supported:<br>
+        <ul>
+            <li>Redirect - redirects the write to the given address. The options field is not used.</li>
+            <li>Impulse - writes an impulse with a length of 0.5 s to the given address. The duration can be modified with the options field.
+            This mode is mainly used with impulse switches.</li>
+        </ul>
     </li><br>
   </ul>
 </ul>
