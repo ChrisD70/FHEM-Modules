@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0013 $
+﻿# $Id: 37_ModbusCoil.pm 0014 2017-01-14 16:46:00Z ChrisD $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -12,6 +12,7 @@
 # 160305 0011 changes for Wago I/O addressing
 # 160416 0012 added alignUpdateInterval
 # 170106 0013 added writeMode redirect
+# 170113 0014 fixed access to Wago PFC area, added writeMode SetReset, documentation update, fix Wago DO address calculation
 # TODO:
 
 package main;
@@ -73,7 +74,7 @@ ModbusCoil_Define($$)
   }
   
   if($a[2] eq 'wago') {
-    my ($type,$coil)=ModbusCoil_ParseWagoAddress($hash,$a[3]);
+    my ($type,$coil,$do)=ModbusCoil_ParseWagoAddress($hash,$a[3]);
     return "$a[3] is not a valid Wago address" if(($type==-1)||($coil==-1));
 
     $hash->{helper}{registerType}=$type;
@@ -81,6 +82,7 @@ ModbusCoil_Define($$)
     $hash->{helper}{wagoT}=substr $a[3],0,1;  # CD 0011
     $a[3]=$coil;
     $hash->{helper}{wago}=1;
+    $hash->{helper}{wagoDOOffset}=$do;
     $hash->{helper}{disableRegisterMapping}=1;
   } else {
     return "$a[2] $a[3] is not a valid Modbus coil" if(($a[2]<0)||($a[2]>255)||($a[3]<0)||($a[3]>65535));
@@ -135,27 +137,33 @@ ModbusCoil_ParseWagoAddress($$)
 
   my $coil=-1;
   my $type=-1;
+  my $do=0;
   if($arg=~/^([M|Q|I]+)X(\d+)\.(\d+)$/) {
     if($3<16) {
       if($1 eq 'I') {
+        $type=2;
         if(($2>31) && ($2<128)) {
           $coil=32256+$2*16+$3;
         } elsif(($2>255) && ($2<512)) {
+          # PFC Bereich
+          $type=1;
           $coil=4096+$2*16+$3;
         } else {
           $coil=$2*16+$3;
         }
-        $type=2;
       }
       if($1 eq 'Q') {
+        $type=1;
         if(($2>31) && ($2<128)) {
+          $do=1; # Adresse beim Schreiben an AO anpassen
           $coil=36352+$2*16+$3;
         } elsif(($2>255) && ($2<512)) {
+          # PFC Bereich
+          $type=2;
           $coil=$2*16+$3;
         } else {
           $coil=512+$2*16+$3;
         }
-        $type=1;
       }
       if($1 eq 'M') {
         if($2<1280) {
@@ -165,7 +173,7 @@ ModbusCoil_ParseWagoAddress($$)
       }
     }
   }
-  return ($type, $coil);
+  return ($type, $coil,$do);
 }
 
 #####################################
@@ -178,7 +186,10 @@ ModbusCoil_Undef($$)
 
   Log3 $name, 5, "Undef $addr $name";
   delete( $modules{ModbusCoil}{defptr}{$addr}{$name} );
-  delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if(defined($hash->{helper}{writeMode}));
+  if(defined($hash->{helper}{writeMode})) {
+    delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} );
+    delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} ) if (defined($hash->{helper}{writeMode}{reset}));
+  }
 
   return undef;
 }
@@ -211,7 +222,7 @@ ModbusCoil_Set($@)
     
     if(!defined($hash->{helper}{writeMode})) {
       $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{address}, $v,0);
-      $msg.="QQQQ" if(defined($hash->{helper}{wagoT}) && ($hash->{helper}{wagoT} eq "Q"));  # CD 0011
+      $msg.="QQQQ" if(defined($hash->{helper}{wagoDOOffset}) && ($hash->{helper}{wagoDOOffset} == 1));  # CD 0011, 0014
     } else {
       if($hash->{helper}{writeMode}{type} eq 'IM') {
         if((($v==0)&&(ReadingsVal($name,"state","off") ne "off")) || (($v==255)&&(ReadingsVal($name,"state","on") ne "on"))) {
@@ -220,16 +231,33 @@ ModbusCoil_Set($@)
           RemoveInternalTimer( "ModbusCoil_ResetImpulse:$name");
           InternalTimer( gettimeofday() + $dur, 
            "ModbusCoil_tcb_ResetImpulse",
-           "ModbusCoil_ResetImpulse:$name", 
+           "ModbusCoil_ResetImpulse:$name:255", 
            0 );
           $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255,0);
-          $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");  # CD 0011
+          $msg.="QQQQ" if($hash->{helper}{writeMode}{DO} == 1);  # CD 0011, 0014
         }
       # CD 0013 start
       } elsif($hash->{helper}{writeMode}{type} eq 'RD') {
         $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, $v,0);
-        $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");
+        $msg.="QQQQ" if($hash->{helper}{writeMode}{DO} == 1);  # CD 0011, 0014
       # CD 0013 end
+      # CD 0014 start
+      } elsif($hash->{helper}{writeMode}{type} eq 'SR') {
+        my $dur=0.5;
+        $dur=$hash->{helper}{writeMode}{impDuration} if (defined($hash->{helper}{writeMode}{impDuration}));
+        RemoveInternalTimer( "ModbusCoil_ResetImpulse:$name");
+        InternalTimer( gettimeofday() + $dur, 
+          "ModbusCoil_tcb_ResetImpulse",
+          "ModbusCoil_ResetImpulse:$name:$v", 
+          0 );
+        if($v==255) {
+          $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 255,0);
+          $msg.="QQQQ" if($hash->{helper}{writeMode}{DO} == 1);  # CD 0011, 0014
+        } else {
+          $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{reset}{address}, 255,0);
+          $msg.="QQQQ" if($hash->{helper}{writeMode}{reset}{DO} == 1);  # CD 0011, 0014
+        }
+      # CD 0014 end
       }
     }
     if(defined($msg)) {
@@ -254,7 +282,7 @@ ModbusCoil_Set($@)
                   my $v=0;
                   $v=255 if(($c[2] eq "on") || ($c[2] eq "1"));
                   my $condmsg=pack("CCnCC", $conh->{helper}{unitId}, 5, $conh->{helper}{address}, $v,0);
-                  $condmsg.="QQQQ" if(defined($conh->{helper}{wagoT}) && ($conh->{helper}{wagoT} eq "Q"));  # CD 0011
+                  $condmsg.="QQQQ" if(defined($hash->{helper}{wagoDOOffset}) && ($hash->{helper}{wagoDOOffset} == 1));  # CD 0011, 0014
                   IOWrite($hash,$condmsg);
                 }
               }
@@ -283,12 +311,17 @@ ModbusCoil_Set($@)
 sub
 ModbusCoil_tcb_ResetImpulse( $ ) {
     my($in ) = shift;
-    my(undef,$name) = split(':',$in);
+    my(undef,$name,$dontuseR) = split(':',$in); # CD 0014 added dontuseR
     my $hash = $defs{$name};
     my $msg;
 
-    $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0,0);
-    $msg.="QQQQ" if(substr $hash->{helper}{writeMode}{register},0,1 eq "Q");  # CD 0011
+    if($dontuseR>0) {
+      $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{address}, 0,0);
+      $msg.="QQQQ" if($hash->{helper}{writeMode}{DO} == 1);  # CD 0011, 0014
+    } else {
+      $msg=pack("CCnCC", $hash->{helper}{unitId}, 5, $hash->{helper}{writeMode}{reset}{address}, 0,0);
+      $msg.="QQQQ" if($hash->{helper}{writeMode}{reset}{DO} == 1);  # CD 0011, 0014
+    }
     IOWrite($hash,$msg);
 }
   
@@ -489,6 +522,18 @@ ModbusCoil_Attr(@)
         delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
         $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
         $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
+        # CD 0014 start
+        if(defined($hash->{helper}{writeMode}{reset})) {
+            ($type,$coil)=ModbusCoil_GetAddress($hash,$hash->{helper}{writeMode}{reset}{register});
+        
+            $hash->{helper}{writeMode}{reset}{registerType}=$type;
+            $hash->{helper}{writeMode}{reset}{address}=$coil;
+            
+            delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{reset}{addr});
+            $hash->{helper}{writeMode}{reset}{addr} = "$hash->{helper}{writeMode}{reset}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{reset}{address}";
+            $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} = $hash;
+        }
+        # C 0014 end
       }
       $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
       delete( $modules{ModbusCoil}{defptr}{$hash->{helper}{addr}}{$name} );
@@ -499,37 +544,73 @@ ModbusCoil_Attr(@)
   elsif($attrName eq "writeMode") {
     if ($cmd eq "set") {
       my @args=split(":",$attrVal);
-      if(($args[0] eq 'Impulse')||($args[0] eq 'Redirect')) {
-        my ($type,$coil);
+      if(($args[0] eq 'Impulse')||($args[0] eq 'Redirect')||($args[0] eq 'SetReset')) {
+        return "not enough parameters for writeMode SetReset" if((@args<3)&&($args[0] eq 'SetReset'));
+        
+        my ($type,$coil,$do);
+        
+        $do=0;
+        
         if (defined($hash->{helper}{wago})) {
-          ($type,$coil)=ModbusCoil_ParseWagoAddress($hash,$args[1]);
+          ($type,$coil,$do)=ModbusCoil_ParseWagoAddress($hash,$args[1]);
           return "$args[1] is not a valid Wago address" if(($type==-1)||($coil==-1));
         } else {
           ($type,$coil)=ModbusCoil_GetAddress($hash,$args[1]);
           $type=1;
         }
-        return "writing to input $args[1] is not allowed" if($type==2);
+        return "writing to address $args[1] is not allowed" if($type==2);
 
         $hash->{helper}{writeMode}{register}=$args[1];
         $hash->{helper}{writeMode}{registerType}=$type;
         $hash->{helper}{writeMode}{address}=$coil;
-        if(defined($args[2])) {
-          $hash->{helper}{writeMode}{impDuration}=$args[2];
+        $hash->{helper}{writeMode}{DO}=$do;
+
+        $hash->{helper}{writeMode}{impDuration}=0.5;
+        # CD 0014 start
+        delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{reset});
+
+        if($args[0] eq 'SetReset') {
+            if (defined($hash->{helper}{wago})) {
+              ($type,$coil,$do)=ModbusCoil_ParseWagoAddress($hash,$args[2]);
+              return "$args[2] is not a valid Wago address" if(($type==-1)||($coil==-1));
+            } else {
+              ($type,$coil)=ModbusCoil_GetAddress($hash,$args[2]);
+              $type=1;
+              $do=0;
+            }
+            return "writing to address $args[2] is not allowed" if($type==2);
+
+            $hash->{helper}{writeMode}{reset}{register}=$args[2];
+            $hash->{helper}{writeMode}{reset}{registerType}=$type;
+            $hash->{helper}{writeMode}{reset}{address}=$coil;
+            $hash->{helper}{writeMode}{reset}{DO}=$do;
+
+            $hash->{helper}{writeMode}{reset}{addr} = "$hash->{helper}{writeMode}{reset}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{reset}{address}";
+            
+            $hash->{helper}{writeMode}{impDuration}=$args[3] if(defined($args[3]));
         } else {
-          $hash->{helper}{writeMode}{impDuration}=0.5;
+            if (defined($hash->{helper}{writeMode}{reset})) {
+                delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} );
+                delete($hash->{helper}{writeMode}{reset});
+            }
+            $hash->{helper}{writeMode}{impDuration}=$args[2] if(defined($args[2]));
         }
+        # CD 0014 end
         delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode}{addr});
         $hash->{helper}{writeMode}{addr} = "$hash->{helper}{writeMode}{registerType} $hash->{helper}{unitId} $hash->{helper}{writeMode}{address}";
         $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} = $hash;
+        $modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} = $hash if defined($hash->{helper}{writeMode}{reset});
         $hash->{helper}{writeMode}{type}='IM' if($args[0] eq 'Impulse');
         $hash->{helper}{writeMode}{type}='RD' if($args[0] eq 'Redirect');
+        $hash->{helper}{writeMode}{type}='SR' if($args[0] eq 'SetReset');
       }
       else {
         return "unknown writeMode $args[0]";
       }
     } else {
+      delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{reset}{addr}}{$name} ) if (defined($hash->{helper}{writeMode})&&defined($hash->{helper}{writeMode}{reset}));
+      delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if (defined($hash->{helper}{writeMode})&&defined($hash->{helper}{writeMode}{addr}));
       delete($hash->{helper}{writeMode}) if defined($hash->{helper}{writeMode});
-      delete($modules{ModbusCoil}{defptr}{$hash->{helper}{writeMode}{addr}}{$name} ) if defined($hash->{helper}{writeMode});
     }
   }
   return undef;
@@ -638,6 +719,8 @@ sub ModbusCoil_is_float {
     <li><a name="">updateInterval</a><br>
         Interval in seconds for reading the coil. If the value is smaller than the pollInterval attribute of the IODev,
         the setting from the IODev takes precedence over this attribute. Default: 0.1</li><br>
+    <li><a name="">alignUpdateInterval</a><br>
+        Aligns the reading of data to the given value. A value of e.g. 3600 reads every hour on the hour.</li><br>
     <li><a name="">IODev</a><br>
         IODev: Sets the ModbusTCP or ModbusRTU device which should be used for sending and receiving data for this coil.</li><br>
     <li><a name="ModbusCoildisableRegisterMapping">disableRegisterMapping</a><br>
@@ -660,15 +743,17 @@ sub ModbusCoil_is_float {
     </li><br>
     <li><a name="">writeMode Impulse|Redirect:&lt;address&gt;[:&lt;options&gt;]</a><br>
         This attribute changes the normal write behaviour. Instead of writing to the address given in the definiton the write is
-        redirected to a different address. Two modes are supported:<br>
+        redirected to a different address. Three modes are supported:<br>
         <ul>
             <li>Redirect - redirects the write to the given address. The options field is not used.</li>
             <li>Impulse - writes an impulse with a length of 0.5 s to the given address. The duration can be modified with the options field.
             This mode is mainly used with impulse switches.</li>
+            <li>SetReset - this mode requires 2 addresses separated by a colon. An 'on' command writes an impulse to the first one,
+            an 'off' command writes an impulse to the second one. The default impulse duration is 0.5 seconds. It can be modified
+            with the options field.</li>
         </ul>
     </li><br>
   </ul>
 </ul>
-
 =end html
 =cut
