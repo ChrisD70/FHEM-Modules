@@ -8,8 +8,10 @@
 36_ModbusTCPServer:
   161231 0021 fixed error handling
 37_ModbusCoil:
-  170106 0013 added writeMode Redirect
+  170106 0014 added writeMode SetReset
+              fixed access to Wago PFC area
               documentation update
+              fix Wago DO address calculation
 37_ModbusRegister:
   160410 0023 added TIME and DT
                                                                                                  .    
@@ -54,6 +56,10 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  170106 0014 added writeMode SetReset
+              fixed access to Wago PFC area
+              documentation update
+              fix Wago DO address calculation
   170106 0013 added writeMode Redirect
               documentation update
   160416 0012 added alignUpdateInterval
