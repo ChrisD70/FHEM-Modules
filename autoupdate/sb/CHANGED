@@ -5,10 +5,9 @@
               - Serverstatus wenn nötig aufteilen und an Player verteilen
               - bei syncGroup talk Zustand nicht beim Player abspeichern
 98_SB_PLAYER:
-  161227 0067 - Reihenfolge im Reading synced korrigiert
-  161218 0066 - ReadingsUpdate für TTS_IDLE bei sync/unsync korrigiert
-  161214 0065 - Attribute volumeOffset und ftuiSupport hinzugefügt
-              - Befehl 'track' hinzugefügt
+  170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
+              - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
+              - externe Artwork-Url für FTUI Medialist abfragen
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -81,6 +80,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
+              - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
+              - externe Artwork-Url für FTUI Medialist abfragen
   161227 0067 - Reihenfolge im Reading synced korrigiert
   161218 0066 - ReadingsUpdate für TTS_IDLE bei sync/unsync korrigiert
   161214 0065 - Attribute volumeOffset und ftuiSupport hinzugefügt
