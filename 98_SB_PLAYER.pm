@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0067 2016-12-27 20:08:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0068 2017-02-02 19:23:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -343,21 +343,32 @@ sub SB_PLAYER_Attr( @ ) {
     # CD 0064 end
     # CD 0065 start
     elsif( $args[ 0 ] eq "ftuiSupport" ) {
+      my $dodelete=0;
+    
       if( $cmd eq "set" ) {
         if ($args[1] eq "0") {
-            delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+            $dodelete=1;
         } elsif ($args[1] eq "1") {
             if(defined($hash->{helper}{playlistIds})) {
                 my @ids=split(',',$hash->{helper}{playlistIds});
                 foreach(@ids) {
-                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
                 }
                 IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
             }
         }
       } else {
-        delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+        $dodelete=1;
       }
+      # CD 0068 start
+      if($dodelete==1) {
+        delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+        delete($hash->{READINGS}{ftuiPlaylistsItems}) if defined($hash->{READINGS}{ftuiPlaylistsItems});
+        delete($hash->{READINGS}{ftuiPlaylistsAlias}) if defined($hash->{READINGS}{ftuiPlaylistsAlias});
+        delete($hash->{READINGS}{ftuiFavoritesItems}) if defined($hash->{READINGS}{ftuiFavoritesItems});
+        delete($hash->{READINGS}{ftuiFavoritesAlias}) if defined($hash->{READINGS}{ftuiFavoritesAlias});
+      }
+      # CD 0068 end
     }
     # CD 0065 end
     
@@ -1189,6 +1200,11 @@ sub SB_PLAYER_Parse( $$ ) {
         } elsif( $args[ 0 ] eq "addtracks" ) {
             $queryMode=0;
             SB_PLAYER_GetStatus( $hash );
+        # CD 0068 start
+        } elsif( $args[ 0 ] eq "add" ) {
+            $queryMode=0;
+            SB_PLAYER_GetStatus( $hash );
+        # CD 0068 end
         } elsif( $args[ 0 ] eq "delete" ) {
             $queryMode=0;
             #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" );     # CD 0016 get available elements for alarms    # CD 0026 deaktiviert
@@ -1721,6 +1737,7 @@ sub SB_PLAYER_Parse( $$ ) {
                 $hash->{helper}{playlistInfo}{$trackid}{duration}=0;
                 $hash->{helper}{playlistInfo}{$trackid}{tracknum}=0;
                 $hash->{helper}{playlistInfo}{$trackid}{url}='-';
+                $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="-" unless(defined($hash->{helper}{playlistInfo}{$trackid}{artwork_url})); # CD 0068
                 next;
             } elsif( $_ =~ /^(title:)(.*)/ ) {
                 $title=$2;
@@ -1745,6 +1762,9 @@ sub SB_PLAYER_Parse( $$ ) {
                 $flush=3;
             } elsif( $_ =~ /^(url:)(.*)/ ) {
                 $hash->{helper}{playlistInfo}{$trackid}{url}=$2;
+                $flush=7;
+            } elsif( $_ =~ /^(artwork_url:)(http.*)/ ) {
+                $hash->{helper}{playlistInfo}{$trackid}{artwork_url}=$2;
                 $flush=7;
             } elsif( $_ =~ /^(.*:)(.*)/ ) {
                 $flush=7;
@@ -1787,7 +1807,11 @@ sub SB_PLAYER_Parse( $$ ) {
                     $ftuimedialist.="\"Time\":\"".(int($hash->{helper}{playlistInfo}{$_}{duration}))."\",";
                     $ftuimedialist.="\"File\":\"".$hash->{helper}{playlistInfo}{$_}{url}."\",";
                     $ftuimedialist.="\"Track\":\"".$hash->{helper}{playlistInfo}{$_}{tracknum}."\",";
-                    $ftuimedialist.="\"Cover\":\"".$coverbase.$hash->{helper}{playlistInfo}{$_}{coverid}."/cover_50x50_o\"},";
+                    if(defined($hash->{helper}{playlistInfo}{$_}{artwork_url}) && ($hash->{helper}{playlistInfo}{$_}{artwork_url} ne "-")) {
+                        $ftuimedialist.="\"Cover\":\"".$hash->{helper}{playlistInfo}{$_}{artwork_url}."\"},";
+                    } else {
+                        $ftuimedialist.="\"Cover\":\"".$coverbase.$hash->{helper}{playlistInfo}{$_}{coverid}."/cover_50x50_o\"},";
+                    }
                 } else {
                     $ftuimedialist.="{\"Artist\":\"-\",";
                     $ftuimedialist.="\"Title\":\"-\",";
@@ -2914,7 +2938,7 @@ sub SB_PLAYER_Set( $@ ) {
         if(defined($hash->{helper}{playlistIds})) {
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
             }
             IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
         }
@@ -3733,12 +3757,24 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             } else {
                 $hash->{FAVSTR} .= "," . $args[ 3 ];    # CD Test für Leerzeichen join("&nbsp;",@args[ 4..$#args ]);
             }
+
             # CD 0064 start
             if( AttrVal( $name, "sortFavorites", "0" ) eq "1" ) {
                 my @radios = split(',',$hash->{FAVSTR});    # CD0064 Elektrolurch
                 $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);   # CD0064 Elektrolurch
             }
             # CD 0064
+
+            # CD 0068 start
+            if(AttrVal($name,"ftuiSupport","") eq "1") {
+                my $t=$hash->{FAVSTR};
+                $t=~s/,/:/g;
+                readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
+                $t=~s/_/ /g;
+                readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
+            }
+            # CD 0068 end
+
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
             RemoveInternalTimer( $hash );   # CD 0016
             InternalTimer( gettimeofday() + 3, 
@@ -3816,6 +3852,17 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                 $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
             }
             # CD 0064
+
+            # CD 0068 start
+            if(AttrVal($name,"ftuiSupport","") eq "1") {
+                my $t=$hash->{SERVERPLAYLISTS};
+                $t=~s/,/:/g;
+                readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
+                $t=~s/_/ /g;
+                readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
+            }
+            # CD 0068 end
+
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
             RemoveInternalTimer( $hash );   # CD 0016
             InternalTimer( gettimeofday() + 3, 
@@ -4570,7 +4617,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
         if(defined($hash->{helper}{playlistIds})) {
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxN\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
             }
             IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
         }
