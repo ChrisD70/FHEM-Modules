@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0030 2016-12-28 22:09:00Z CD $
+# $Id: 97_SB_SERVER.pm 0031 2017-02-04 21:39:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -70,7 +70,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0029';
+use constant SB_SERVER_VERSION => '0031';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -148,34 +148,54 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{RCCNAME} = "none";
     $hash->{USERNAME} = "?";
     $hash->{PASSWORD} = "?";
+    
+    my ($user,$password);
+    my @newDef;
+    
     # parse the user spec
     foreach( @a ) {
 	if( $_ =~ /^(RCC:)(.*)/ ) {
 	    $hash->{RCCNAME} = $2;
+        push @newDef,$_;
 	    next;
 	} elsif( $_ =~ /^(WOL:)(.*)/ ) {
 	    $hash->{WOLNAME} = $2;
+        push @newDef,$_;
 	    next;
 	} elsif( $_ =~ /^(PRESENCE:)(.*)/ ) {   # CD 0007
 	    $hash->{PRESENCENAME} = $2;         # CD 0007
+        push @newDef,$_;
 	    next;                               # CD 0007
 	} elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{3,5})/ ) {
 	    $hash->{IP} = $1;
 	    $hash->{CLIPORT}  = $2;
+        push @newDef,$_;
 	    next;
 	} elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/ ) {
 	    $hash->{IP} = $1;
 	    $hash->{CLIPORT}  = 9090;
+        push @newDef,$_;
 	    next;
 	} elsif( $_ =~ /^(USER:)(.*)/ ) {
-	    $hash->{USERNAME} = $2;
+        $user=$2 if($2 ne 'yes');
+	    $hash->{USERNAME} = 'yes';
+        push @newDef,'USER:yes';
 	} elsif( $_ =~ /^(PASSWORD:)(.*)/ ) {
-	    $hash->{PASSWORD} = $2;
+        $password=$2 if($2 ne 'yes');
+	    $hash->{PASSWORD} = 'yes';
+        push @newDef,'PASSWORD:yes';
 	} else {
+        push @newDef,$_;
 	    next;
 	}
     }
 
+    # CD 0031
+    if(($user ne "") && ($password ne "")) {
+        SB_SERVER_storePassword($hash,$user,$password);
+        $hash->{DEF} = join(' ',@newDef); 
+    }
+    
     $hash->{LASTANSWER} = "none";
 
     # used for alive checking of the CLI interface
@@ -796,6 +816,7 @@ sub SB_SERVER_Set( $@ ) {
             $hash->{helper}{sgTalkActivePlayer}='waiting for power on';
             $hash->{helper}{sgTalkData}=join(' ', @a);
             $hash->{helper}{sgTalkTimeoutPowerOn}=time()+3;
+            $hash->{helper}{sgTalkGroup}=$statename;    # CD 0031
             RemoveInternalTimer( "StartTalk:$name");
             InternalTimer( gettimeofday() + 0.01, 
                "SB_SERVER_tcb_StartTalk",
@@ -808,10 +829,39 @@ sub SB_SERVER_Set( $@ ) {
             SB_SERVER_FixSyncGroupNames($hash);
             SB_SERVER_UpdateSgReadings($hash);
         # CD 0027 end
+        # CD 0031 start
+        } elsif($subcmd eq 'volume') {
+            return( "not enough parameters" ) if( @a != 2 );
+        
+            my $statename=$a[0];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
+
+            my $vol=$a[1];
+        
+            if (SB_SERVER_isSyncGroupActive($hash,$statename)==1) {
+                foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+                    if(($e ne '')&&($e ne '0')) {
+                        if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                            fhem("set ".$hash->{helper}{syncGroups}{$statename}{$e}{fhemname}." volume ".$vol." nosync");
+                        }
+                    }
+                }
+            } else {
+                return "Sync group $statename not active";
+            }
+        # CD 0031 end
+        # CD 0031 nur zu Testzwecken
+        } elsif($subcmd eq 'isActive') {
+            return( "not enough parameters" ) if( @a == 0 );
+        
+            my $statename=$a[0];
+            $statename =~ s/[,;:]/_/g;   # CD 0027 Sonderzeichen ersetzen
+   
+            return SB_SERVER_isSyncGroupActive($hash, $statename);
         } else {
             return( "unknown command $subcmd" );
         }
-        
+        # CD 0031 end
         # CD 0025 start
         if($updateReadings==1) {
             SB_SERVER_UpdateSgReadings($hash);
@@ -857,22 +907,25 @@ sub SB_SERVER_tcb_StartTalk($) {
 
     return unless defined($hash->{helper}{sgTalkActivePlayer});
 
-    # eingeschalteten Player suchen
-    my @pls=split(',',$hash->{helper}{sgTalkPlayers});
-    foreach my $pl (@pls) {
-        if(ReadingsVal($pl,'power','0') eq 'on') {
-            $hash->{helper}{sgTalkActivePlayer}=$pl;
-            my $phash = $defs{$pl}; # CD 0029
-            $phash->{helper}{sgTalkActive}=1;   # CD 0029
-            fhem "set $pl talk " . $hash->{helper}{sgTalkData};
-            last;
+    # alle gesynced ?
+    if (SB_SERVER_isSyncGroupActive($hash,$hash->{helper}{sgTalkGroup})==1) {
+        # eingeschalteten Player suchen
+        my @pls=split(',',$hash->{helper}{sgTalkPlayers});
+        foreach my $pl (@pls) {
+            if(ReadingsVal($pl,'power','0') eq 'on') {
+                $hash->{helper}{sgTalkActivePlayer}=$pl;
+                my $phash = $defs{$pl}; # CD 0029
+                $phash->{helper}{sgTalkActive}=1;   # CD 0029
+                fhem "set $pl talk " . $hash->{helper}{sgTalkData};
+                last;
+            }
         }
     }
 
     # keinen eingeschalteten Player gefunden
     if($hash->{helper}{sgTalkTimeoutPowerOn}<time()) {
         # kein Player eingeschaltet, abbrechen
-        Log3( $hash, 1, "SB_SERVER_tcb_StartTalk($name): timeout waiting for player power on, aborting"); 
+        Log3( $hash, 1, "SB_SERVER_tcb_StartTalk($name): timeout waiting for player power on and sync, aborting"); 
         SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
         delete $hash->{helper}{sgTalkActivePlayer};
     } else {
@@ -886,7 +939,30 @@ sub SB_SERVER_tcb_StartTalk($) {
         }
     }
 }
-                  
+
+# CD 0031 start
+sub SB_SERVER_isSyncGroupActive($$) {
+    my ($hash,$statename) = @_;
+    my $name = $hash->{NAME};
+
+    if((!defined($hash->{helper}{syncGroups}))||(!defined($hash->{helper}{syncGroups}{$statename}))) {
+        return 0;
+    }
+
+    my $master=$hash->{helper}{syncGroups}{$statename}{0}{lmsname};
+    my $isActive=1;
+
+    foreach my $e ( keys %{$hash->{helper}{syncGroups}{$statename}} ) {
+        if(($e ne '')&&($e ne '0')) {
+            if(defined($hash->{helper}{syncGroups}{$statename}{$e})) {
+                $isActive=0 if (InternalVal($hash->{helper}{syncGroups}{$statename}{$e}{fhemname},'SYNCMASTERPN','?') ne $master)
+            }
+        }
+    }
+    return $isActive;
+}
+# CD 0031 end
+
 sub SB_SERVER_LoadSyncGroup($$$) {
     my ($hash,$statename,$poweron) = @_;
     my $name = $hash->{NAME};
@@ -1356,10 +1432,16 @@ sub SB_SERVER_ParseCmds( $$ ) {
         # CD 0007 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
 		if( ( $hash->{USERNAME} ne "?" ) && 
 		    ( $hash->{PASSWORD} ne "?" ) ) {
-		    DevIo_SimpleWrite( $hash, "login " . 
-				       $hash->{USERNAME} . " " . 
-				       $hash->{PASSWORD} . "\n", 
-				       0 );
+            my ($user,$password)=SB_SERVER_readPassword($hash); # CD 0031
+            if(defined($user)) {
+                DevIo_SimpleWrite( $hash, "login " . 
+                           $user . " " . 
+                           $password . "\n", 
+                           0 );
+            } else {
+                Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " . 
+                  "required but no username and password specified" );
+            }
 		} else {
 		    Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " . 
 			  "required but no username and password specified" );
@@ -2763,10 +2845,16 @@ sub SB_SERVER_LMS_Status( $ ) {
     $hash->{helper}{SB_SERVER_LMS_Status}=time();
     if( ( $hash->{USERNAME} ne "?" ) && 
         ( $hash->{PASSWORD} ne "?" ) ) {
-        DevIo_SimpleWrite( $hash, "login " . 
-                   $hash->{USERNAME} . " " . 
-                   $hash->{PASSWORD} . "\n", 
-                   0 );
+        my ($user,$password)=SB_SERVER_readPassword($hash); # CD 0031
+        if(defined($user)) {
+            DevIo_SimpleWrite( $hash, "login " . 
+                       $user . " " . 
+                       $password . "\n", 
+                       0 );
+        } else {
+            Log3( $hash, 3, "SB_SERVER_LMS_Status($name): login " . 
+              "required but no username and password specified" );
+        }
     }
     
     # subscribe us
@@ -3098,6 +3186,88 @@ sub SB_SERVER_Recall($$) {
     }
 }
 
+# CD 0031 User und Passwort speichern/lesen, aus 72_FRITZBOX
+sub SB_SERVER_storePassword($$$)
+{
+    my ($hash, $user, $password) = @_;
+     
+    my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
+    my $key = getUniqueId().$index;
+    
+    my $enc_pwd = "";
+    
+    if(eval "use Digest::MD5;1")
+    {
+        $key = Digest::MD5::md5_hex(unpack "H*", $key);
+        $key .= Digest::MD5::md5_hex($key);
+    }
+    
+    for my $char (split //, $password)
+    {
+        my $encode=chop($key);
+        $enc_pwd.=sprintf("%.2x",ord($char)^ord($encode));
+        $key=$encode.$key;
+    }
+    
+    my $err = setKeyValue($hash->{TYPE}."_".$hash->{NAME}."_user", $user);
+    return "error while saving the user - $err" if(defined($err));
+
+    $err = setKeyValue($index, $enc_pwd);
+    return "error while saving the password - $err" if(defined($err));
+    
+    return "user and password successfully saved";
+}
+   
+sub SB_SERVER_readPassword($)
+{
+   my ($hash) = @_;
+   my $name = $hash->{NAME};
+
+   my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
+   my $key = getUniqueId().$index;
+
+   my ($user, $password, $err);
+
+   ($err, $password) = getKeyValue($index);
+
+   if ( defined($err) ) {
+      Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER password: $err";
+      return undef;
+   }  
+    
+   my $dec_pwd = '';
+   
+   if ( defined($password) ) {
+      if ( eval "use Digest::MD5;1" ) {
+         $key = Digest::MD5::md5_hex(unpack "H*", $key);
+         $key .= Digest::MD5::md5_hex($key);
+      }
+    
+      for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/g)) {
+         my $decode=chop($key);
+         $dec_pwd.=chr(ord($char)^ord($decode));
+         $key=$decode.$key;
+      }
+   } else {
+      Log3 $hash, 2, "SB_SERVER_readPassword($name): No password found";
+      return undef;
+   }
+   
+   ($err, $user) = getKeyValue($hash->{TYPE}."_".$hash->{NAME}."_user");
+
+   if ( defined($err) ) {
+      Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER user: $err";
+      return undef;
+   }  
+   if ( defined($user) ) {
+        return ($user,$dec_pwd)
+   } else {
+      Log3 $hash, 2, "SB_SERVER_readPassword($name): No user found";
+      return undef;
+   }
+}
+# CD 0031 end
+
 # ############################################################################
 #  No PERL code beyond this line
 # ############################################################################
@@ -3218,6 +3388,37 @@ sub SB_SERVER_Recall($$) {
       <li><b>renew</b> -  Erneuert die Verbindung zum Server.</li>
       <li><b>rescan</b> -  Startet einen Scan der Musikbibliothek f&uuml;r alle im Server angegebenen Verzeichnisse.</li>
       <li><b>statusRequest</b> -  Aktualisiert die Readings von Server und konfigurierten Playern.</li>
+      <li><b>save [&lt;name&gt;]</b> -  Speichert den Zustand aller Player unter dem Namen &lt;name&gt; ab.</li>
+      <li><b>recall [&lt;name&gt;] [options] </b> -  Ruft den Zustand aller Player auf.<br>Optionen:</li>
+        <ul>
+          <li>del - L&ouml;scht nach dem Restore den gespeicherten Status</li>
+          <li>delonly - L&ouml;scht den gespeicherten Status ohne vorherigem Restore</li>
+        </ul>
+    </ul>   
+    <br><br>
+    Der Befehl <code>syncGroup</code> dient zur Verwaltung von Gruppenvorlagen für die Synchronisierung der Player.
+    Dar&uuml;ber k&ouml;nnen Gruppen von Playern angelegt werden die sich bei Bedarf aktivieren lassen. Die Vorlagen
+    werden bei SAVE und SHUTDOWN von FHEM abgespeichert und beim Start von FHEM geladen.
+    Folgende Unterbefehle sind definiert:<br><br>
+    <ul>
+      <li><b>addp &lt;playerName[,playerName...]&gt; &lt;Vorlage&gt;</b> -  F&uuml;gt die angegebenen Player zur Vorlage hinzu, wenn die
+      Vorlage noch nicht existiert wird sie angelegt und der erste Player wird Master.</li>
+      <li><b>removep &lt;playerName[,playerName...]&gt; &lt;Vorlage&gt;</b> -  Entfernt die angegebenen Player aus der Vorlage, falls
+      einer Master war wird der 1. verbleibende Player der Vorlage zum neuen Master.</li>
+      <li><b>masterp &lt;playerName&gt; &lt;Vorlage&gt;</b> -  Legt den angegebenen Player als Master fest.</li>
+      <li><b>load [poweron] &lt;Vorlage&gt;</b> -  Aktiviert die angegebene Vorlage, die betroffenen Player werden entsynchronisiert
+      und zu einer neuen Gruppe zusammengef&uuml;gt. Wenn zus&auml;tzlich <code>poweron</code> angegeben wird, werden die Player
+      eingeschaltet.</li>
+      <li><b>delete &lt;Vorlage&gt;</b> -  L&ouml;scht die angegebene Vorlage.</li>
+      <li><b>deleteall</b> -  L&ouml;scht alle Gruppenvorlagen.</li>
+      <li><b>talk &lt;Vorlage&gt; &lt;Text&gt;</b> -  Speichert den Zustand aller Player ab, aktiviert die angegebene Vorlage und spielt
+      den Text &uuml;ber den beim Player konfigurierten TTS-Dienst ab. Nach Ende der Durchsage wird der vorherige Zustand der Player wieder
+      hergestellt. Wenn zus&auml;tzlich <code>poweron</code> angegeben wird, wird versucht die Player einzuschalten.</li>
+      <li><b>resetTTS</b> -  TTS zur&uuml;cksetzen, kann n&ouml;tig sein wenn die Ausgabe h&auml;ngt.</li>
+      <li><b>volume &lt;n&gt;</b> -  Stellt die Lautst&auml;rke auf einen Wert &lt;n&gt; ein. Dabei muss &lt;n&gt;
+      eine Zahl zwischen 0 und 100 sein. Der Befehl wird nur ausgeführt wenn die Vorlage aktiv ist.</li>
+      <li><b>volume +|-&lt;n&gt;</b> - Erh&ouml;ht oder vermindert die Lautst&auml;rke um den Wert, der durch +|-&lt;n&gt;
+      vorgegeben wird. Dabei muss &lt;n&gt; eine Zahl zwischen 0 und 100 sein. Der Befehl wird nur ausgeführt wenn die Vorlage aktiv ist.</li>
     </ul>   
     <br>
   </ul>

@@ -1,9 +1,8 @@
 ﻿97_SB_SERVER:
-  161228 0030 - unbekannte Tags im Serverstatus nicht zum Playernamen hinzufügen
-  161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
-              - Master als ersten Player in den sync-Group-Readings anzeigen
-              - Serverstatus wenn nötig aufteilen und an Player verteilen
-              - bei syncGroup talk Zustand nicht beim Player abspeichern
+  170204 0031 - syncGroup volume hinzugefügt
+              - User und Passwort nicht mehr sichtbar speichern
+              - deutsche Dokumentation für syncGroup hinzugefügt
+              - bei syncGroup talk warten bis die Player synchronisiert sind
 98_SB_PLAYER:
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
               - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
@@ -12,6 +11,10 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170204 0031 - syncGroup volume hinzugefügt
+              - User und Passwort nicht mehr sichtbar speichern
+              - deutsche Dokumentation für syncGroup hinzugefügt
+              - bei syncGroup talk warten bis die Player synchronisiert sind
   161228 0030 - unbekannte Tags im Serverstatus nicht zum Playernamen hinzufügen
   161203 0029 - Absturz wenn IODev keinen hash enthält korrigiert
               - Master als ersten Player in den sync-Group-Readings anzeigen
