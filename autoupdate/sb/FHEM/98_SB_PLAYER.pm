@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0068 2017-02-02 19:23:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0069 2017-02-05 17:46:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -4701,6 +4701,8 @@ sub SB_PLAYER_FHEM2LMSVolume( $$ ) {
     my( $hash, $fhemvol ) = @_;
     
     my $name = $hash->{NAME};
+
+    if($fhemvol=~/[+-]+.*/) {return $fhemvol};    # CD 0069
 
     $fhemvol = int($fhemvol);
         

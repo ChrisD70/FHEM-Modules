@@ -4,6 +4,7 @@
               - deutsche Dokumentation für syncGroup hinzugefügt
               - bei syncGroup talk warten bis die Player synchronisiert sind
 98_SB_PLAYER:
+  170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
               - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
               - externe Artwork-Url für FTUI Medialist abfragen
@@ -83,6 +84,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
               - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
               - externe Artwork-Url für FTUI Medialist abfragen
