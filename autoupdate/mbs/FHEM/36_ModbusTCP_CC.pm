@@ -1,8 +1,9 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0003 $
+# $Id: 36_ModbusTCP_CC.pm 0004 2017-02-05 22:43:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
+# 170205 0004 fixed writing 16-bit integers
 
 package main;
 
@@ -298,6 +299,8 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                         # ignorieren
                         $ext=1;
                       }
+                    } else {
+                        $sval=$val;
                     }
                     if($ext==0) {
                       $sval-=65536 if(defined($mbd[4]) && ($val>32767) && ($mbd[4] eq 'T'));
@@ -390,6 +393,8 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                             }
                             $ext=1;
                           }
+                        } else {
+                            $sval=$val;
                         }
                         if($ext==0) {
                           $sval-=65536 if(defined($mbd[4]) && ($val>32767) && ($mbd[4] eq 'T'));
