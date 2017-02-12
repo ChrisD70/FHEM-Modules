@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0069 2017-02-05 17:46:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0070 2017-02-12 21:21:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2332,8 +2332,14 @@ sub SB_PLAYER_Set( $@ ) {
         if ($arg[0] ne '-') {       # CD 0014
             if( defined( $hash->{helper}{SB_PLAYER_Favs}{$arg[0]}{ID} ) ) {
                 my $fid = $hash->{helper}{SB_PLAYER_Favs}{$arg[0]}{ID};
-                IOWrite( $hash, "$hash->{PLAYERMAC} favorites playlist " . 
-                         "play item_id:$fid\n" );
+
+                if($hash->{helper}{SB_PLAYER_Favs}{$arg[0]}{SOURCE} eq 'LMS') {    # CD 0070
+                    IOWrite( $hash, "$hash->{PLAYERMAC} favorites playlist " . 
+                             "play item_id:$fid\n" );
+                } else {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} $hash->{helper}{SB_PLAYER_Favs}{$arg[0]}{SOURCE} playlist play " . 
+                             "item_id:$fid\n" );
+                }
                 $hash->{FAVSELECT} = $arg[ 0 ];
                 readingsSingleUpdate( $hash, "$hash->{FAVSET}", "$arg[ 0 ]", 1 );
                 # SB_PLAYER_GetStatus( $hash ); # CD 0021 deaktiviert, zu früh
@@ -2901,14 +2907,18 @@ sub SB_PLAYER_Set( $@ ) {
         if( @arg == 1 ) {
             my $msg;
             if( defined( $hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{ID} ) ) {
-                $msg = "$hash->{PLAYERMAC} playlistcontrol cmd:load " . 
-                    "playlist_id:$hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{ID}";
+                if($hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{SOURCE} eq 'LMS') {    # CD 0070
+                    $msg = "$hash->{PLAYERMAC} playlistcontrol cmd:load " . 
+                        "playlist_id:$hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{ID}";
+                } else {
+                    $msg = "$hash->{PLAYERMAC} $hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{SOURCE} playlist play " . 
+                        "item_id:$hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{ID}";
+                }
                 Log3( $hash, 5, "SB_PLAYER_Set($name): playlists command = " . 
                       $msg . " ........  with $arg[0]" );
                 IOWrite( $hash, $msg . "\n" );
                 readingsSingleUpdate( $hash, "playlists", "$arg[ 0 ]", 1 );
                 SB_PLAYER_GetStatus( $hash );
-
             } else {
                 $msg = "SB_PLAYER_Set: no name for playlist defined.";
                 Log3( $hash, 3, $msg );
@@ -3752,6 +3762,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             # format: ADD IODEVname ID shortentry
             $hash->{helper}{SB_PLAYER_Favs}{$args[3]}{ID} = $args[ 2 ];
             $hash->{helper}{SB_PLAYER_Favs}{$args[3]}{URL} = $args[ 4 ];        # CD 0021 hinzugefügt
+            $hash->{helper}{SB_PLAYER_Favs}{$args[3]}{SOURCE} = $args[ 5 ];     # CD 0070 hinzugefügt
             if( $hash->{FAVSTR} eq "" ) {
                 $hash->{FAVSTR} = $args[ 3 ];   # CD Test für Leerzeichen join("&nbsp;",@args[ 4..$#args ]);
             } else {
@@ -3783,9 +3794,42 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                            0 );
             #end
         } elsif( $args[ 0 ] eq "FLUSH" ) {
-            undef( %{$hash->{helper}{SB_PLAYER_Favs}} );
-            $hash->{FAVSTR} = "";
-            delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));      # CD 0016
+            if($args[ 1 ] eq 'all') {
+                undef( %{$hash->{helper}{SB_PLAYER_Favs}} );
+                $hash->{FAVSTR} = "";
+                delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));      # CD 0016
+            } else {
+                # CD 0070 gezielt nach Plugin/App löschen
+                my $doupdate=0;
+                my $favs="";
+                foreach my $fa ( keys %{$hash->{helper}{SB_PLAYER_Favs}} ) {
+                    if($hash->{helper}{SB_PLAYER_Favs}{$fa}{SOURCE} eq $args[ 1 ]) {
+                        delete $hash->{helper}{SB_PLAYER_Favs}{$fa};
+                        $doupdate=1;
+                    } else {
+                        if( $favs eq "" ) {
+                            $favs = $fa;
+                        } else {
+                            $favs .= "," . $fa;
+                        }
+                    }
+                }
+                if($doupdate==1) {
+                    if( AttrVal( $name, "sortFavorites", "0" ) eq "1" ) {
+                        my @radios = split(',',$favs);
+                        $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+                    } else {
+                        $hash->{FAVSTR} = $favs;
+                    }
+                    if(AttrVal($name,"ftuiSupport","") eq "1") {
+                        my $t=$hash->{FAVSTR};
+                        $t=~s/,/:/g;
+                        readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
+                        $t=~s/_/ /g;
+                        readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
+                    }
+                }
+            }
         } else {
         }
 
@@ -3836,8 +3880,9 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
               }
             } else {
             # CD 0014 end
-                Log3( $hash, 5, "SB_PLAYER_RecbroadCast($name): PLAYLISTS ADD " . 
+                Log3( $hash, 4, "SB_PLAYER_RecbroadCast($name): PLAYLISTS ADD " . 
                       "name:$args[1] id:$args[2] uid:$args[3]" );
+                $hash->{helper}{SB_PLAYER_Playlists}{$args[3]}{SOURCE} = $args[ 4 ];    # CD 0070
                 $hash->{helper}{SB_PLAYER_Playlists}{$args[3]}{ID} = $args[ 2 ];
                 $hash->{helper}{SB_PLAYER_Playlists}{$args[3]}{NAME} = $args[ 1 ];
                 if( $hash->{SERVERPLAYLISTS} eq "" ) {
@@ -3871,10 +3916,44 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                            0 );
             #end
         } elsif( $args[ 0 ] eq "FLUSH" ) {
-            undef( %{$hash->{helper}{SB_PLAYER_Playlists}} );
-            undef( %{$hash->{helper}{myPlaylists}} );  # CD 0036
-            $hash->{SERVERPLAYLISTS} = "";
-            delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));      # CD 0016
+            if($args[ 1 ] eq 'all') {
+                undef( %{$hash->{helper}{SB_PLAYER_Playlists}} );
+                undef( %{$hash->{helper}{myPlaylists}} );  # CD 0036
+                $hash->{SERVERPLAYLISTS} = "";
+                delete($hash->{helper}{alarmPlaylists}) if (defined($hash->{helper}{alarmPlaylists}));      # CD 0016
+            } else {
+                # CD 0070 gezielt nach Plugin/App löschen
+                my $doupdate=0;
+                my $pls="";
+                foreach my $pl ( keys %{$hash->{helper}{SB_PLAYER_Playlists}} ) {
+                    if($hash->{helper}{SB_PLAYER_Playlists}{$pl}{SOURCE} eq $args[ 1 ]) {
+                        delete $hash->{helper}{SB_PLAYER_Playlists}{$pl};
+                        $doupdate=1;
+                    } else {
+                        if( $pls eq "" ) {
+                            $pls = $pl;
+                        } else {
+                            $pls .= "," . $pl;
+                        }
+                    }
+                }
+                if($doupdate==1) {
+                    if( AttrVal( $name, "sortPlaylists", "0" ) eq "1" ) {
+                        my @radios = split(',',$pls);
+                        $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+                    } else {
+                        $hash->{SERVERPLAYLISTS}=$pls;
+                    }
+
+                    if(AttrVal($name,"ftuiSupport","") eq "1") {
+                        my $t=$hash->{SERVERPLAYLISTS};
+                        $t=~s/,/:/g;
+                        readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
+                        $t=~s/_/ /g;
+                        readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
+                    }
+                }
+            }
         } else {
         }
 
