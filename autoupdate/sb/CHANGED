@@ -1,9 +1,11 @@
 ﻿97_SB_SERVER:
+  170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170204 0031 - syncGroup volume hinzugefügt
               - User und Passwort nicht mehr sichtbar speichern
               - deutsche Dokumentation für syncGroup hinzugefügt
               - bei syncGroup talk warten bis die Player synchronisiert sind
 98_SB_PLAYER:
+  170212 0070 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
               - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
@@ -12,6 +14,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170204 0031 - syncGroup volume hinzugefügt
               - User und Passwort nicht mehr sichtbar speichern
               - deutsche Dokumentation für syncGroup hinzugefügt
@@ -84,6 +87,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170212 0070 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
               - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
