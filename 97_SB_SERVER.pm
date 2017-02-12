@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0031 2017-02-04 21:39:00Z CD $
+# $Id: 97_SB_SERVER.pm 0032 2017-02-12 21:21:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -50,6 +50,7 @@ use URI::Escape;
 # include for using the perl ping command
 use Net::Ping;
 use Encode qw(decode encode);           # CD 0009 hinzugefügt
+#use Text::Unidecode;
 
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
@@ -70,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0031';
+use constant SB_SERVER_VERSION => '0032';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -105,6 +106,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "doalivecheck:true,false ";
     $hash->{AttrList} .= "maxcmdstack ";
     $hash->{AttrList} .= "httpport ";
+    $hash->{AttrList} .= "enablePlugins ";
     $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     $hash->{AttrList} .= $readingFnAttributes;
 
@@ -112,6 +114,31 @@ sub SB_SERVER_Initialize( $ ) {
     eval "use Data::Dumper";
     $SB_SERVER_hasDataDumper = 0 if($@); 
 }
+
+# CD 0032 start
+sub SB_SERVER_SetAttrList( $ ) {
+    my ($hash) = @_;
+
+    my $attrList;
+    $attrList = "alivetimer maxfavorites ";
+    $attrList .= "doalivecheck:true,false ";
+    $attrList .= "maxcmdstack ";
+    $attrList .= "httpport ";
+    $attrList .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
+    my $applist="enablePlugins";
+    if (defined($hash->{helper}{apps})) {
+        $applist.=":multiple-strict";
+        foreach my $app ( sort keys %{$hash->{helper}{apps}} ) {
+            $applist.=",$app";
+        }
+    }
+    $attrList .= "$applist ";
+
+    $attrList .= $readingFnAttributes;
+    
+    $modules{$defs{$hash->{NAME}}{TYPE}}{AttrList}=$attrList;
+}
+# CD 0032 end
 
 # ----------------------------------------------------------------------------
 #  called when defining a module
@@ -191,7 +218,7 @@ sub SB_SERVER_Define( $$ ) {
     }
 
     # CD 0031
-    if(($user ne "") && ($password ne "")) {
+    if(defined($user) && defined($password)) {
         SB_SERVER_storePassword($hash,$user,$password);
         $hash->{DEF} = join(' ',@newDef); 
     }
@@ -529,8 +556,8 @@ sub SB_SERVER_Attr( @ ) {
 
     Log( 4, "SB_SERVER_Attr($name): called with @args" );
 
-    if( $cmd eq "set" ) {
-        if( $args[ 0 ] eq "alivetimer" ) {
+    if( $args[ 0 ] eq "alivetimer" ) {
+        if( $cmd eq "set" ) {
             # CD 0021 start
             RemoveInternalTimer( "SB_SERVER_Alive:$name");
             InternalTimer( gettimeofday() + $args[ 1 ],
@@ -539,11 +566,40 @@ sub SB_SERVER_Attr( @ ) {
                        0 );
             # CD 0021 end
         }
+    } elsif( $args[ 0 ] eq "httpport" ) {
         # CD 0015 bei Änderung des Ports diesen an Clients schicken
-        if( $args[ 0 ] eq "httpport" ) {
+        if( $cmd eq "set" ) {
             SB_SERVER_Broadcast( $hash, "SERVER", 
                      "IP " . $hash->{IP} . ":" .
                      $args[ 1 ] );
+        }
+    } elsif( $args[ 0 ] eq "enablePlugins" ) {
+        # CD 0070 bei Änderung Status abfragen
+        if( $cmd eq "set" ) {
+            if($init_done>0) {
+                if(defined($hash->{helper}{apps})) {
+                    my @enabledApps=split(',',$args[ 1 ]);
+                    foreach my $app (@enabledApps) {
+                        if(defined($hash->{helper}{apps}{$app})) {
+                            DevIo_SimpleWrite( $hash, ($hash->{helper}{apps}{$app}{cmd})." items 0 200\n", 0 );
+                        }
+                    }
+                }
+            }
+        } else {
+            if(defined($hash->{helper}{apps})) {
+                my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
+                foreach my $app (@enabledApps) {
+                    if(defined($hash->{helper}{apps}{$app})) {
+                        SB_SERVER_Broadcast( $hash, "PLAYLISTS", "FLUSH ".($hash->{helper}{apps}{$app}{cmd}), undef );
+                        SB_SERVER_Broadcast( $hash, "FAVORITES", "FLUSH ".($hash->{helper}{apps}{$app}{cmd}), undef );
+                    }
+                }
+            }
+            
+            delete($hash->{helper}{apps}) if(defined($hash->{helper}{apps}));
+            delete($hash->{helper}{appcmd}) if(defined($hash->{helper}{appcmd}));
+            DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         }
     }
 }
@@ -611,6 +667,17 @@ sub SB_SERVER_Set( $@ ) {
                    0 );
         DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
         DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
+        # CD 0032 start
+        DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
+        if(defined($hash->{helper}{apps})) {
+            my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
+            foreach my $app (@enabledApps) {
+                if(defined($hash->{helper}{apps}{$app})) {
+                    DevIo_SimpleWrite( $hash, ($hash->{helper}{apps}{$app}{cmd})." items 0 200\n", 0 );
+                }
+            }
+        }
+        # CD 0032 end
     } elsif( $cmd eq "cliraw" ) {
         # write raw messages to the CLI interface per player
         my $v = join( " ", @a );
@@ -1347,6 +1414,220 @@ sub SB_SERVER_DoInit( $ ) {
     return( 1 );
 }
 
+# CD 0032 start
+# ----------------------------------------------------------------------------
+#  Parse return of app items query
+# ----------------------------------------------------------------------------
+sub SB_SERVER_ParseAppResponse( $$ ) {
+    my ( $hash, $buf ) = @_;
+    my $name = $hash->{NAME};
+    my $appresponse=0;
+
+    if($buf=~m/items/) {
+        my @data=split(' ',$buf);
+        #Log 0,$buf;
+        if(defined($hash->{helper}{appcmd}) && defined($hash->{helper}{appcmd}{$data[1]})) {
+            my $appcmd=$data[1];
+            my $appname=$hash->{helper}{appcmd}{$appcmd}{name};
+            my $nameactive=0;
+            my $save=0;
+
+            if($buf=~m/item_id:/) {
+                # app subitems ...
+                my $id="0";
+                my $pname="";
+                my $dest=0;
+                my $broadcastPlaylists=0;
+                my $broadcastFavorites=0;
+
+                foreach (@data) {
+                    if( $_ =~ /^(item_id:)(.*)/ ) {
+                        if(defined($hash->{helper}{appcmd}{$appcmd}{playlistsId}) && ($hash->{helper}{appcmd}{$appcmd}{playlistsId} eq $2)) {
+                            $dest=1;
+                        }
+                        if(defined($hash->{helper}{appcmd}{$appcmd}{favoritesId}) && ($hash->{helper}{appcmd}{$appcmd}{favoritesId} eq $2)) {
+                            $dest=2;
+                        }
+                    } elsif( $_ =~ /^(id:)(.*)/ ) {
+                        # new entry
+                        if($save==1) {
+                            if($dest==1) {
+                                if(defined($hash->{helper}{appcmd}{$appcmd}{playlists}) && defined($hash->{helper}{appcmd}{$appcmd}{playlists}{$id})) {
+                                    $broadcastPlaylists=1 if($hash->{helper}{appcmd}{$appcmd}{playlists}{$id}{name} ne $pname);
+                                } else {
+                                    $broadcastPlaylists=1;
+                                }
+                                $hash->{helper}{appcmd}{$appcmd}{playlists}{$id}{name}=$pname;
+                            }
+                            if($dest==2) {
+                                # Bug in squeezecloud ? Element 3.2 funktioniert nicht
+                                if($appcmd eq 'squeezecloud') {
+                                    if($id-int($id)>0.19) {
+                                        $id+=0.1;
+                                    }
+                                }
+                            
+                                if(defined($hash->{helper}{appcmd}{$appcmd}{favorites}) && defined($hash->{helper}{appcmd}{$appcmd}{favorites}{$id})) {
+                                    $broadcastFavorites=1 if($hash->{helper}{appcmd}{$appcmd}{favorites}{$id}{name} ne $pname);
+                                } else {
+                                    $broadcastFavorites=1;
+                                }
+                                $hash->{helper}{appcmd}{$appcmd}{favorites}{$id}{name}=$pname;
+                            }
+                            $save=0;
+                        }
+                        $id=$2;
+                        $nameactive=0;
+                        next;
+                    } elsif( $_ =~ /^(name:)(.*)/ ) {
+                        $pname=$2;
+                        $save=1;
+                        $nameactive=1;
+                        next;
+                    } elsif( $_ =~ /^(type:)(.*)/ ) {
+                        $nameactive=0;
+                    } else {
+                        $pname.=" $_" if($nameactive==1);
+                    }
+                }
+                if($save==1) {
+                    if($dest==1) {
+                        if(defined($hash->{helper}{appcmd}{$appcmd}{playlists}) && defined($hash->{helper}{appcmd}{$appcmd}{playlists}{$id})) {
+                            $broadcastPlaylists=1 if($hash->{helper}{appcmd}{$appcmd}{playlists}{$id}{name} ne $pname);
+                        } else {
+                            $broadcastPlaylists=1;
+                        }
+                        $hash->{helper}{appcmd}{$appcmd}{playlists}{$id}{name}=$pname;
+                    }
+                    if($dest==2) {
+                        # Bug in squeezecloud ? Element 3.2 funktioniert nicht
+                        if($appcmd eq 'squeezecloud') {
+                            if($id-int($id)>0.19) {
+                                $id+=0.1;
+                            }
+                        }
+
+                        if(defined($hash->{helper}{appcmd}{$appcmd}{favorites}) && defined($hash->{helper}{appcmd}{$appcmd}{favorites}{$id})) {
+                            $broadcastFavorites=1 if($hash->{helper}{appcmd}{$appcmd}{favorites}{$id}{name} ne $pname);
+                        } else {
+                            $broadcastFavorites=1;
+                        }
+                        $hash->{helper}{appcmd}{$appcmd}{favorites}{$id}{name}=$pname;
+                    }
+                }
+                if($broadcastPlaylists==1) {
+                    SB_SERVER_Broadcast( $hash, "PLAYLISTS", "FLUSH $appcmd", undef );
+                    RemoveInternalTimer( "SB_SERVER_tcb_SendPlaylists:$name");
+                    foreach my $pl ( keys %{$hash->{helper}{appcmd}{$appcmd}{playlists}} ) {
+                        my $plname=$hash->{helper}{appcmd}{$appcmd}{playlists}{$pl}{name};
+                        $plname=~s/ /_/g;
+                        $plname=~s/[^[:ascii:]]//g;
+                        #$plname=unidecode($plname);
+                        my $uniquename = SB_SERVER_FavoritesName2UID( $plname );
+                        push @SB_SERVER_PLS, "ADD $plname $pl $uniquename $appcmd";
+                    }
+                    if(scalar(@SB_SERVER_PLS)>0) {
+                        InternalTimer( gettimeofday() + 0.01,
+                                   "SB_SERVER_tcb_SendPlaylists",
+                                   "SB_SERVER_tcb_SendPlaylists:$name", 
+                                   0 );
+                    }
+                }
+                if($broadcastFavorites==1) {
+                    SB_SERVER_Broadcast( $hash, "FAVORITES", "FLUSH $appcmd", undef );
+                    RemoveInternalTimer( "SB_SERVER_tcb_SendFavorites:$name");
+                    foreach my $pl ( keys %{$hash->{helper}{appcmd}{$appcmd}{favorites}} ) {
+                        my $plname=$hash->{helper}{appcmd}{$appcmd}{favorites}{$pl}{name};
+                        $plname=~s/ /_/g;
+                        $plname=~s/[^[:ascii:]]//g;
+                        #$plname=unidecode($plname);
+                        my $uniquename = SB_SERVER_FavoritesName2UID( $plname );
+                        push @SB_SERVER_FAVS, "ADD $name $pl $uniquename url $appcmd $plname";
+                    }
+                    if(scalar(@SB_SERVER_FAVS)>0) {
+                        InternalTimer( gettimeofday() + 0.01,
+                                   "SB_SERVER_tcb_SendFavorites",
+                                   "SB_SERVER_tcb_SendFavorites:$name", 
+                                   0 );
+                    }
+                }
+            } else {
+                # app items ...
+                my $id=0;
+                my $iname="";
+                my $type="";
+                my $isaudio=0;
+                my $hasitems=0;
+                
+                foreach (@data) {
+                    if( $_ =~ /^(id:)(.*)/ ) {
+                        # new entry
+                        if($save==1) {
+                            $hash->{helper}{appcmd}{$appcmd}{items}{$id}{name}=$iname;
+                            $hash->{helper}{appcmd}{$appcmd}{items}{$id}{type}=$type;
+                            $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
+                            $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
+                            $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                            $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
+                            $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
+                            $save=0;
+                        }
+                        $id=$2;
+                        $nameactive=0;
+                        next;
+                    } elsif( $_ =~ /^(type:)(.*)/ ) {
+                        $type=$2;
+                        $save=1;
+                        $nameactive=0;
+                        next;
+                    } elsif( $_ =~ /^(isaudio:)(.*)/ ) {
+                        $isaudio=$2;
+                        $save=1;
+                        $nameactive=0;
+                        next;
+                    } elsif( $_ =~ /^(hasitems:)(.*)/ ) {
+                        $hasitems=$2;
+                        $save=1;
+                        $nameactive=0;
+                        next;
+                    } elsif( $_ =~ /^(name:)(.*)/ ) {
+                        $iname=$2;
+                        $save=1;
+                        $nameactive=1;
+                        next;
+                    } elsif( $_ =~ /^(count:)(.*)/ ) {
+                        if($2==0) {
+                            delete $hash->{helper}{appcmd}{$appcmd}{items} if defined($hash->{helper}{appcmd}{$appcmd}{items});
+                            $save=0;
+                            Log3( $hash, 2, "SB_SERVER_ParseAppResponse($name): no valid data for $appname: $buf" );
+                            last;
+                        }
+                    } else {
+                        $iname.=" $_" if($nameactive==1);
+                    }
+                }
+                if($save==1) {
+                    $hash->{helper}{appcmd}{$appcmd}{items}{$id}{name}=$iname;
+                    $hash->{helper}{appcmd}{$appcmd}{items}{$id}{type}=$type;
+                    $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
+                    $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
+                    $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                    $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
+                    $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
+                }
+                if(defined($hash->{helper}{appcmd}{$appcmd}{playlistsId})) {
+                    DevIo_SimpleWrite( $hash, "$appcmd items 0 200 item_id:".($hash->{helper}{appcmd}{$appcmd}{playlistsId})."\n", 0 );
+                }
+                if(defined($hash->{helper}{appcmd}{$appcmd}{favoritesId})) {
+                    DevIo_SimpleWrite( $hash, "$appcmd items 0 200 item_id:".($hash->{helper}{appcmd}{$appcmd}{favoritesId})." want_url:1\n", 0 );
+                }
+            }
+            $appresponse=1;
+        }
+    }
+    return $appresponse;
+}
+# CD 0032 end
 
 # ----------------------------------------------------------------------------
 #  Dispatch every single line of commands
@@ -1366,20 +1647,23 @@ sub SB_SERVER_DispatchCommandLine( $$ ) {
     my @id = split( ":", $id1 );
 
     if( @id > 1 ) {
-	# we have received a return for a dedicated player
+        # CD 0032 start
+        # check for app response
+        if(SB_SERVER_ParseAppResponse($hash,$buf)==0) {
+            # we have received a return for a dedicated player
 
-	# create the fhem specific unique id
-	my $playerid = join( "", @id );
-	Log3( $hash, 5, "SB_SERVER_DispatchCommandLine: fhem-id: $playerid" );
-	
-	# create the commands
-	my $cmds = substr( $buf, $indx + 1 );
-	Log3( $hash, 5, "SB_SERVER__DispatchCommandLine: commands: $cmds" );
-	Dispatch( $hash, "SB_PLAYER:$playerid:$cmds", undef );
-
+            # create the fhem specific unique id
+            my $playerid = join( "", @id );
+            Log3( $hash, 5, "SB_SERVER_DispatchCommandLine: fhem-id: $playerid" );
+            
+            # create the commands
+            my $cmds = substr( $buf, $indx + 1 );
+            Log3( $hash, 5, "SB_SERVER__DispatchCommandLine: commands: $cmds" );
+            Dispatch( $hash, "SB_PLAYER:$playerid:$cmds", undef );
+        }
     } else {
-	# that is a server specific command
-	SB_SERVER_ParseCmds( $hash, $buf );
+        # that is a server specific command
+        SB_SERVER_ParseCmds( $hash, $buf );
     }
 
     return( undef );
@@ -1562,6 +1846,60 @@ sub SB_SERVER_ParseCmds( $$ ) {
             delete $hash->{helper}{getData}{artists};
         }
     # CD 0030 end
+    # CD 0032 start
+    } elsif( $cmd eq "apps" ) {
+        my $save=0;
+        my $appcmd="";
+        my $appname="";
+        my $scansubs=0;
+        
+        # 1. Mal ?
+        $scansubs=1 unless (defined($hash->{helper}{apps}));
+        
+        delete($hash->{helper}{apps}) if(defined($hash->{helper}{apps}));
+        delete($hash->{helper}{appcmd}) if(defined($hash->{helper}{appcmd}));
+        
+        foreach( @args ) {
+            if( $_ =~ /^(icon:)(.*)/ ) {
+                # new entry
+                if($save==1) {
+                    $hash->{helper}{apps}{$appname}{cmd}=$appcmd;
+                    $hash->{helper}{appcmd}{$appcmd}{name}=$appname;
+                    $save=0;
+                }
+                next;
+            } elsif( $_ =~ /^(cmd:)(.*)/ ) {
+                $appcmd=$2;
+                $save=1;
+                next;
+            } elsif( $_ =~ /^(name:)(.*)/ ) {
+                $appname=$2;
+                $appname=~s/\./_/g;
+                $appname=~s/-/_/g;
+                $save=1;
+                next;
+            } elsif( $_ =~ /^(type:)(.*)/ ) {
+                $save=0 if($2 ne 'xmlbrowser');
+                next;
+            }
+        }
+        if($save==1) {
+            $hash->{helper}{apps}{$appname}{cmd}=$appcmd;
+            $hash->{helper}{appcmd}{$appcmd}{name}=$appname;
+        }
+        SB_SERVER_SetAttrList($hash);
+        
+        if(defined($hash->{helper}{apps})&&($scansubs==1)) {
+            my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
+            foreach my $app (@enabledApps) {
+                if(defined($hash->{helper}{apps}{$app})) {
+                    DevIo_SimpleWrite( $hash, ($hash->{helper}{apps}{$app}{cmd})." items 0 200\n", 0 );
+                }
+            }
+        }
+    # CD 0032 end
+
+    # CD 0032 end
     } else {
 	# unkown
     }
@@ -2126,7 +2464,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     # the list for the sync masters
     # make all client create e new sync master list
     SB_SERVER_Broadcast( $hash, "SYNCMASTER",  
-			 "FLUSH dont care", undef );
+			 "FLUSH all", undef );
 
     # now send the list for the sync masters
     @SB_SERVER_SM=();
@@ -2358,7 +2696,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 
     # make all client create e new favorites list
     SB_SERVER_Broadcast( $hash, "FAVORITES",  
-			 "FLUSH dont care", undef );
+			 "FLUSH all", undef );
 
     # find all the names and broadcast to our clients
     $favsetstring = "favorites:";
@@ -2369,7 +2707,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
               " Name:" . $favorites{$name}{$titi}{Name} . " $titi" );
         $favsetstring .= "$titi,";
         push @SB_SERVER_FAVS, "ADD $name $favorites{$name}{$titi}{ID} " . 
-                     "$titi $favorites{$name}{$titi}{URL} $favorites{$name}{$titi}{Name}";     # CD 0009 URL an Player schicken # CD 0029 aufteilen wenn Hardware zu schwach
+                     "$titi $favorites{$name}{$titi}{URL} LMS $favorites{$name}{$titi}{Name}";     # CD 0009 URL an Player schicken # CD 0029 aufteilen wenn Hardware zu schwach
     }
     # CD 0029 start
     if(scalar(@SB_SERVER_FAVS)>0) {
@@ -2432,7 +2770,7 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     # this defines the regexp. Please add new stuff with the seperator |
     # CD 0003 changed öÜ to ö|Ü
     my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|' .       # CD 0011 ,:? hinzugefügt
-	'\/|\'|\.|\"|\^|°|\$|\||%|@|&|\+]';     # CD 0009 + hinzugefügt
+	'\/|\'|\.|\"|\^|°|\$|\||%|@|*|#|&|\+]';     # CD 0009 + hinzugefügt # CD 0070 * und # hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;
 
@@ -2528,7 +2866,7 @@ sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
 
     # force all clients to delete alarm playlists
     SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",  
-			 "FLUSH dont care", undef );
+			 "FLUSH all", undef );
 
     @SB_SERVER_AL_PLS=split("category:",join(" ",@{$dataptr}));
     # CD 0029 Übertragung an Player aufteilen
@@ -2623,7 +2961,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 
     # make all client create a new favorites list
     SB_SERVER_Broadcast( $hash, "PLAYLISTS",  
-			 "FLUSH dont care", undef );
+			 "FLUSH all", undef );
 
     my @data1 = split( " ", $datastr );
 
@@ -2635,7 +2973,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename";         # CD 0029
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
             }
             $idbuf = $2;
             $namebuf = "";
@@ -2650,7 +2988,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename";         # CD 0029
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
             }
             
         } else {
@@ -2869,6 +3207,16 @@ sub SB_SERVER_LMS_Status( $ ) {
     DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
     DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );  # CD 0029
+    # CD 0032 start
+    if(defined($hash->{helper}{apps})) {
+        my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
+        foreach my $app (@enabledApps) {
+            if(defined($hash->{helper}{apps}{$app})) {
+                DevIo_SimpleWrite( $hash, ($hash->{helper}{apps}{$app}{cmd})." items 0 200\n", 0 );
+            }
+        }
+    }
+    # CD 0032 end
 
     return( true );
 }
