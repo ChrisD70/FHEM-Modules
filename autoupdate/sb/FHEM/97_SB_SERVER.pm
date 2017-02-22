@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0032 2017-02-12 21:21:00Z CD $
+# $Id: 97_SB_SERVER.pm 0033 2017-02-22 19:52:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0032';
+use constant SB_SERVER_VERSION => '0033';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -602,6 +602,7 @@ sub SB_SERVER_Attr( @ ) {
             DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         }
     }
+    return; # 0032 betateilchen/mahowi
 }
 
 

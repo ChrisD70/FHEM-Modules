@@ -1,4 +1,5 @@
 ﻿97_SB_SERVER:
+  170222 0033 - Rückgabewert beim Setzen von Attributen korrgiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170204 0031 - syncGroup volume hinzugefügt
               - User und Passwort nicht mehr sichtbar speichern
@@ -14,6 +15,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170222 0033 - Rückgabewert beim Setzen von Attributen korrgiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170204 0031 - syncGroup volume hinzugefügt
               - User und Passwort nicht mehr sichtbar speichern
