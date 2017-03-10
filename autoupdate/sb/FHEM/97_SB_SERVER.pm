@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0033 2017-02-22 19:52:00Z CD $
+# $Id: 97_SB_SERVER.pm 0034 2017-03-10 20:51:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0033';
+use constant SB_SERVER_VERSION => '0034';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -602,7 +602,7 @@ sub SB_SERVER_Attr( @ ) {
             DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         }
     }
-    return; # 0032 betateilchen/mahowi
+    return; # 0033 betateilchen/mahowi
 }
 
 
@@ -2760,6 +2760,14 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
 
     # eliminate spaces
     $namestr = join( "_", split( " ", $namestr ) );     # CD 0009 Leerzeichen durch _ ersetzen statt löschen
+
+    # CD 0034 start
+    my $rc=eval
+    {
+        require Text::Unaccent;
+        $namestr=Text::Unaccent::unac_string('UTF8', $namestr);
+    };
+    # CD 0034 end
 
     # CD 0009 verschiedene Sonderzeichen ersetzen und nicht mehr löschen
     my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",

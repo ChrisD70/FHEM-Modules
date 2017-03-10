@@ -1,10 +1,7 @@
 ﻿97_SB_SERVER:
+  170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
-  170204 0031 - syncGroup volume hinzugefügt
-              - User und Passwort nicht mehr sichtbar speichern
-              - deutsche Dokumentation für syncGroup hinzugefügt
-              - bei syncGroup talk warten bis die Player synchronisiert sind
 98_SB_PLAYER:
   170212 0070 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
@@ -15,6 +12,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170204 0031 - syncGroup volume hinzugefügt
