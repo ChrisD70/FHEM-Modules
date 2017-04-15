@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0070 2017-02-12 21:21:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0071 2017-04-15 15:27:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -352,7 +352,7 @@ sub SB_PLAYER_Attr( @ ) {
             if(defined($hash->{helper}{playlistIds})) {
                 my @ids=split(',',$hash->{helper}{playlistIds});
                 foreach(@ids) {
-                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
                 }
                 IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
             }
@@ -2000,7 +2000,7 @@ sub SB_PLAYER_Undef( $$$ ) {
     # to be reviewed if that works. 
     # check for uc()
     # what is $hash->{DEF}?
-    delete $modules{SB_PLAYER}{defptr}{uc($hash->{DEF})};
+    delete $modules{SB_PLAYER}{defptr}{$hash->{FHEMUID}};   # CD 0071 uc($hash->{DEF}) durch $hash->{FHEMUID} ersetzt
 
     return( undef );
 }
@@ -4659,6 +4659,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             next;
         } elsif( $cur =~ /^(playlist_tracks:)(.*)/ ) {
             readingsBulkUpdate( $hash, "playlistTracks", $2 );
+            $hash->{helper}{playlistIds}='0' if($2==0); # CD 0071 wenn playlist leer ist internen Zustand zurücksetzen
             next;
         } elsif( $cur =~ /^(playlist_cur_index:)(.*)/ ) {
             readingsBulkUpdate( $hash, "playlistCurrentTrack", $2+1 );
@@ -4696,7 +4697,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
         if(defined($hash->{helper}{playlistIds})) {
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}));
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));   # CD 0071, id 0 ignorieren
             }
             IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
         }

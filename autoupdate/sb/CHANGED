@@ -3,11 +3,9 @@
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
 98_SB_PLAYER:
-  170212 0070 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
-  170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
-  170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
-              - neue Readings für Playlisten und Favoriten für FTUI (benötigt angepasstes select-Widget)
-              - externe Artwork-Url für FTUI Medialist abfragen
+  170415 0071 - löschen korrigiert
+              - Playlisteintrag mit Id 0 ignorieren
+              - leere Playlist korrigiert
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -87,6 +85,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170415 0071 - löschen korrigiert
+              - Playlisteintrag mit Id 0 ignorieren
+              - leere Playlist korrigiert
   170212 0070 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
   170205 0069 - relative Lautstärkeänderung bei Playern korrigiert
   170202 0068 - FTUI Medialist aktualisieren wenn Track hinzugefügt wird
