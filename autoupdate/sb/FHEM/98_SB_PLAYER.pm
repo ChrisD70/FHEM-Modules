@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0071 2017-04-15 15:27:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0072 2017-04-17 12:49:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -349,6 +349,7 @@ sub SB_PLAYER_Attr( @ ) {
         if ($args[1] eq "0") {
             $dodelete=1;
         } elsif ($args[1] eq "1") {
+            delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
             if(defined($hash->{helper}{playlistIds})) {
                 my @ids=split(',',$hash->{helper}{playlistIds});
                 foreach(@ids) {
@@ -1722,6 +1723,8 @@ sub SB_PLAYER_Parse( $$ ) {
         my $album="";
         my $flush=0;
    
+        Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
+   
         foreach( @args ) {
             $flush=0;
             if( $_ =~ /^(id:)(-?[0-9]*)/ ) {
@@ -1730,7 +1733,7 @@ sub SB_PLAYER_Parse( $$ ) {
                 if(defined($hash->{helper}{playlistInfo}{$2}) && ($trackid>0)) {
                     last;
                 }
-                $hash->{helper}{playlistInfo}{$trackid}{title}='-';
+                $hash->{helper}{playlistInfo}{$trackid}{title}='no data';
                 $hash->{helper}{playlistInfo}{$trackid}{artist}='-';
                 $hash->{helper}{playlistInfo}{$trackid}{album}='-';
                 $hash->{helper}{playlistInfo}{$trackid}{coverid}=0;
@@ -1790,7 +1793,12 @@ sub SB_PLAYER_Parse( $$ ) {
         $hash->{helper}{playlistInfo}{$trackid}{title}=$title if($title ne "");
         $hash->{helper}{playlistInfo}{$trackid}{artist}=$artist if($artist ne "");
         $hash->{helper}{playlistInfo}{$trackid}{album}=$album if($album ne "");
+        # TEST
+        #   if (rand() > 0.4) {delete $hash->{helper}{playlistInfo}{$trackid}};
+        # TEST
     } elsif( $cmd eq "FHEMupdatePlaylistInfoDone" ) {
+            my $wait=1;
+    
             my $coverbase="http://" . $hash->{SBSERVER} . "/music/";
 
             my @ids=split(',',$hash->{helper}{playlistIds});
@@ -1813,8 +1821,11 @@ sub SB_PLAYER_Parse( $$ ) {
                         $ftuimedialist.="\"Cover\":\"".$coverbase.$hash->{helper}{playlistInfo}{$_}{coverid}."/cover_50x50_o\"},";
                     }
                 } else {
+                    Log3( $hash, 3, "SB_PLAYER_Parse: $name: no songinfo for id $_" );  # CD 0072
+                    SB_PLAYER_SonginfoAddQueue($hash,$_,$wait);   # CD 0072
+                    $wait=0;
                     $ftuimedialist.="{\"Artist\":\"-\",";
-                    $ftuimedialist.="\"Title\":\"-\",";
+                    $ftuimedialist.="\"Title\":\"loading...\",";
                     $ftuimedialist.="\"Album\":\"-\",";
                     $ftuimedialist.="\"Time\":\"0\",";
                     $ftuimedialist.="\"File\":\"-\",";
@@ -2213,7 +2224,8 @@ sub SB_PLAYER_Set( $@ ) {
             "resetTTS:noArg " .         # CD 0028 hinzugefügt
             "updateFTUImedialist:noArg " .  # CD 0065 hinzugefügt
             "clearFTUIcache:noArg " .   # CD 0065 hinzugefügt
-            "track ";                   # CD 0065 hinzugefügt
+            "track " .                  # CD 0065 hinzugefügt
+            "tracknumber ";             # CD 0072 hinzugefügt
         # add the favorites
         $res .= $hash->{FAVSET} . ":-," . $hash->{FAVSTR} . " ";    # CD 0014 '-' hinzugefügt
         # add the syncmasters
@@ -2945,6 +2957,8 @@ sub SB_PLAYER_Set( $@ ) {
     # CD 0052 end
     # CD 0065 start
     } elsif( $cmd eq "updateFTUImedialist" ) {
+        delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+
         if(defined($hash->{helper}{playlistIds})) {
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
@@ -2954,7 +2968,7 @@ sub SB_PLAYER_Set( $@ ) {
         }
     } elsif( $cmd eq "clearFTUIcache" ) {
         delete $hash->{helper}{playlistInfo} if defined($hash->{helper}{playlistInfo});
-    } elsif( $cmd eq "track" ) {
+    } elsif(( $cmd eq "track" ) || ( $cmd eq "tracknumber" )) {
         if( @arg != 1 ) {
             my $msg = "SB_PLAYER_Set: no arguments for track given.";
             Log3( $hash, 3, $msg );
@@ -4694,6 +4708,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     
     # CD 0065 start
     if(AttrVal($name,"ftuiSupport","") eq "1") {
+        delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+
         if(defined($hash->{helper}{playlistIds})) {
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
@@ -4969,6 +4985,65 @@ sub SB_PLAYER_LoadPlayerStates($)
   return undef;
 } 
 
+# CD 0072 start
+sub
+SB_PLAYER_SonginfoAddQueue($$$) ##################################################
+{
+    my ($hash, $id, $wait) = @_;
+    my $name = $hash->{NAME};
+
+    if(!$hash->{SONGINFOQUEUE}) {
+        $hash->{SONGINFOQUEUE} = [ $id ];
+        push(@{$hash->{SONGINFOQUEUE}}, $id);
+        RemoveInternalTimer( "SonginfoHandleQueue:$name");
+        InternalTimer( gettimeofday() + ($wait==1?2.0:0.01), 
+           "SB_PLAYER_tcb_SonginfoHandleQueue",
+           "SonginfoHandleQueue:$name", 
+           0 );
+    } else {
+        push(@{$hash->{SONGINFOQUEUE}}, "wait") if ($wait==1);
+        push(@{$hash->{SONGINFOQUEUE}}, $id);
+    }
+}
+
+sub
+SB_PLAYER_SonginfoHandleQueue($) ##################################################
+{
+    my $hash = shift;
+    my $name = $hash->{NAME};
+
+    my $arr = $hash->{SONGINFOQUEUE};
+    if(defined($arr) && @{$arr} > 0) {
+        shift(@{$arr});
+        if(@{$arr} == 0) {
+            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+            delete($hash->{SONGINFOQUEUE});
+            return;
+        }
+        my $id = $arr->[0];
+        if($id ne "wait") {
+            if($id eq "") {
+                SB_PLAYER_SonginfoHandleQueue($hash);
+            } else {
+                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$id." tags:acdltuxNK\n" );
+            }
+        }
+        InternalTimer( gettimeofday() + (($id eq "wait")?2.0:0.01), 
+           "SB_PLAYER_tcb_SonginfoHandleQueue",
+           "SonginfoHandleQueue:$name", 
+           0 );
+    }
+} 
+
+sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    SB_PLAYER_SonginfoHandleQueue($hash);
+}
+# CD 0072 end
+
 # ##############################################################################
 #  No PERL code beyond this line
 # ##############################################################################
@@ -5039,7 +5114,7 @@ sub SB_PLAYER_LoadPlayerStates($)
      <li><b>playlist add &lt;filename|playlistname&gt;</b> -  Add the specified file or playlist at the end of the current playlist.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   Insert specified file or playlist after the current track into
      the current playlist.</li>
-     <li><b>track &lt;n|+n|-n&gt;</b> -   Sets the track with the given tracknumber as the current title. An explicitly
+     <li><b>track|tracknumber &lt;n|+n|-n&gt;</b> -   Sets the track with the given tracknumber as the current title. An explicitly
      positive or negative number may be used to jump to a song relative to the currently playing song..</li>
      <li><b>statusRequest</b> -  Update all readings.</li>
      <li><b>sync &lt;playerName[,playerName...]&gt; [new|asSlave]</b> - Put playerName(s) into this player's multiroom group. Remove playerName(s) from their existing group(s) if necessary. Options:</li>
@@ -5273,7 +5348,7 @@ sub SB_PLAYER_LoadPlayerStates($)
      an das Ende der aktuellen Playlist an.</li>
      <li><b>playlist insert &lt;filename|playlistname&gt;</b> -   F&uuml;gt die angegebene Datei oder Playlist
      hinter der aktuellen Datei oder Playlist in der aktuellen Playlist ein.</li>
-     <li><b>track &lt;n|+n|-n&gt;</b> -   Aktiviert einen bestimmten Titel der aktiven Playliste. Mit &lt;n&gt; ist
+     <li><b>track|tracknumber &lt;n|+n|-n&gt;</b> -   Aktiviert einen bestimmten Titel der aktiven Playliste. Mit &lt;n&gt; ist
      die laufende Nummer des Titels innerhalb dieser Playliste anzugeben. Ein explizierter Wert mit Vorzeichen,
      springt in der momentanen Playliste um &lt;+n&gt; oder &lt;-n&gt; Titel vor oder zurück.</li>
      <li><b>statusRequest</b> -  Aktualisierung aller Readings.</li>

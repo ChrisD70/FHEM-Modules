@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0034 2017-03-10 20:51:00Z CD $
+# $Id: 97_SB_SERVER.pm 0035 2017-04-17 12:49:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0034';
+use constant SB_SERVER_VERSION => '0035';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -1569,6 +1569,7 @@ sub SB_SERVER_ParseAppResponse( $$ ) {
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                            $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Wiedergabelisten'); # CD 0035
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
                             $save=0;
@@ -2761,6 +2762,13 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     # eliminate spaces
     $namestr = join( "_", split( " ", $namestr ) );     # CD 0009 Leerzeichen durch _ ersetzen statt löschen
 
+    # CD 0009 verschiedene Sonderzeichen ersetzen und nicht mehr löschen
+    my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
+                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
+    my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
+    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
+    # CD 0009
+
     # CD 0034 start
     my $rc=eval
     {
@@ -2769,16 +2777,9 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     };
     # CD 0034 end
 
-    # CD 0009 verschiedene Sonderzeichen ersetzen und nicht mehr löschen
-    my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
-                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
-    my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
-    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
-    # CD 0009
-
     # this defines the regexp. Please add new stuff with the seperator |
     # CD 0003 changed öÜ to ö|Ü
-    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|' .       # CD 0011 ,:? hinzugefügt
+    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|;|' .       # CD 0011 ,:? hinzugefügt # CD 0035 ; hinzugefügt
 	'\/|\'|\.|\"|\^|°|\$|\||%|@|*|#|&|\+]';     # CD 0009 + hinzugefügt # CD 0070 * und # hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;

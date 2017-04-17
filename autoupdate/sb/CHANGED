@@ -1,8 +1,12 @@
 ﻿97_SB_SERVER:
+  170417 0035 - Playlist-Erkennung der Plugins erweitert
+              - ; nicht in Playlistnamen zulassen
   170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
 98_SB_PLAYER:
+  170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
+              - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
   170415 0071 - löschen korrigiert
               - Playlisteintrag mit Id 0 ignorieren
               - leere Playlist korrigiert
@@ -10,6 +14,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170417 0035 - Playlist-Erkennung der Plugins erweitert
+              - ; nicht in Playlistnamen zulassen
   170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
@@ -85,6 +91,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
+              - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
   170415 0071 - löschen korrigiert
               - Playlisteintrag mit Id 0 ignorieren
               - leere Playlist korrigiert
