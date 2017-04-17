@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0033 2017-02-22 19:52:00Z CD $
+# $Id: 97_SB_SERVER.pm 0035 2017-04-17 12:49:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0033';
+use constant SB_SERVER_VERSION => '0035';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -602,7 +602,7 @@ sub SB_SERVER_Attr( @ ) {
             DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         }
     }
-    return; # 0032 betateilchen/mahowi
+    return; # 0033 betateilchen/mahowi
 }
 
 
@@ -1569,6 +1569,7 @@ sub SB_SERVER_ParseAppResponse( $$ ) {
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                            $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Wiedergabelisten'); # CD 0035
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
                             $save=0;
@@ -2768,9 +2769,17 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
     # CD 0009
 
+    # CD 0034 start
+    my $rc=eval
+    {
+        require Text::Unaccent;
+        $namestr=Text::Unaccent::unac_string('UTF8', $namestr);
+    };
+    # CD 0034 end
+
     # this defines the regexp. Please add new stuff with the seperator |
     # CD 0003 changed öÜ to ö|Ü
-    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|' .       # CD 0011 ,:? hinzugefügt
+    my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|;|' .       # CD 0011 ,:? hinzugefügt # CD 0035 ; hinzugefügt
 	'\/|\'|\.|\"|\^|°|\$|\||%|@|*|#|&|\+]';     # CD 0009 + hinzugefügt # CD 0070 * und # hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;
