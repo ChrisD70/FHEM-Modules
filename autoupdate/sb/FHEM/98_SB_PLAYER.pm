@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0072 2017-04-17 12:49:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0073 2017-04-19 20:41:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1723,7 +1723,7 @@ sub SB_PLAYER_Parse( $$ ) {
         my $album="";
         my $flush=0;
    
-        Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
+        #Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
    
         foreach( @args ) {
             $flush=0;

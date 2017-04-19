@@ -5,6 +5,7 @@
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
   170212 0032 - Unterstützung für Playlisten und Favoriten von Plugins hinzugefügt
 98_SB_PLAYER:
+  170419 0073 - Logging songinfo entfernt
   170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
               - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
   170415 0071 - löschen korrigiert
@@ -91,6 +92,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170419 0073 - Logging songinfo entfernt
   170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
               - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
   170415 0071 - löschen korrigiert
