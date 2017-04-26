@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0035 2017-04-17 12:49:00Z CD $
+# $Id: 97_SB_SERVER.pm 0036 2017-04-26 22:17:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0035';
+use constant SB_SERVER_VERSION => '0036';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -1570,6 +1570,7 @@ sub SB_SERVER_ParseAppResponse( $$ ) {
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Wiedergabelisten'); # CD 0035
+                            $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Listes de lecture'); # CD 0036
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
                             $save=0;
@@ -1794,6 +1795,13 @@ sub SB_SERVER_ParseCmds( $$ ) {
     } elsif( $cmd eq "rescan" ) {
         if( $args[0] eq "done" ) {
         	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+            # CD 0036 start - refresh favorites and playlists after rescan
+            DevIo_SimpleWrite( $hash, "favorites items 0 " .
+                   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",
+                   0 );
+            DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+            DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );
+            # CD 0036 end
         }
     # CD 0016 end
     # CD 0030 start
