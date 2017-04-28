@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0072 2017-04-17 12:49:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0074 2017-04-28 21:34:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1428,6 +1428,11 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "presence", "absent" );
             readingsBulkUpdate( $hash, "state", "off" );
             readingsBulkUpdate( $hash, "power", "off" );
+            # CD 0074 bei disconnect playStatus und Timer zurücksetzen
+            readingsBulkUpdate( $hash, "playStatus", "stopped" );
+            RemoveInternalTimer( $hash );
+            RemoveInternalTimer( "QueryElapsedTime:$name");
+            # CD 0074 end
             SB_PLAYER_Amplifier( $hash );
             # CD 0031 wenn Player während TTS verschwindet Zustand zurücksetzen
             if(($hash->{helper}{ttsstate}>TTS_IDLE)&&($hash->{helper}{ttsstate}<TTS_RESTORE)) {
@@ -1723,7 +1728,7 @@ sub SB_PLAYER_Parse( $$ ) {
         my $album="";
         my $flush=0;
    
-        Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
+        #Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
    
         foreach( @args ) {
             $flush=0;
