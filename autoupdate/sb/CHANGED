@@ -5,6 +5,7 @@
   170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
   170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
 98_SB_PLAYER:
+  170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
   170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
               - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
@@ -93,6 +94,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
   170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
               - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
