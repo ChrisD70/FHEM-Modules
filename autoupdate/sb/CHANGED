@@ -1,9 +1,8 @@
 ﻿97_SB_SERVER:
+  170507 0037 - leere Namen und Namen mit nur Leerzeichen in Favoriten und Wiedergabelisten ersetzen
   170426 0036 - Favoriten und Wiedergabelisten nach Rescan aktualisieren
   170417 0035 - Playlist-Erkennung der Plugins erweitert
               - ; nicht in Playlistnamen zulassen
-  170310 0034 - weitere Sonderzeichen filtern, benötigt Text::Unaccent
-  170222 0033 - Rückgabewert beim Setzen von Attributen korrigiert
 98_SB_PLAYER:
   170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
@@ -16,6 +15,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170507 0037 - leere Namen und Namen mit nur Leerzeichen in Favoriten und Wiedergabelisten ersetzen
   170426 0036 - Favoriten und Wiedergabelisten nach Rescan aktualisieren
   170417 0035 - Playlist-Erkennung der Plugins erweitert
               - ; nicht in Playlistnamen zulassen
