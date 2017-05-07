@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0036 2017-04-26 22:17:00Z CD $
+# $Id: 97_SB_SERVER.pm 0037 2017-05-07 18:50:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -2618,6 +2618,8 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $isplaylist = false;
     my $url = "?";           # CD 0009 hinzugefügt
 
+    my $cnt=0;
+    
     foreach ( @data ) {
     #Log 0,$_;
 	if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
@@ -2626,6 +2628,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 	    if( $firstone == false ) {
             if(( $hasitemsbuf == false )||($isplaylist == true)) {
                 # derive our hash entry
+                $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
                 my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                 $favorites{$name}{$entryuid} = {
                 ID => $idbuf,
@@ -2694,6 +2697,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
     if(( $hasitemsbuf == false )||($isplaylist == true)) {
 	    # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
+        $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
         my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
 	    $favorites{$name}{$entryuid} = {
 		ID => $idbuf,
@@ -2775,6 +2779,7 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
                         "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
     my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
     $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
+#    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}||''/g;
     # CD 0009
 
     # CD 0034 start
@@ -2985,11 +2990,14 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 
     @SB_SERVER_PLS=();
     
+    my $cnt=1;  # CD 0037
+    
     foreach( @data1 ) {
         if( $_ =~ /^(id:)(.*)/ ) {
             Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
+                $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);                # CD 0037
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                 push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
             }
@@ -3005,6 +3013,7 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
             Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): " . 
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
+                $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);                # CD 0037
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                 push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
             }
