@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0074 2017-04-28 21:34:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0075 2017-05-11 22:54:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -61,6 +61,8 @@ use Time::HiRes qw(gettimeofday);
 no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
 use constant { true => 1, false => 0 };
+
+sub SB_PLAYER_SonginfoHandleQueue($);   # CD 0075
 
 # the list of favorites
 # CD 0010 moved to $hash->{helper}{SB_PLAYER_Favs}, fixes problem on module reload
