@@ -1,9 +1,10 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0004 2017-02-05 22:43:00Z CD $
+# $Id: 36_ModbusTCP_CC.pm 0005 2017-05-27 16:54:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
 # 170205 0004 fixed writing 16-bit integers
+# 170522 0005 added FC 1, 2 and 15
 
 package main;
 
@@ -22,6 +23,7 @@ use constant READ_HOLDING_REGISTERS                      => 0x03;
 use constant READ_INPUT_REGISTERS                        => 0x04;
 use constant WRITE_SINGLE_COIL                           => 0x05;
 use constant WRITE_SINGLE_REGISTER                       => 0x06;
+use constant WRITE_MULTIPLE_COILS                        => 0x0F;
 use constant WRITE_MULTIPLE_REGISTERS                    => 0x10;
 use constant MODBUS_ENCAPSULATED_INTERFACE               => 0x2B;
 ## Modbus except code
@@ -416,6 +418,177 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                             fhem "set $n $sval";
                           }
                         }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          if ($found) {
+            $msg = pack("nnnCCnn", $rx_hd_tr_id, $rx_hd_pr_id, 6, $rx_hd_unit_id, $rx_bd_fc, $start, $num);
+          } else {
+            $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+          }
+        } else {
+          $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+        }
+      } else {
+        $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_VALUE);
+      }
+    } elsif (($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
+      my ($start,$num)=unpack "nn",$f_body;
+      my @coils=devspec2array("comment=.*MBC:.*");
+      if (@coils>0) {
+        my @v;
+        my $found=0;
+        my $vindex=-1;
+        my $vpos=0;
+        
+        for (my $r=$start;$r<$start+$num;$r++) {
+          if($vindex!=int(($r-$start)/8)) {
+            $vindex=int(($r-$start)/8);
+            $v[$vindex]=0;
+
+          }
+          $vpos=($r-$start)%8;
+
+          foreach(@coils) {
+            my $n=$_;
+            my $c=AttrVal($n,"comment","");
+            $c =~ m/MBC:(\S+)/;
+            my @mb=split(':',$1);
+            foreach(@mb) {
+              my @mbd=split(',',$_);
+              if (@mbd>2) {
+                if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
+                  if ($mbd[1] eq $r+1) {
+                    if ((($mbd[2] eq 'C')&&($rx_bd_fc==READ_COILS))||(($mbd[2] eq 'I')&&($rx_bd_fc==READ_DISCRETE_INPUTS))||($mbd[2] eq '*')) {
+                      my $rv;
+                      my $rvx=0;
+                      my $ext=0;
+                      if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                        $rv=ReadingsVal($n,$mbd[3],0);
+                      } else {
+                        $rv=ReadingsVal($n,"state",0);
+                      }
+                      if(defined($mbd[5])) {
+                        $rvx=1 if($rv eq $mbd[5]);
+                      } else {
+                        $rvx=1 if($rv eq 'on');
+                      }
+                      if ($rvx) {
+                        $v[$vindex]=$v[$vindex] | (1<<$vpos);
+                      } else {
+                        $v[$vindex]=$v[$vindex] & ~(1<<$vpos);
+                      }
+                      $found=1;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if ($found) {
+          $msg = pack("nnnCCCC*", $rx_hd_tr_id, $rx_hd_pr_id, 3+@v*1, $rx_hd_unit_id, $rx_bd_fc, @v*1, @v);
+        } else {
+          $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+        }
+      } else {
+        $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+      }
+    } elsif ($rx_bd_fc==WRITE_SINGLE_COIL) {
+      my ($adr,$val)=unpack "nn",$f_body;
+      if(($val==0)||($val==0xff00)) {
+        my @coils=devspec2array("comment=.*MBC:.*");
+        if (@coils>0) {
+          my @v;
+          my $found=0;
+          foreach(@coils) {
+            my $n=$_;
+            my $c=AttrVal($n,"comment","");
+            $c =~ m/MBC:(\S+)/;
+            my @mb=split(':',$1);
+            foreach(@mb) {
+              my @mbd=split(',',$_);
+              if (@mbd>2) {
+                if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
+                  if ($mbd[1] eq $adr+1) {
+                    if (($mbd[2] eq 'C')||($mbd[2] eq '*')) {
+                      my $sval=0;
+                      if($val==0) {
+                        $sval=defined($mbd[4])?$mbd[4]:'off';
+                      } else {
+                        $sval=defined($mbd[5])?$mbd[5]:'on';
+                      }
+                      if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                        my $s=getAllSets($n);
+                        if ($s=~$mbd[3]) {
+                          fhem "set $n $mbd[3] $sval";
+                        } else {
+                          fhem "setreading $n $mbd[3] $sval";
+                        }
+                      } else {
+                        fhem "set $n $sval";
+                      }
+                      $found=1;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          if ($found) {
+            $msg = pack("nnnCCnn", $rx_hd_tr_id, $rx_hd_pr_id, 6, $rx_hd_unit_id, $rx_bd_fc, $adr,$val);
+          } else {
+            $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+          }
+        } else {
+          $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+        }
+      } else {
+        $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_VALUE);
+      }
+    } elsif ($rx_bd_fc==WRITE_MULTIPLE_COILS) {
+      my ($start,$num,$bytes,@data)=unpack "nnCC*",$f_body;
+      if (($num>0) && ($num<=2048) && (ceil($num/8)==$bytes)) {
+        my @coils=devspec2array("comment=.*MBC:.*");
+        if (@coils>0) {
+          my @v;
+          my $found=0;
+          for (my $r=$start;$r<$start+$num;$r++) {
+            my $vindex=int(($r-$start)/8);
+            my $vpos=($r-$start)%8;
+            my $val=(($data[$vindex])>>$vpos) & 1;
+            foreach(@coils) {
+              my $n=$_;
+              my $c=AttrVal($n,"comment","");
+              $c =~ m/MBC:(\S+)/;
+              my @mb=split(':',$1);
+              foreach(@mb) {
+                my @mbd=split(',',$_);
+                if (@mbd>2) {
+                  if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
+                    if ($mbd[1] eq $r+1) {
+                      if (($mbd[2] eq 'C')||($mbd[2] eq '*')) {
+                        my $sval=0;
+                        if($val==0) {
+                          $sval=defined($mbd[4])?$mbd[4]:'off';
+                        } else {
+                          $sval=defined($mbd[5])?$mbd[5]:'on';
+                        }
+                        if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                          my $s=getAllSets($n);
+                          if ($s=~$mbd[3]) {
+                            fhem "set $n $mbd[3] $sval";
+                          } else {
+                            fhem "setreading $n $mbd[3] $sval";
+                          }
+                        } else {
+                          fhem "set $n $sval";
+                        }
+                        $found=1;
                       }
                     }
                   }
