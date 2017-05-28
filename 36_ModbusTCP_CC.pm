@@ -1,10 +1,11 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0005 2017-05-27 16:54:00Z CD $
+# $Id: 36_ModbusTCP_CC.pm 0006 2017-05-28 14:18:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
 # 170205 0004 fixed writing 16-bit integers
-# 170522 0005 added FC 1, 2 and 15
+# 170527 0005 added FC 1, 2 and 15
+# 170528 0006 performance improvements, updated documentation
 
 package main;
 
@@ -80,6 +81,8 @@ sub ModbusTCP_CC_Define($$) {###################################################
   my $name = $a[0];
   my $port = @a==2?502:$a[2];
 
+  TcpServer_Close($hash); 
+  
   $hash->{STATE} = "disconnected";
   $hash->{helper}{statistics}{pktIn}=0;
   $hash->{helper}{statistics}{pktOut}=0;
@@ -107,8 +110,13 @@ sub ModbusTCP_CC_Undef($$) {####################################################
 
 sub ModbusTCP_CC_Notify(@) {##########################################################
   my ($hash,$dev) = @_;
+  my $name = $hash->{NAME};
+
   if ($dev->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev->{CHANGED}})){
-    my $name = $hash->{NAME};
+  }
+  if ($dev->{NAME} eq "global" && grep (m/comment/,@{$dev->{CHANGED}})){
+    Log3 $hash,4,"ModbusTCP_CC_Notify($name) : comment changed, invalidating cache";
+    delete $hash->{helper}{listsOK} if(defined($hash->{helper}{listsOK}));
   }
   return;
 }
@@ -150,9 +158,23 @@ sub ModbusTCP_CC_Parse($$) {####################################################
   # check header
   if ($rx_hd_length == bytes::length($rmsg)-6)
   {
+    my @regs;
+    my @coils;
+  
+    if((!defined($hash->{logDev}->{helper}{listsOK}))||($init_done==0)) {
+      Log3 $hash->{logDev},4,"ModbusTCP_CC_Parse($name) : caching devspec2array";
+      @regs=devspec2array("comment=.*MBR:.*");
+      @coils=devspec2array("comment=.*MBC:.*");
+      $hash->{logDev}->{helper}{regs}=join(',',@regs);
+      $hash->{logDev}->{helper}{coils}=join(',',@coils);
+      $hash->{logDev}->{helper}{listsOK}=1;
+    } else {
+      @regs=split ',',$hash->{logDev}->{helper}{regs};
+      @coils=split ',',$hash->{logDev}->{helper}{coils};
+    }
+  
     if (($rx_bd_fc==READ_HOLDING_REGISTERS)||($rx_bd_fc==READ_INPUT_REGISTERS)) {
       my ($start,$num)=unpack "nn",$f_body;
-      my @regs=devspec2array("comment=.*MBR:.*");
       if (@regs>0) {
         my @v;
         my $found=0;
@@ -259,7 +281,6 @@ sub ModbusTCP_CC_Parse($$) {####################################################
     } elsif ($rx_bd_fc==WRITE_SINGLE_REGISTER) {
       my ($adr,$val)=unpack "nn",$f_body;
       my $oval=$val;
-      my @regs=devspec2array("comment=.*MBR:.*");
       if (@regs>0) {
         my @v;
         my $found=0;
@@ -341,7 +362,6 @@ sub ModbusTCP_CC_Parse($$) {####################################################
     } elsif ($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
       my ($start,$num,$bytes,@data)=unpack "nnCn*",$f_body;
       if (($num>0) && ($num<128) && ($num*2==$bytes)) {
-        my @regs=devspec2array("comment=.*MBR:.*");
         if (@regs>0) {
           my @v;
           my $found=0;
@@ -438,7 +458,6 @@ sub ModbusTCP_CC_Parse($$) {####################################################
       }
     } elsif (($rx_bd_fc==READ_COILS)||($rx_bd_fc==READ_DISCRETE_INPUTS)) {
       my ($start,$num)=unpack "nn",$f_body;
-      my @coils=devspec2array("comment=.*MBC:.*");
       if (@coils>0) {
         my @v;
         my $found=0;
@@ -501,7 +520,6 @@ sub ModbusTCP_CC_Parse($$) {####################################################
     } elsif ($rx_bd_fc==WRITE_SINGLE_COIL) {
       my ($adr,$val)=unpack "nn",$f_body;
       if(($val==0)||($val==0xff00)) {
-        my @coils=devspec2array("comment=.*MBC:.*");
         if (@coils>0) {
           my @v;
           my $found=0;
@@ -553,7 +571,6 @@ sub ModbusTCP_CC_Parse($$) {####################################################
     } elsif ($rx_bd_fc==WRITE_MULTIPLE_COILS) {
       my ($start,$num,$bytes,@data)=unpack "nnCC*",$f_body;
       if (($num>0) && ($num<=2048) && (ceil($num/8)==$bytes)) {
-        my @coils=devspec2array("comment=.*MBC:.*");
         if (@coils>0) {
           my @v;
           my $found=0;
@@ -654,7 +671,7 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
 <h3>ModbusTCP_CC</h3>
 <ul>
   This module implements a connector for ModbusTCP clients ('masters'). It can be used to access FHEM from a SCADA system.<br>
-  Currently FC 3, 4, 6 and 16 are supported.
+  Currently FC 1, 2, 3, 4, 6, 15 and 16 are supported.
   <br><br>
   <a name="ModbusTCP_CCdefine"></a>
   <b>Define</b>
@@ -674,14 +691,15 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
     <li><a href="#attrdummy">dummy</a></li><br>
   </ul>
   <b>Usage</b><br>
-  The Modbus register number is configured through the comment field of the devices.<br><br>
-  Format: MBR:&lt;unitId&gt;,&lt;register&gt;,&lt;register type&gt;,&lt;reading&gt;
-  [,&lt;negative representation&gt;[,&lt;multiplier&gt;[,&lt;offset&gt;]]]<br> with
+  The Modbus coil/register number is configured through the comment field of the devices.<br><br>
+  Format for registers: MBR:&lt;unitId&gt;,&lt;register&gt;,&lt;register type&gt;[,&lt;reading&gt;
+  [,&lt;format&gt;[,&lt;multiplier&gt;[,&lt;offset&gt;]]]]<br> with
   <ul>
   <li>&lt;unitId&gt; - the unit id (0 - 255), * for any id</li>
   <li>&lt;register&gt; - the register number (1 - 65536) (not address !)</li>
   <li>&lt;register type&gt; - I for input register, H for holding register or * for any type</li>
-  <li>&lt;negative representation&gt; - optional, T for two's complement, any other value for no negative numbers</li>
+  <li>&lt;reading&gt; - optional, name of the reading, if none is specified, state is used</li>
+  <li>&lt;format&gt; - optional, T for two's complement, F for IEEE754 single precision, little endian, FB for IEEE754 single precision, big endian</li>
   <li>&lt;multiplier&gt; - optional, multiplier applied to the reading on reads, used as divisor on writes</li>
   <li>&lt;offset&gt; - optional, offset added to the reading on reads, subtracted on writes</li>
   </ul>
@@ -691,6 +709,35 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
   is mapped on input register 2 on unit 1 and <code>desired-temp</code> is mapped on holding register
   21 on unit 1. <code>measured-temp</code> and <code>desired-temp</code> are multiplied by 10 and negative
   values are represented in two's complement.
+  <br><br>
+  Format for coils: MBC:&lt;unitId&gt;,&lt;coil&gt;,&lt;type&gt;[,&lt;reading&gt;
+  [,&lt;off&gt;[,&lt;on&gt;]]]<br> with
+  <ul>
+  <li>&lt;unitId&gt; - the unit id (0 - 255), * for any id</li>
+  <li>&lt;coil&gt; - the coil number (1 - 65536) (not address !)</li>
+  <li>&lt;type&gt; - I for input (read only), C for coil (read/write) or * for any type</li>
+  <li>&lt;reading&gt; - optional, name of the reading, if none is specified, state is used</li>
+  <li>&lt;off&gt; - optional, alternative value for the off-state</li>
+  <li>&lt;on&gt; - optional, alternative value for the on-state</li>
+  </ul>
+  <br>Example for a Homematic switch (HM-ES-PMSw1-Pl) called sw:<br><br>
+  <code>attr sw comment MBC:1,12,C</code><br><br>
+  The switch state is mapped to coil 12 on unit 1.
+  <br><br>
+  Format for mapping coils to registers: MBR:&lt;unitId&gt;,&lt;coil&gt;,&lt;type&gt;[,&lt;reading&gt;
+  [,B&lt;bit&gt;[,&lt;off&gt;[,&lt;on&gt;]]]<br> with
+  <ul>
+  <li>&lt;unitId&gt; - the unit id (0 - 255), * for any id</li>
+  <li>&lt;coil&gt; - the coil number (1 - 65536) (not address !)</li>
+  <li>&lt;type&gt; - I for input (read only), C for coil (read/write) or * for any type</li>
+  <li>&lt;reading&gt; - optional, name of the reading, if none is specified, state is used</li>
+  <li>B&lt;bit&gt; - optional, map value to specified bit (range 0-15)</li>
+  <li>&lt;off&gt; - optional, alternative value for the off-state</li>
+  <li>&lt;on&gt; - optional, alternative value for the on-state</li>
+  </ul>
+  <br>Example for a Homematic switch (HM-ES-PMSw1-Pl) called sw:<br><br>
+  <code>attr sw comment MBR:1,6,H,,B4</code><br><br>
+  The switch state is mapped to bit 4 of register 6 on unit 1.
 </ul>
 
 =end html
