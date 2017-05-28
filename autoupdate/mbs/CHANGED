@@ -1,5 +1,6 @@
 36_ModbusTCP_CC:
-    170522 0005 added FC 1, 2 and 15
+    170528 0006 performance improvements, updated documentation
+    170527 0005 added FC 1, 2 and 15
     170205 0004 fixed writing 16-bit integers
     161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
     160207 0002 added FC 6 and 16, modified for FHEM 5.7
