@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0076 2017-05-28 10:48:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0077 2017-05-28 19:14:57Z CD/MM/Matthew/Heppel_14408 $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -45,7 +45,6 @@
 #  DISPLAYTYPE      what sort of display is there, if any
 #
 # ##############################################################################
-
 
 package main;
 use strict;
@@ -95,7 +94,6 @@ use constant TTS_SYNCGROUPACTIVE                         => 1000;
 use constant TTS_EXT_TEXT2SPEECH_BUSY                    => 2004;
 use constant TTS_EXT_TEXT2SPEECH_ACTIVE                  => 2006;
 
-
 my %ttsstates = (   0   =>'idle',
                     4   =>'Text2Speech busy, waiting',
                     6   =>'Text2Speech active',
@@ -143,12 +141,12 @@ sub SB_PLAYER_Initialize( $ ) {
 
     # the attributes we have. Space separated list of attribute values in
     # the form name:default1,default2
-    $hash->{AttrList}  = "IODev ignore:1,0 do_not_notify:1,0 ";
+    $hash->{AttrList}  = "IODev do_not_notify:1,0 ";    # CD 0077 ignore:1,0 entfernt, nicht verwendet
     $hash->{AttrList}  .= "volumeStep volumeLimit ";
     $hash->{AttrList}  .= "ttslanguage:de,en,fr ttslink:multiple,Google,VoiceRSS ";
     $hash->{AttrList}  .= "donotnotify:true,false ";
-    $hash->{AttrList}  .= "idismac:true,false ";
-    $hash->{AttrList}  .= "serverautoon:true,false ";
+    $hash->{AttrList}  .= "idismac ";      # CD 0077 nicht verwendet, entfernen
+    $hash->{AttrList}  .= "serverautoon "; # CD 0077 nicht verwendet, entfernen
     $hash->{AttrList}  .= "fadeinsecs ";
     $hash->{AttrList}  .= "amplifier:on,play ";
     $hash->{AttrList}  .= "coverartheight:50,100,200 ";
@@ -515,10 +513,10 @@ sub SB_PLAYER_Define( $$ ) {
         $attr{$name}{donotnotify} = "true";
     }
 
-    # is the ID the MAC adress
-    if( !defined( $attr{$name}{idismac} ) ) {
-        $attr{$name}{idismac} = "true";
-    }
+    # is the ID the MAC adress # CD 0077 nicht verwendet, deaktiviert
+    #if( !defined( $attr{$name}{idismac} ) ) {
+    #    $attr{$name}{idismac} = "true";
+    #}
 
     # the language for text2speech
     if( !defined( $attr{$name}{ttslanguage} ) ) {
@@ -531,10 +529,10 @@ sub SB_PLAYER_Define( $$ ) {
             "/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob";   # CD 0045 Format geändert, &client=t&prev=input hinzugefügt, CD 0048 client=tw-ob verwenden
     }
 
-    # turn on the server when player is used
-    if( !defined( $attr{$name}{serverautoon} ) ) {
-        $attr{$name}{serverautoon} = "true";
-    }
+    # turn on the server when player is used # CD 0077 nicht verwendet, deaktiviert
+    #if( !defined( $attr{$name}{serverautoon} ) ) {
+    #    $attr{$name}{serverautoon} = "true";
+    #}
 
     # amplifier on/off when play/pause or on/off
     if( !defined( $attr{$name}{amplifier} ) ) {
@@ -2152,10 +2150,17 @@ sub SB_PLAYER_Notify( $$ ) {
     my $devName = $dev_hash->{NAME}; # Device that created the events
 
     if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
+        # CD 0077 unbenutzte Attribute entfernen
+        $modules{$hash->{TYPE}}{AttrList} =~ s/serverautoon.//;
+        $modules{$hash->{TYPE}}{AttrList} =~ s/idismac.//;
     }
 
     # CD 0036 start
     if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
+        # CD 0077 unbenutzte Attribute entfernen
+        delete($attr{$name}{serverautoon}) if(defined( $attr{$name}{serverautoon}));
+        delete($attr{$name}{idismac}) if(defined( $attr{$name}{idismac}));
+        
         SB_PLAYER_SavePlayerStates($hash) if($SB_PLAYER_hasDataDumper==1);
     }
     # CD 0036 end
@@ -5163,8 +5168,10 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
          <li>line2 - Text to be displayed in the second line</li>
          <li>duration -  Duration of display in seconds</li>
        </ul>
-     <li><b>CurrentTrackPosition &lt;TimePosition&gt;</b> -  Sets the current timeposition inside the title to the given value.</li>
-     <li><b>resetTTS</b> -  Resets TTS, can be necessary if the output via Google blocks.</li>
+     <li><b>currentTrackPosition &lt;TimePosition&gt;</b> -  Sets the current timeposition inside the title to the given value.</li>
+     <li><b>resetTTS</b> -  Resets TTS, can be necessary if the output via TTS blocks.</li>
+     <li><b>updateFTUImedialist</b> -  Manually refresh the reading ftuiMedialist (containing the current songs).</li>
+     <li><b>clearFTUIcache</b> -  Clear the cached data used for the FTUI-readings.</li>
     </ul>
 
    <br>Alarms<br>
@@ -5228,8 +5235,8 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       Only changes in the readings currentAlbum, currentArtist, currentTitle cause an event.</li><br>
     <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
-    <li>idismac true|false<br>
-      Determines if the MAC-adress should be the unique identifier</li>
+    <li>ftuiSupport 0|1<br>
+      If set to 1 additional readings for FTUI integration are created.</li>
     <li>sortFavorites 0|1<br>
       If set to 1 the favorites will be sorted alphabetically.</li>
     <li>sortPlaylists 0|1<br>
@@ -5251,7 +5258,7 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
     <li>ttslink &lt;link&gt;<br>
       Enter the link to the TTS-Funktion. Google, VoiceRSS and –with reservations- Text2Speech are supported.<br><br>
       Example of using Google’s TTS:<br>
-      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&tl=&lt;LANG&gt;&q=&lt;TEXT&gt;&client=tw-ob</code></li><br>
+      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&amp;tl=&lt;LANG&gt;&amp;q=&lt;TEXT&gt;&amp;client=tw-ob</code></li><br>
     <li>ttsMP3FileDir &lt;directory&gt;<br>
       Directory to be used by default for text-embedded MP3-Files.</li><br>
       Example:<br>
@@ -5262,8 +5269,8 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       <li>debugsaverestore - Additional information about loading/saving of player‘s status are written into the logfile</li>
       <li>nosaverestore - Do not save and restore the status of the player, thereby the normal playing stops after using TTS.</li>
       <li>forcegroupon - Switch on all players of the group.</li>
-      <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output</li>
-      <li>doubleescape - Alternative encoding for letters with accents</li>
+      <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output.</li>
+      <li>eventondone - Fire an event at the end of the TTS output.</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text prepended to every text to speech output</li>
@@ -5274,6 +5281,8 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       If set to true, most readings are immediately updated when a set command is executed without waiting for a reply from the server.</li>
     <li>volumeLimit &lt;value&gt;<br>
       Upper limit for volume setting by FHEM.</li>
+    <li>volumeOffset &lt;value&gt;<br>
+    The offset is added to the volume sent to the server. It is subtracted from the volume returned by the server.</li>
     <li>volumeStep &lt;value&gt;<br>
       Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1–100. Default value: 10</li>
   </ul>
@@ -5407,9 +5416,11 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
          <li>text2 - Inhalt der zweiten Zeile</li>
          <li>duration -  Dauer der Anzeige auf dem Display in Sekunden</li>
        </ul>
-     <li><b>CurrentTrackPosition &lt;TimePosition&gt;</b> -  Setzt die Abspielposition innerhalb des
+     <li><b>currentTrackPosition &lt;TimePosition&gt;</b> -  Setzt die Abspielposition innerhalb des
      Liedes auf den angegebenen Zeitwert (z.B. 0:01:15).</li>
-     <li><b>resetTTS</b> -  TTS zur&uuml;cksetzen, kann n&ouml;tig sein wenn die Ausgabe über Google h&auml;ngt.</li>
+     <li><b>resetTTS</b> -  TTS zur&uuml;cksetzen, kann n&ouml;tig sein wenn die TTS-Ausgabe h&auml;ngt.</li>
+     <li><b>updateFTUImedialist</b> -  Erzwingt die Aktualisierung des Readings ftuiMedialist (enth&auml;lt die aktuellen Songs).</li>
+     <li><b>clearFTUIcache</b> -  L&ouml;scht alle zwischengespeicherten Daten für die Erstellung der FTUI-Readings.</li>
    </ul>
 
    <br>Befehlsliste zur Steuerung der Wecker, mehrere Wecker k&ouml;nnen definiert werden.<br><br>
@@ -5492,14 +5503,14 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       Fade in f&uuml;r Beginn von Playlisten und neuen Soundfiles. Bezeichnet die Dauer des Vorganges, in der die
       Lautst&auml;rke auf den vorgegebenen Wert ansteigt und wird in Sekunden angegeben. Ein zweiter, durch Komma
       getrennter optionaler Wert, gibt die Dauer des Fadein beim Verlassen des Pausenzustandes an.</li>
-    <li>idismac true|false<br>
-      Soll die MAC-Adresse des Players als ID genommen werden, muss true (default) eingetragen werden, sonst false.</li>
+    <li>ftuiSupport 0|1<br>
+      Wenn das Attribut den Wert 1 hat werden zus&auml;tzliche Readings f&uuml;r die Integration in FTUI erzeugt.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Aktualisierungsintervall der automatischen Status-Abfrage. Default: 300</li>
     <li>sortFavorites 0|1<br>
-      Wenn das Attribut den Wert 1 hat wird die Liste der Favoriten alphabetisch sortiert</li>
+      Wenn das Attribut den Wert 1 hat wird die Liste der Favoriten alphabetisch sortiert.</li>
     <li>sortPlaylists 0|1<br>
-      Wenn das Attribut den Wert 1 hat wird die Liste der Wiedergabelisten alphabetisch sortiert</li>
+      Wenn das Attribut den Wert 1 hat wird die Liste der Wiedergabelisten alphabetisch sortiert.</li>
     <li>syncedNamesSource FHEM|LMS<br>
       Legt fest ob die FHEM-Ger&auml;tenamen oder die LMS-Namen der Player im synced-Reading verwendet werden.</li>
     <li>syncVolume 0|1<br>
@@ -5519,7 +5530,7 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
     <li>ttslink &lt;link&gt;<br>
       Link zur TTS-Funktion. Unterst&uuml;tzt werden: Google, VoiceRSS (API-Key wird ben&ouml;tigt) und mit Einschr&auml;nkungen Text2Speech.<br><br>
       Beispiel f&uuml;r Google’s TTS:<br>
-      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&tl=&lt;LANG&gt;&q=&lt;TEXT&gt;&client=tw-ob</code></li><br>
+      <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&amp;tl=&lt;LANG&gt;&amp;q=&lt;TEXT&gt;&amp;client=tw-ob</code></li><br>
     <li>ttsMP3FileDir &lt;directory&gt;<br>
       Standard-Verzeichnis f&uuml;r Musik- und Sprachdateien (z.B. Gong, Sirene, Ansagen,...)
       im mp3-Format, die beim TTS eingebunden werden sollen.</li><br>
@@ -5531,8 +5542,8 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       <li>debugsaverestore - Schreibt zus&auml;tzliche Meldungen zum Speichern/Laden des Playerzustandes ins Log.</li>
       <li>nosaverestore - Zustand des Players nicht sichern und wiederherstellen, dadurch stoppt die Wiedergabe nach Abspielen des TTS.</li>
       <li>forcegroupon - Player in der Gruppe werden eingeschaltet.</li>
-      <li>ignorevolumelimit - Attribut volumeLimit f&uuml;r die TTS-Ausgabe ignorieren</li>
-      <li>doubleescape - alternative Codierung der Sonderzeichen</li>
+      <li>ignorevolumelimit - Attribut volumeLimit f&uuml;r die TTS-Ausgabe ignorieren.</li>
+      <li>eventondone - Erzeugt ein Event wenn die Sprachausgabe zu Ende ist.</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text, der vor jede TTS-Ausgabe gehangen wird</li>
@@ -5546,6 +5557,9 @@ sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
       soweit wie m&ouml;glich sofort aktualisiert.</li>
     <li>volumeLimit &lt;value&gt;<br>
     Oberer Grenzwert zur Lautst&auml;rkeeinstellung durch FHEM.</li>
+    <li>volumeOffset &lt;value&gt;<br>
+    Offset der zur Lautstärke die zum LMS geschickt wird addiert wird. Für die Anzeige der aktuellen Lautstärke wird der
+    Wert von der vom LMS geschickten Lautstärke abgezogen.</li>
     <li>volumeStep &lt;value&gt;<br>
       Hier wird die Granularit&auml;t der Lautst&auml;rkeregelung festgelegt. Default ist 10</li>
   </ul>

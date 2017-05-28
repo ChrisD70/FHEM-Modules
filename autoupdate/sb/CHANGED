@@ -1,22 +1,24 @@
 ﻿97_SB_SERVER:
+  170528      - in FHEM-SVN eingecheckt (14409)
+              - Dokumentation aktualisiert
   170507 0037 - leere Namen und Namen mit nur Leerzeichen in Favoriten und Wiedergabelisten ersetzen
   170426 0036 - Favoriten und Wiedergabelisten nach Rescan aktualisieren
   170417 0035 - Playlist-Erkennung der Plugins erweitert
               - ; nicht in Playlistnamen zulassen
 98_SB_PLAYER:
+  170528 0077 - unbenutzte Attribute entfernt
+              - Dokumentation aktualisiert
+              - in FHEM-SVN eingecheckt (14408)
   170528 0076 - Abfrage Songinfos geändert
   170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
   170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
-  170417 0072 - 'tracknumber' als Alternative zu 'track' hinzugefügt
-              - FTUI: songinfo wiederholt laden solange keine Daten vorhanden sind
-  170415 0071 - löschen korrigiert
-              - Playlisteintrag mit Id 0 ignorieren
-              - leere Playlist korrigiert
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170528      - in FHEM-SVN eingecheckt (14409)
+              - Dokumentation aktualisiert
   170507 0037 - leere Namen und Namen mit nur Leerzeichen in Favoriten und Wiedergabelisten ersetzen
   170426 0036 - Favoriten und Wiedergabelisten nach Rescan aktualisieren
   170417 0035 - Playlist-Erkennung der Plugins erweitert
@@ -96,6 +98,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170528 0077 - unbenutzte Attribute entfernt
+              - Dokumentation aktualisiert
+              - in FHEM-SVN eingecheckt (14408)
   170528 0076 - Abfrage Songinfos geändert
   170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
   170428 0074 - bei disconnect playStatus und Timer zurücksetzen
