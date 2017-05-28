@@ -4,6 +4,7 @@
   170417 0035 - Playlist-Erkennung der Plugins erweitert
               - ; nicht in Playlistnamen zulassen
 98_SB_PLAYER:
+  170528 0076 - Abfrage Songinfos geändert
   170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
   170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
@@ -95,6 +96,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170528 0076 - Abfrage Songinfos geändert
   170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
   170428 0074 - bei disconnect playStatus und Timer zurücksetzen
   170419 0073 - Logging songinfo entfernt
