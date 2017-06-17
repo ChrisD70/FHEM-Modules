@@ -1,4 +1,5 @@
 ﻿97_SB_SERVER:
+  170617 0039 - scan*-Readings aktualisieren
   170603 0038 - state statt STATE verwenden
               - Timer aufräumen
               - renew und abort geändert
@@ -7,6 +8,7 @@
               - Dokumentation aktualisiert
   170507 0037 - leere Namen und Namen mit nur Leerzeichen in Favoriten und Wiedergabelisten ersetzen
 98_SB_PLAYER:
+  170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen
   170528 0077 - unbenutzte Attribute entfernt
               - Dokumentation aktualisiert
@@ -18,6 +20,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170617 0039 - scan*-Readings aktualisieren
   170603 0038 - state statt STATE verwenden
               - Timer aufräumen
               - renew und abort geändert
@@ -103,6 +106,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen
   170528 0077 - unbenutzte Attribute entfernt
               - Dokumentation aktualisiert
