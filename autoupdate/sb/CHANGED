@@ -1,13 +1,15 @@
 ﻿97_SB_SERVER:
+  170625 0041 - MAC-Adresse besser überprüfen
+              - Initialisierung der Readings über readingsBulkUpdate
+              - NOTIFYDEV verwenden
   170618 0040 - Reading scanduration hinzugefügt
   170617 0039 - scan*-Readings aktualisieren
   170603 0038 - state statt STATE verwenden
               - Timer aufräumen
               - renew und abort geändert
               - Reconnect überarbeitet
-  170528      - in FHEM-SVN eingecheckt (14409)
-              - Dokumentation aktualisiert
 98_SB_PLAYER:
+  170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen
   170528 0077 - unbenutzte Attribute entfernt
@@ -15,11 +17,13 @@
               - in FHEM-SVN eingecheckt (14408)
   170528 0076 - Abfrage Songinfos geändert
   170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
-  170428 0074 - bei disconnect playStatus und Timer zurücksetzen
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170625 0041 - MAC-Adresse besser überprüfen
+              - Initialisierung der Readings über readingsBulkUpdate
+              - NOTIFYDEV verwenden
   170618 0040 - Reading scanduration hinzugefügt
   170617 0039 - scan*-Readings aktualisieren
   170603 0038 - state statt STATE verwenden
@@ -107,6 +111,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen
   170528 0077 - unbenutzte Attribute entfernt
