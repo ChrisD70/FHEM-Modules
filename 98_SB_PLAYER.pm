@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0079 2017-06-17 18:44:00Z CD/MM/Matthew/Heppel_14463 $
+# $Id: 98_SB_PLAYER.pm 0080 2017-06-25 21:44:00Z CD/MM/Matthew/Heppel_14557 $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -697,6 +697,8 @@ sub SB_PLAYER_Define( $$ ) {
                    "SB_PLAYER_GetStatus",
                    $hash,
                    0 );
+
+    notifyRegexpChanged($hash, "global"); # CD 0080
 
     return( undef );
 }
