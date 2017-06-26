@@ -9,6 +9,7 @@
               - renew und abort geändert
               - Reconnect überarbeitet
 98_SB_PLAYER:
+  170626 0081 - \ in FTUI Medialist filtern
   170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen
@@ -111,6 +112,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170626 0081 - \ in FTUI Medialist filtern
   170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
   170603 0078 - Timer aufräumen

@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0080 2017-06-25 21:44:00Z CD/MM/Matthew/Heppel_14557 $
+# $Id: 98_SB_PLAYER.pm 0081 2017-06-26 20:32:00Z CD/MM/Matthew/Heppel_14557 $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1825,6 +1825,9 @@ sub SB_PLAYER_Parse( $$ ) {
                     $hash->{helper}{playlistInfo}{$_}{artist}=~s/\"//g;
                     $hash->{helper}{playlistInfo}{$_}{title}=~s/\"//g;
                     $hash->{helper}{playlistInfo}{$_}{album}=~s/\"//g;
+                    $hash->{helper}{playlistInfo}{$_}{artist} =~ s{\\}{\\\\}g;  # CD 0081
+                    $hash->{helper}{playlistInfo}{$_}{title} =~ s{\\}{\\\\}g;   # CD 0081
+                    $hash->{helper}{playlistInfo}{$_}{album} =~ s{\\}{\\\\}g;   # CD 0081
                     $ftuimedialist.="{\"Artist\":\"".$hash->{helper}{playlistInfo}{$_}{artist}."\",";
                     $ftuimedialist.="\"Title\":\"".$hash->{helper}{playlistInfo}{$_}{title}."\",";
                     $ftuimedialist.="\"Album\":\"".$hash->{helper}{playlistInfo}{$_}{album}."\",";
