@@ -9,6 +9,10 @@
               - renew und abort geändert
               - Reconnect überarbeitet
 98_SB_PLAYER:
+  170722 0082 - ftui-Readings automatisch aktualisieren wenn ftuiSupport gesetzt wird
+              - Cover, Artist und Titel von Remote-Streams in ftuiMedialist aktualisieren
+              - zusätzliche Größen für CoverArt
+              - alarmFadeSeconds hinzugefügt
   170626 0081 - \ in FTUI Medialist filtern
   170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
@@ -16,8 +20,6 @@
   170528 0077 - unbenutzte Attribute entfernt
               - Dokumentation aktualisiert
               - in FHEM-SVN eingecheckt (14408)
-  170528 0076 - Abfrage Songinfos geändert
-  170511 0075 - Warnung wegen SB_PLAYER_SonginfoHandleQueue behoben
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -112,6 +114,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170722 0082 - ftui-Readings automatisch aktualisieren wenn das Attribut gesetzt wird
+              - Cover, Artist und Titel von Remote-Streams in ftuiMedialist aktualisieren
+              - zusätzliche Größen für CoverArt
+              - alarmFadeSeconds hinzugefügt
   170626 0081 - \ in FTUI Medialist filtern
   170625 0080 - NOTIFYDEV verwenden
   170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
