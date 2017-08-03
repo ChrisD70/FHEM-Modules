@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0082 2017-07-22 14:45:00Z CD/MM/Matthew/Heppel_14557 $
+# $Id: 98_SB_PLAYER.pm 0083 2017-08-03 19:57:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -375,10 +375,19 @@ sub SB_PLAYER_Attr( @ ) {
             if(defined($hash->{helper}{playlistIds})) {
                 $hash->{helper}{playlistInfoRetries}=5; # CD 0076
                 my @ids=split(',',$hash->{helper}{playlistIds});
+                my $c=0;    # CD 0083
+                my $w='';   # CD 0083
                 foreach(@ids) {
-                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                    # CD 0083 schreiben gruppieren
+                    $w=$w.$hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                    $c++;
+                    if($c>20) {
+                        IOWrite($hash, $w);
+                        $c=0;
+                        $w='';
+                    }
                 }
-                IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+                IOWrite( $hash, $w.$hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
             }
         }
       } else {
@@ -3056,10 +3065,19 @@ sub SB_PLAYER_Set( $@ ) {
         if(defined($hash->{helper}{playlistIds})) {
             $hash->{helper}{playlistInfoRetries}=5; # CD 0076
             my @ids=split(',',$hash->{helper}{playlistIds});
+            my $c=0;    # CD 0083
+            my $w='';   # CD 0083
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
+                # CD 0083 schreiben gruppieren
+                $w=$w.$hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
+                $c++;
+                if($c>20) {
+                    IOWrite($hash, $w);
+                    $c=0;
+                    $w='';
+                }
             }
-            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+            IOWrite( $hash, $w.$hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
         }
     } elsif( $cmd eq "clearFTUIcache" ) {
         delete $hash->{helper}{playlistInfo} if defined($hash->{helper}{playlistInfo});
@@ -3755,29 +3773,25 @@ sub SB_PLAYER_GetStatus( $ ) {
         $hash->{helper}{lastGetStatus}=gettimeofday();
 
         # we fire the respective questions and parse the answers in parse
-        IOWrite( $hash, "$hash->{PLAYERMAC} artist ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} album ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} title ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist url ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} remote ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );     # CD 0030 u added to tags
+        IOWrite( $hash, "$hash->{PLAYERMAC} artist ?\n".
+                "$hash->{PLAYERMAC} album ?\n".
+                "$hash->{PLAYERMAC} title ?\n".
+                "$hash->{PLAYERMAC} playlist url ?\n".
+                "$hash->{PLAYERMAC} remote ?\n".
+                "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n".   # CD 0030 u added to tags
         #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists}));  # CD 0016 get available elements for alarms before querying the alarms # CD 0026 wird über Server verteilt
-        IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
-        # MM 0016 start
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmDefaultVolume ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmTimeoutSeconds ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmSnoozeSeconds ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmfadeseconds ?\n" ); # CD 0082
-        # MM 0016 end
-        # CD 0007
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref syncVolume ?\n" );
-        # CD 0009
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist name ?\n" );
-        # CD 0048
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist path 0 ?\n" );
-        # CD 0014
-        IOWrite( $hash, "$hash->{PLAYERMAC} duration ?\n" );
+                "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n".  # CD 0015 filter added
+                # MM 0016 start
+                "$hash->{PLAYERMAC} playerpref alarmsEnabled ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmDefaultVolume ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmTimeoutSeconds ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmSnoozeSeconds ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmfadeseconds ?\n". # CD 0082
+                # MM 0016 end
+                "$hash->{PLAYERMAC} playerpref syncVolume ?\n". # CD 0007
+                "$hash->{PLAYERMAC} playlist name ?\n".         # CD 0009
+                "$hash->{PLAYERMAC} playlist path 0 ?\n".       # CD 0048
+                "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
         SB_PLAYER_QueryElapsedTime($hash);
     }   # CD 0014 end
 
@@ -4213,7 +4227,7 @@ sub SB_PLAYER_ParseAlarms( $@ ) {
             $hash->{helper}{ALARMSCOUNT} = $2;  # CD 0016 ALARMSCOUNT nach {helper} verschoben
             next;
         } else {
-            Log3( $hash, 1, "SB_PLAYER_Alarms($name): Unknown data ($_)");
+            Log3( $hash, 2, "SB_PLAYER_Alarms($name): Unknown data ($_)");
             next;
         }
         # MM 0016 end
@@ -4820,9 +4834,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             $hash->{helper}{playlistInfoRetries}=5; # CD 0076
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));   # CD 0071, id 0 ignorieren
+                SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless ($_==0);   # CD 0083
             }
-            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
         }
     }
     # CD 0065 end
