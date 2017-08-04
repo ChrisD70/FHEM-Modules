@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0082 2017-07-22 14:45:00Z CD/MM/Matthew/Heppel_14557 $
+# $Id: 98_SB_PLAYER.pm 0084 2017-08-04 12:19:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -372,13 +372,17 @@ sub SB_PLAYER_Attr( @ ) {
             # CD 0082 end
         
             delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+            $hash->{helper}{songinfoquery}='';              # CD 0084
+            $hash->{helper}{songinfocounter}=0;             # CD 0084
+            $hash->{helper}{songinfopending}=0;             # CD 0084
             if(defined($hash->{helper}{playlistIds})) {
                 $hash->{helper}{playlistInfoRetries}=5; # CD 0076
                 my @ids=split(',',$hash->{helper}{playlistIds});
                 foreach(@ids) {
-                    IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                    # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
+                    SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
                 }
-                IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+                SB_PLAYER_SonginfoAddQueue($hash,0,0);
             }
         }
       } else {
@@ -712,6 +716,10 @@ sub SB_PLAYER_Define( $$ ) {
         $hash->{helper}{amplifierDelayOffPause}=0;  # CD 0043
         $hash->{helper}{lmsvolume}=0;               # CD 0065
     }
+
+    $hash->{helper}{songinfoquery}='';              # CD 0084
+    $hash->{helper}{songinfocounter}=0;             # CD 0084
+    $hash->{helper}{songinfopending}=0;             # CD 0084
 
     # do and update of the status
     InternalTimer( gettimeofday() + 10,
@@ -1202,6 +1210,10 @@ sub SB_PLAYER_Parse( $$ ) {
         } elsif( $args[ 0 ] eq "clear" ) {
             readingsBulkUpdate( $hash, "currentPlaylistName", "none" );
             readingsBulkUpdate( $hash, "playlists", "none" );
+            readingsBulkUpdate( $hash, "playlistTracks", 0 );   # CD 0084
+            readingsBulkUpdate( $hash, "duration", 0 );         # CD 0084
+            $hash->{helper}{playlistIds}='0';   # CD 0084
+            readingsBulkUpdate( $hash, "ftuiMedialist", '[{"Artist":"-","Title":"-","Album":"-","Time":"0","File":"-","Track":"0","Cover":"-"}]') if(AttrVal($name,"ftuiSupport","") eq "1");  # CD 0084
             # CD 0009 end
             SB_PLAYER_GetStatus( $hash );       # CD 0014
         } elsif( $args[ 0 ] eq "url" ) {
@@ -1761,7 +1773,8 @@ sub SB_PLAYER_Parse( $$ ) {
         my $flush=0;
 
         #Log3( $hash, 3, "SB_PLAYER_Parse: $name: parsing songinfo: $msg" );  # CD 0072
-
+        $hash->{helper}{songinfopending}--;     # CD 0084
+        
         foreach( @args ) {
             $flush=0;
             if( $_ =~ /^(id:)(-?[0-9]*)/ ) {
@@ -1839,6 +1852,7 @@ sub SB_PLAYER_Parse( $$ ) {
         #   if (rand() > 0.4) {delete $hash->{helper}{playlistInfo}{$trackid}};
         # TEST
     } elsif( $cmd eq "FHEMupdatePlaylistInfoDone" ) {
+        $hash->{helper}{songinfopending}=0;     # CD 0084
         SB_PLAYER_ftuiMedialist( $hash );
     # CD 0065 end
     } elsif( $cmd eq "NONE" ) {
@@ -1917,19 +1931,25 @@ sub SB_PLAYER_ftuiMedialist($) {
             }
         } else {
             $ftuimedialist.="{\"Artist\":\"-\",";
+            if($hash->{helper}{playlistInfoRetries}>0) {    # CD 0076
+                SB_PLAYER_SonginfoAddQueue($hash,$_,$wait) unless ($_==0);   # CD 0072 # CD 0076
+                $wait=0;
+                # CD 0084 start
+                if(ReadingsVal($name,'playlistTracks',0) eq '0') {
+                    $ftuimedialist.="\"Title\":\"-\",";
+                } else {
+                # CD 0084 end
+                    $ftuimedialist.="\"Title\":\"loading...\",";
+                }
+            } else {
+                $ftuimedialist.="\"Title\":\"no data\",";   # CD 0076
+                Log3( $hash, 3, "SB_PLAYER_Parse: $name: no songinfo for id $_" );  # CD 0072
+            }
             $ftuimedialist.="\"Album\":\"-\",";
             $ftuimedialist.="\"Time\":\"0\",";
             $ftuimedialist.="\"File\":\"-\",";
             $ftuimedialist.="\"Track\":\"0\",";
             $ftuimedialist.="\"Cover\":\"-\"},";
-            if($hash->{helper}{playlistInfoRetries}>0) {    # CD 0076
-                SB_PLAYER_SonginfoAddQueue($hash,$_,$wait) unless ($_==0);   # CD 0072 # CD 0076
-                $wait=0;
-                $ftuimedialist.="\"Title\":\"loading...\",";
-            } else {
-                $ftuimedialist.="\"Title\":\"no data\",";   # CD 0076
-                Log3( $hash, 3, "SB_PLAYER_Parse: $name: no songinfo for id $_" );  # CD 0072
-            }
         }
         $trackcounter+=1;   # CD 0082
     }
@@ -2221,6 +2241,11 @@ sub SB_PLAYER_Notify( $$ ) {
         # CD 0077 unbenutzte Attribute entfernen
         $modules{$hash->{TYPE}}{AttrList} =~ s/serverautoon.//;
         $modules{$hash->{TYPE}}{AttrList} =~ s/idismac.//;
+        # CD 0084
+        InternalTimer( gettimeofday() + 1.0,
+           "SB_PLAYER_tcb_SonginfoHandleQueue",
+           "SonginfoHandleQueue:$name",
+           0 );
     }
 
     # CD 0036 start
@@ -3052,14 +3077,18 @@ sub SB_PLAYER_Set( $@ ) {
     # CD 0065 start
     } elsif( $cmd eq "updateFTUImedialist" ) {
         delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+        $hash->{helper}{songinfoquery}='';              # CD 0084
+        $hash->{helper}{songinfocounter}=0;             # CD 0084
+        $hash->{helper}{songinfopending}=0;             # CD 0084
 
         if(defined($hash->{helper}{playlistIds})) {
             $hash->{helper}{playlistInfoRetries}=5; # CD 0076
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
+                # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
+                SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
             }
-            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+            SB_PLAYER_SonginfoAddQueue($hash,0,0);
         }
     } elsif( $cmd eq "clearFTUIcache" ) {
         delete $hash->{helper}{playlistInfo} if defined($hash->{helper}{playlistInfo});
@@ -3755,29 +3784,25 @@ sub SB_PLAYER_GetStatus( $ ) {
         $hash->{helper}{lastGetStatus}=gettimeofday();
 
         # we fire the respective questions and parse the answers in parse
-        IOWrite( $hash, "$hash->{PLAYERMAC} artist ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} album ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} title ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist url ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} remote ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n" );     # CD 0030 u added to tags
+        IOWrite( $hash, "$hash->{PLAYERMAC} artist ?\n".
+                "$hash->{PLAYERMAC} album ?\n".
+                "$hash->{PLAYERMAC} title ?\n".
+                "$hash->{PLAYERMAC} playlist url ?\n".
+                "$hash->{PLAYERMAC} remote ?\n".
+                "$hash->{PLAYERMAC} status 0 500 tags:Kcu\n".   # CD 0030 u added to tags
         #IOWrite( $hash, "$hash->{PLAYERMAC} alarm playlists 0 200\n" ) if (!defined($hash->{helper}{alarmPlaylists}));  # CD 0016 get available elements for alarms before querying the alarms # CD 0026 wird über Server verteilt
-        IOWrite( $hash, "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n" );  # CD 0015 filter added
-        # MM 0016 start
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmsEnabled ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmDefaultVolume ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmTimeoutSeconds ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmSnoozeSeconds ?\n" );
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref alarmfadeseconds ?\n" ); # CD 0082
-        # MM 0016 end
-        # CD 0007
-        IOWrite( $hash, "$hash->{PLAYERMAC} playerpref syncVolume ?\n" );
-        # CD 0009
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist name ?\n" );
-        # CD 0048
-        IOWrite( $hash, "$hash->{PLAYERMAC} playlist path 0 ?\n" );
-        # CD 0014
-        IOWrite( $hash, "$hash->{PLAYERMAC} duration ?\n" );
+                "$hash->{PLAYERMAC} alarms 0 200 tags:all filter:all\n".  # CD 0015 filter added
+                # MM 0016 start
+                "$hash->{PLAYERMAC} playerpref alarmsEnabled ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmDefaultVolume ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmTimeoutSeconds ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmSnoozeSeconds ?\n".
+                "$hash->{PLAYERMAC} playerpref alarmfadeseconds ?\n". # CD 0082
+                # MM 0016 end
+                "$hash->{PLAYERMAC} playerpref syncVolume ?\n". # CD 0007
+                "$hash->{PLAYERMAC} playlist name ?\n".         # CD 0009
+                "$hash->{PLAYERMAC} playlist path 0 ?\n".       # CD 0048
+                "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
         SB_PLAYER_QueryElapsedTime($hash);
     }   # CD 0014 end
 
@@ -4815,14 +4840,18 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     # CD 0065 start
     if(AttrVal($name,"ftuiSupport","") eq "1") {
         delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+        $hash->{helper}{songinfoquery}='';              # CD 0084
+        $hash->{helper}{songinfocounter}=0;             # CD 0084
+        $hash->{helper}{songinfopending}=0;             # CD 0084
 
         if(defined($hash->{helper}{playlistIds})) {
             $hash->{helper}{playlistInfoRetries}=5; # CD 0076
             my @ids=split(',',$hash->{helper}{playlistIds});
             foreach(@ids) {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$_." tags:acdltuxNK\n" ) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));   # CD 0071, id 0 ignorieren
+#                SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless ($_==0);   # CD 0083
+                SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));  # CD 0084
             }
-            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+            SB_PLAYER_SonginfoAddQueue($hash,0,0);
         }
     }
     # CD 0065 end
@@ -5103,10 +5132,12 @@ SB_PLAYER_SonginfoAddQueue($$$) ################################################
         $hash->{SONGINFOQUEUE} = [ $id ];
         push(@{$hash->{SONGINFOQUEUE}}, $id);
         RemoveInternalTimer( "SonginfoHandleQueue:$name");
-        InternalTimer( gettimeofday() + ($wait==1?2.0:0.01),
-           "SB_PLAYER_tcb_SonginfoHandleQueue",
-           "SonginfoHandleQueue:$name",
-           0 );
+        if ($init_done>0) { # CD 0084
+            InternalTimer( gettimeofday() + ($wait==1?2.0:0.01),
+               "SB_PLAYER_tcb_SonginfoHandleQueue",
+               "SonginfoHandleQueue:$name",
+               0 );
+        }
     } else {
         push(@{$hash->{SONGINFOQUEUE}}, "wait") if ($wait==1);
         push(@{$hash->{SONGINFOQUEUE}}, $id);
@@ -5121,24 +5152,45 @@ SB_PLAYER_SonginfoHandleQueue($) ###############################################
 
     my $arr = $hash->{SONGINFOQUEUE};
     if(defined($arr) && @{$arr} > 0) {
-        shift(@{$arr});
-        if(@{$arr} == 0) {
-            IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
-            delete($hash->{SONGINFOQUEUE});
-            return;
-        }
-        my $id = $arr->[0];
-        if($id ne "wait") {
-            if(($id eq "") || ($id==0)) { # CD 0076 id 0 ignorieren
-                SB_PLAYER_SonginfoHandleQueue($hash);
-            } else {
-                IOWrite( $hash, $hash->{PLAYERMAC}." songinfo 0 100 track_id:".$id." tags:acdltuxNK\n" );
+        if($hash->{helper}{songinfopending}<50) {
+            shift(@{$arr});
+            if(@{$arr} == 0) {
+                if($hash->{helper}{songinfocounter}>0) {
+                    IOWrite( $hash, $hash->{helper}{songinfoquery});
+                    $hash->{helper}{songinfopending}+=$hash->{helper}{songinfocounter};
+                    $hash->{helper}{songinfoquery}='';
+                    $hash->{helper}{songinfocounter}=0;
+                }
+                IOWrite( $hash, $hash->{PLAYERMAC}." FHEMupdatePlaylistInfoDone\n" );
+                delete($hash->{SONGINFOQUEUE});
+                return;
             }
+            my $id = $arr->[0];
+            if($id ne "wait") {
+                if(($id eq "") || ($id==0)) { # CD 0076 id 0 ignorieren
+                    SB_PLAYER_SonginfoHandleQueue($hash);
+                } else {
+                    # CD 0084 Abfragen zusammenfassen
+                    $hash->{helper}{songinfoquery}=$hash->{helper}{songinfoquery}.$hash->{PLAYERMAC}." songinfo 0 100 track_id:".$id." tags:acdltuxNK\n";
+                    $hash->{helper}{songinfocounter}++;
+                    if($hash->{helper}{songinfocounter}>=10) {
+                        IOWrite( $hash, $hash->{helper}{songinfoquery});
+                        $hash->{helper}{songinfopending}+=$hash->{helper}{songinfocounter};
+                        $hash->{helper}{songinfoquery}='';
+                        $hash->{helper}{songinfocounter}=0;
+                    }
+                }
+            }
+            InternalTimer( gettimeofday() + (($id eq "wait")?2.0:0.01),
+               "SB_PLAYER_tcb_SonginfoHandleQueue",
+               "SonginfoHandleQueue:$name",
+               0 );
+        } else {
+            InternalTimer( gettimeofday() + 0.1,
+               "SB_PLAYER_tcb_SonginfoHandleQueue",
+               "SonginfoHandleQueue:$name",
+               0 );
         }
-        InternalTimer( gettimeofday() + (($id eq "wait")?2.0:0.01),
-           "SB_PLAYER_tcb_SonginfoHandleQueue",
-           "SonginfoHandleQueue:$name",
-           0 );
     }
 }
 
