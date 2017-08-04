@@ -9,15 +9,15 @@
               - renew und abort geändert
               - Reconnect überarbeitet
 98_SB_PLAYER:
+  170804 0084 - Songinfos weiter verzögern (Probleme mit langsamer Hardware)
+              - Songinfos gruppiert abrufen
+              - ftuiMedialist löschen wenn Playlist leer ist
+              - Aufbau ftuiMedialist korrigiert wenn Songinfos fehlen
   170803 0083 - Songinfos verzögert abrufen
   170722 0082 - ftui-Readings automatisch aktualisieren wenn ftuiSupport gesetzt wird
               - Cover, Artist und Titel von Remote-Streams in ftuiMedialist aktualisieren
               - zusätzliche Größen für CoverArt
               - alarmFadeSeconds hinzugefügt
-  170626 0081 - \ in FTUI Medialist filtern
-  170625 0080 - NOTIFYDEV verwenden
-  170617 0079 - kein automatischer statusRequest wenn der Player 'absent' ist
-  170603 0078 - Timer aufräumen
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -112,6 +112,10 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170804 0084 - Songinfos weiter verzögern (Probleme mit langsamer Hardware)
+              - Songinfos gruppiert abrufen
+              - ftuiMedialist löschen wenn Playlist leer ist
+              - Aufbau ftuiMedialist korrigiert wenn Songinfos fehlen
   170803 0083 - Songinfos verzögert abrufen
   170722 0082 - ftui-Readings automatisch aktualisieren wenn das Attribut gesetzt wird
               - Cover, Artist und Titel von Remote-Streams in ftuiMedialist aktualisieren
