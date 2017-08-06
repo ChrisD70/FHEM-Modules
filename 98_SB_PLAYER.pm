@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0084 2017-08-04 12:19:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0085 2017-08-06 13:54:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1323,10 +1323,18 @@ sub SB_PLAYER_Parse( $$ ) {
 
     } elsif( $cmd eq "title" ) {
         readingsBulkUpdate( $hash, "currentTitle", join( " ", @args ) );
-        SB_PLAYER_ftuiMedialist( $hash ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
+        RemoveInternalTimer( "ftuiMedialist:$name");    # CD 0085
+        InternalTimer( gettimeofday() + 0.01,           # CD 0085
+           "SB_PLAYER_tcb_ftuiMedialist",
+           "ftuiMedialist:$name",
+           0 ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
     } elsif( $cmd eq "artist" ) {
         readingsBulkUpdate( $hash, "currentArtist", join( " ", @args ) );
-        SB_PLAYER_ftuiMedialist( $hash ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
+        RemoveInternalTimer( "ftuiMedialist:$name");
+        InternalTimer( gettimeofday() + 0.01,
+           "SB_PLAYER_tcb_ftuiMedialist",
+           "ftuiMedialist:$name",
+           0 ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
     } elsif( $cmd eq "album" ) {
         readingsBulkUpdate( $hash, "currentAlbum", join( " ", @args ) );
 
@@ -1853,7 +1861,11 @@ sub SB_PLAYER_Parse( $$ ) {
         # TEST
     } elsif( $cmd eq "FHEMupdatePlaylistInfoDone" ) {
         $hash->{helper}{songinfopending}=0;     # CD 0084
-        SB_PLAYER_ftuiMedialist( $hash );
+        RemoveInternalTimer( "ftuiMedialist:$name");    # CD 0085
+        InternalTimer( gettimeofday() + 0.01,           # CD 0085
+           "SB_PLAYER_tcb_ftuiMedialist",
+           "ftuiMedialist:$name",
+           0 );
     # CD 0065 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for
@@ -1876,6 +1888,38 @@ sub SB_PLAYER_Parse( $$ ) {
     Log3( $hash, 5, "SB_PLAYER_Parse: $name: leaving" );
 
     return( $name );
+}
+
+# CD 0085
+# ----------------------------------------------------------------------------
+#  delay building ftuiMedialist reading
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_tcb_ftuiMedialist( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    if(AttrVal($name,"ftuiSupport","") eq "1") {
+        my $t31=time;
+        readingsBeginUpdate( $hash );
+        if((time-$t31)>0.5) {
+            Log3($hash,3,"SB_PLAYER_tcb_ftuiMedialist($name), time:".int((time-$t31)*1000)."ms cmd: prepare FHEM event handling");
+        }
+        $t31=time;
+        SB_PLAYER_ftuiMedialist($hash);
+        if((time-$t31)>0.5) {
+            Log3($hash,3,"SB_PLAYER_tcb_ftuiMedialist($name), time:".int((time-$t31)*1000)."ms cmd: SB_PLAYER_ftuiMedialist");
+        }
+        $t31=time;
+        if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
+            readingsEndUpdate( $hash, 0 );
+        } else {
+            readingsEndUpdate( $hash, 1 );
+        }
+        if((time-$t31)>0.5) {
+            Log3($hash,3,"SB_PLAYER_tcb_ftuiMedialist($name), time:".int((time-$t31)*1000)."ms cmd: execute FHEM event handling");
+        }
+    }
 }
 
 # CD 0082
@@ -5220,6 +5264,7 @@ sub SB_PLAYER_RemoveInternalTimers($) {
     RemoveInternalTimer( "TriggerPlaylistStop:$name");
     RemoveInternalTimer( "TriggerTTSDone:$name");
     RemoveInternalTimer( "recallPause:$name");
+    RemoveInternalTimer( "ftuiMedialist:$name");    # CD 0085
     RemoveInternalTimer( $hash );
 }
 # CD 0078 end
