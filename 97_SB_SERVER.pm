@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0042 2017-08-05 18:18:00Z CD $
+# $Id: 97_SB_SERVER.pm 0043 2017-08-20 18:19:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0042';
+use constant SB_SERVER_VERSION => '0043';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
