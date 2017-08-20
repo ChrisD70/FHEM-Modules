@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0085 2017-08-06 13:54:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0086 2017-08-20 18:24:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -174,7 +174,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
-    $hash->{AttrList}  .= "ftuiSupport:1,0 ";                       # CD 0065
+    $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt
     $hash->{AttrList}  .= $readingFnAttributes;
 
     # CD 0036 aus 37_sonosBookmarker
@@ -348,22 +348,34 @@ sub SB_PLAYER_Attr( @ ) {
       my $dodelete=0;
 
       if( $cmd eq "set" ) {
-        if ($args[1] eq "0") {
-            $dodelete=1;
-        } elsif ($args[1] eq "1") {
+        # CD 0086 Readings einzeln aktivierbar
+        my @options=split(',',$args[1]);
+        delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
+        $hash->{helper}{ftuiSupport}{enable}=($args[1] eq '0')?0:1;
+            
+        for my $opt (@options) {
+            $hash->{helper}{ftuiSupport}{favorites}=1 if($opt=~ m/favorites/)||($opt eq '1');
+            $hash->{helper}{ftuiSupport}{playlists}=1 if($opt=~ m/playlists/)||($opt eq '1');
+            $hash->{helper}{ftuiSupport}{medialist}=1 if($opt=~ m/medialist/)||($opt eq '1');
+        }
+        
+        if(defined($hash->{helper}{ftuiSupport})) {
             # CD 0082 Readings setzen (kein manueller statusRequest mehr nötig)
             readingsBeginUpdate( $hash );
-            my $t=$hash->{FAVSTR};
-            $t=~s/,/:/g;
-            readingsBulkUpdate( $hash, "ftuiFavoritesItems", $t );
-            $t=~s/_/ /g;
-            readingsBulkUpdate( $hash, "ftuiFavoritesAlias", $t );
-
-            $t=$hash->{SERVERPLAYLISTS};
-            $t=~s/,/:/g;
-            readingsBulkUpdate( $hash, "ftuiPlaylistsItems", $t );
-            $t=~s/_/ /g;
-            readingsBulkUpdate( $hash, "ftuiPlaylistsAlias", $t );
+            if(defined($hash->{helper}{ftuiSupport}{favorites})) {
+                my $t=$hash->{FAVSTR};
+                $t=~s/,/:/g;
+                readingsBulkUpdate( $hash, "ftuiFavoritesItems", $t );
+                $t=~s/_/ /g;
+                readingsBulkUpdate( $hash, "ftuiFavoritesAlias", $t );
+            }
+            if(defined($hash->{helper}{ftuiSupport}{playlists})) {
+                my $t=$hash->{SERVERPLAYLISTS};
+                $t=~s/,/:/g;
+                readingsBulkUpdate( $hash, "ftuiPlaylistsItems", $t );
+                $t=~s/_/ /g;
+                readingsBulkUpdate( $hash, "ftuiPlaylistsAlias", $t );
+            }
             if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
                 readingsEndUpdate( $hash, 0 );
             } else {
@@ -375,24 +387,32 @@ sub SB_PLAYER_Attr( @ ) {
             $hash->{helper}{songinfoquery}='';              # CD 0084
             $hash->{helper}{songinfocounter}=0;             # CD 0084
             $hash->{helper}{songinfopending}=0;             # CD 0084
-            if(defined($hash->{helper}{playlistIds})) {
-                $hash->{helper}{playlistInfoRetries}=5; # CD 0076
-                my @ids=split(',',$hash->{helper}{playlistIds});
-                foreach(@ids) {
-                    # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
-                    SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+            if(defined($hash->{helper}{ftuiSupport}{medialist})) {
+                if(defined($hash->{helper}{playlistIds})) {
+                    $hash->{helper}{playlistInfoRetries}=5; # CD 0076
+                    my @ids=split(',',$hash->{helper}{playlistIds});
+                    foreach(@ids) {
+                        # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
+                        SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                    }
+                    SB_PLAYER_SonginfoAddQueue($hash,0,0);
                 }
-                SB_PLAYER_SonginfoAddQueue($hash,0,0);
             }
         }
       } else {
+        delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
+        $hash->{helper}{ftuiSupport}{enable}=0;
         $dodelete=1;
       }
       # CD 0068 start
-      if($dodelete==1) {
+      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{medialist})) {
         delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+      }
+      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{playlists})) {
         delete($hash->{READINGS}{ftuiPlaylistsItems}) if defined($hash->{READINGS}{ftuiPlaylistsItems});
         delete($hash->{READINGS}{ftuiPlaylistsAlias}) if defined($hash->{READINGS}{ftuiPlaylistsAlias});
+      }
+      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{favorites})) {
         delete($hash->{READINGS}{ftuiFavoritesItems}) if defined($hash->{READINGS}{ftuiFavoritesItems});
         delete($hash->{READINGS}{ftuiFavoritesAlias}) if defined($hash->{READINGS}{ftuiFavoritesAlias});
       }
@@ -1132,26 +1152,28 @@ sub SB_PLAYER_Parse( $$ ) {
             }
             # CD 0039 end
         } elsif( $args[ 0 ] eq "shuffle" ) {
-            if( $args[ 1 ] eq "0" ) {
-                readingsBulkUpdate( $hash, "shuffle", "off" );
-            } elsif( $args[ 1 ] eq "1") {
-                readingsBulkUpdate( $hash, "shuffle", "song" );
-            } elsif( $args[ 1 ] eq "2") {
-                readingsBulkUpdate( $hash, "shuffle", "album" );
-            } else {
-                readingsBulkUpdate( $hash, "shuffle", "?" );
-            }
-            # CD 0039 Änderung am Master, gesyncte Player aktualisieren
-            if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
-                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
-                    my @pl=split(",",$hash->{SYNCGROUP});
-                    foreach (@pl) {
-                        IOWrite( $hash, "$_ playlist shuffle ?\n" );
+            if(defined($args[ 1 ])) {    # CD 0086
+                if( $args[ 1 ] eq "0" ) {
+                    readingsBulkUpdate( $hash, "shuffle", "off" );
+                } elsif( $args[ 1 ] eq "1") {
+                    readingsBulkUpdate( $hash, "shuffle", "song" );
+                } elsif( $args[ 1 ] eq "2") {
+                    readingsBulkUpdate( $hash, "shuffle", "album" );
+                } else {
+                    readingsBulkUpdate( $hash, "shuffle", "?" );
+                }
+                # CD 0039 Änderung am Master, gesyncte Player aktualisieren
+                if ($hash->{PLAYERMAC} eq $hash->{SYNCMASTER}) {
+                    if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                        my @pl=split(",",$hash->{SYNCGROUP});
+                        foreach (@pl) {
+                            IOWrite( $hash, "$_ playlist shuffle ?\n" );
+                        }
                     }
                 }
+                # CD 0039 end
+                SB_PLAYER_GetStatus( $hash );       # CD 0014
             }
-            # CD 0039 end
-            SB_PLAYER_GetStatus( $hash );       # CD 0014
         } elsif( $args[ 0 ] eq "name" ) {
             # CD 0014 start
             $queryMode=0;
@@ -1213,7 +1235,7 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "playlistTracks", 0 );   # CD 0084
             readingsBulkUpdate( $hash, "duration", 0 );         # CD 0084
             $hash->{helper}{playlistIds}='0';   # CD 0084
-            readingsBulkUpdate( $hash, "ftuiMedialist", '[{"Artist":"-","Title":"-","Album":"-","Time":"0","File":"-","Track":"0","Cover":"-"}]') if(AttrVal($name,"ftuiSupport","") eq "1");  # CD 0084
+            readingsBulkUpdate( $hash, "ftuiMedialist", '[{"Artist":"-","Title":"-","Album":"-","Time":"0","File":"-","Track":"0","Cover":"-"}]') if(defined($hash->{helper}{ftuiSupport}{medialist}));  # CD 0084
             # CD 0009 end
             SB_PLAYER_GetStatus( $hash );       # CD 0014
         } elsif( $args[ 0 ] eq "url" ) {
@@ -1327,14 +1349,14 @@ sub SB_PLAYER_Parse( $$ ) {
         InternalTimer( gettimeofday() + 0.01,           # CD 0085
            "SB_PLAYER_tcb_ftuiMedialist",
            "ftuiMedialist:$name",
-           0 ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
+           0 ) if(defined($hash->{helper}{ftuiSupport}{medialist})); # CD 0082
     } elsif( $cmd eq "artist" ) {
         readingsBulkUpdate( $hash, "currentArtist", join( " ", @args ) );
         RemoveInternalTimer( "ftuiMedialist:$name");
         InternalTimer( gettimeofday() + 0.01,
            "SB_PLAYER_tcb_ftuiMedialist",
            "ftuiMedialist:$name",
-           0 ) if(AttrVal($name,"ftuiSupport","") eq "1"); # CD 0082
+           0 ) if(defined($hash->{helper}{ftuiSupport}{medialist})); # CD 0082
     } elsif( $cmd eq "album" ) {
         readingsBulkUpdate( $hash, "currentAlbum", join( " ", @args ) );
 
@@ -1899,7 +1921,7 @@ sub SB_PLAYER_tcb_ftuiMedialist( $ ) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
-    if(AttrVal($name,"ftuiSupport","") eq "1") {
+    if(defined($hash->{helper}{ftuiSupport}{medialist})) {
         my $t31=time;
         readingsBeginUpdate( $hash );
         if((time-$t31)>0.5) {
@@ -1998,7 +2020,6 @@ sub SB_PLAYER_ftuiMedialist($) {
         $trackcounter+=1;   # CD 0082
     }
     $ftuimedialist=~s/,$/]/;
-    #Log 0,$ftuimedialist;
     readingsBulkUpdate( $hash, "ftuiMedialist", $ftuimedialist );
 }
 # CD 0082 end
@@ -3125,14 +3146,16 @@ sub SB_PLAYER_Set( $@ ) {
         $hash->{helper}{songinfocounter}=0;             # CD 0084
         $hash->{helper}{songinfopending}=0;             # CD 0084
 
-        if(defined($hash->{helper}{playlistIds})) {
-            $hash->{helper}{playlistInfoRetries}=5; # CD 0076
-            my @ids=split(',',$hash->{helper}{playlistIds});
-            foreach(@ids) {
-                # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
-                SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
+        if(defined($hash->{helper}{ftuiSupport}{medialist})) {
+            if(defined($hash->{helper}{playlistIds})) {
+                $hash->{helper}{playlistInfoRetries}=5; # CD 0076
+                my @ids=split(',',$hash->{helper}{playlistIds});
+                foreach(@ids) {
+                    # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
+                    SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless(defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote}) || ($_==0)); # CD 0076 id 0 ignorieren
+                }
+                SB_PLAYER_SonginfoAddQueue($hash,0,0);
             }
-            SB_PLAYER_SonginfoAddQueue($hash,0,0);
         }
     } elsif( $cmd eq "clearFTUIcache" ) {
         delete $hash->{helper}{playlistInfo} if defined($hash->{helper}{playlistInfo});
@@ -3963,7 +3986,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             # CD 0064
 
             # CD 0068 start
-            if(AttrVal($name,"ftuiSupport","") eq "1") {
+            if(defined($hash->{helper}{ftuiSupport}{favorites})) {
                 my $t=$hash->{FAVSTR};
                 $t=~s/,/:/g;
                 readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
@@ -4007,7 +4030,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                     } else {
                         $hash->{FAVSTR} = $favs;
                     }
-                    if(AttrVal($name,"ftuiSupport","") eq "1") {
+                    if(defined($hash->{helper}{ftuiSupport}{favorites})) {
                         my $t=$hash->{FAVSTR};
                         $t=~s/,/:/g;
                         readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
@@ -4085,7 +4108,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             # CD 0064
 
             # CD 0068 start
-            if(AttrVal($name,"ftuiSupport","") eq "1") {
+            if(defined($hash->{helper}{ftuiSupport}{playlists})) {
                 my $t=$hash->{SERVERPLAYLISTS};
                 $t=~s/,/:/g;
                 readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
@@ -4131,7 +4154,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                         $hash->{SERVERPLAYLISTS}=$pls;
                     }
 
-                    if(AttrVal($name,"ftuiSupport","") eq "1") {
+                    if(defined($hash->{helper}{ftuiSupport}{playlists})) {
                         my $t=$hash->{SERVERPLAYLISTS};
                         $t=~s/,/:/g;
                         readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
@@ -4882,7 +4905,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     $hash->{helper}{playerStatusOK}=1;  # CD 0042
 
     # CD 0065 start
-    if(AttrVal($name,"ftuiSupport","") eq "1") {
+    if(defined($hash->{helper}{ftuiSupport}{medialist})) {
         delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
         $hash->{helper}{songinfoquery}='';              # CD 0084
         $hash->{helper}{songinfocounter}=0;             # CD 0084
@@ -5230,7 +5253,7 @@ SB_PLAYER_SonginfoHandleQueue($) ###############################################
                "SonginfoHandleQueue:$name",
                0 );
         } else {
-            InternalTimer( gettimeofday() + 0.1,
+            InternalTimer( gettimeofday() + 0.05,
                "SB_PLAYER_tcb_SonginfoHandleQueue",
                "SonginfoHandleQueue:$name",
                0 );
@@ -5441,8 +5464,9 @@ sub SB_PLAYER_RemoveInternalTimers($) {
       Only changes in the readings currentAlbum, currentArtist, currentTitle cause an event.</li><br>
     <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
-    <li>ftuiSupport 0|1<br>
-      If set to 1 additional readings for FTUI integration are created.</li>
+    <li>ftuiSupport 0|1|favorites|playlists|medialist<br>
+      Create additional readings for FTUI integration. Warning: Using 1 or medialist may cause high cpu usage and unresponsiveness
+      on slower systems.</li>
     <li>sortFavorites 0|1<br>
       If set to 1 the favorites will be sorted alphabetically.</li>
     <li>sortPlaylists 0|1<br>
@@ -5710,8 +5734,9 @@ sub SB_PLAYER_RemoveInternalTimers($) {
       Fade in f&uuml;r Beginn von Playlisten und neuen Soundfiles. Bezeichnet die Dauer des Vorganges, in der die
       Lautst&auml;rke auf den vorgegebenen Wert ansteigt und wird in Sekunden angegeben. Ein zweiter, durch Komma
       getrennter optionaler Wert, gibt die Dauer des Fadein beim Verlassen des Pausenzustandes an.</li>
-    <li>ftuiSupport 0|1<br>
-      Wenn das Attribut den Wert 1 hat werden zus&auml;tzliche Readings f&uuml;r die Integration in FTUI erzeugt.</li>
+    <li>ftuiSupport 0|1|favorites|playlists|medialist<br>
+      Zus&auml;tzliche Readings f&uuml;r die Integration in FTUI erzeugen. Achtung: Die Verwendung von 1 oder medialist kann kurzzeitig zu
+      erh&ouml;ter Systemlast und H&auml;ngern auf langsamen Systemen f&uuml;hren.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Aktualisierungsintervall der automatischen Status-Abfrage. Default: 300</li>
     <li>sortFavorites 0|1<br>
