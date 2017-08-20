@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0041 2017-06-25 21:42:00Z CD_14556 $
+# $Id: 97_SB_SERVER.pm 0043 2017-08-20 18:19:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0041';
+use constant SB_SERVER_VERSION => '0043';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -1204,14 +1204,14 @@ sub SB_SERVER_Read( $ ) {
 
     # and dispatch the rest
     foreach( @cmds ) {
-        #my $t31=time;   # CD 0020
+        my $t31=time;   # CD 0020
         # double check complete line
         my $lastchar = substr( $_, -1);
         SB_SERVER_DispatchCommandLine( $hash, $_  );
         # CD 0020 start
-        #if((time-$t31)>0.2) {
-        #    Log3($hash,0,"SB_SERVER_Read($name), time:".int((time-$t31)*1000)." cmd: ".$_);
-        #}
+        if((time-$t31)>0.5) {
+            Log3($hash,3,"SB_SERVER_Read($name), time:".int((time-$t31)*1000)."ms cmd: ".$_);
+        }
         # CD 0020 end
     }
 

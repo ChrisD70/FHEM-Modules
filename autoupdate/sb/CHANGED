@@ -1,14 +1,15 @@
 ﻿97_SB_SERVER:
+  170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
+  170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
   170625 0041 - MAC-Adresse besser überprüfen
               - Initialisierung der Readings über readingsBulkUpdate
               - NOTIFYDEV verwenden
   170618 0040 - Reading scanduration hinzugefügt
   170617 0039 - scan*-Readings aktualisieren
-  170603 0038 - state statt STATE verwenden
-              - Timer aufräumen
-              - renew und abort geändert
-              - Reconnect überarbeitet
 98_SB_PLAYER:
+  170820 0086 - Attribut ftuiSupport erweitert
+  170804 0085 - SB_PLAYER_ftuiMedialist wurde manchmal aufgerufen bevor die nötigen Readings gesetzt waren
+              - Ausführungszeit von SB_PLAYER_tcb_ftuiMedialist überwachen (verbose 3)
   170804 0084 - Songinfos weiter verzögern (Probleme mit langsamer Hardware)
               - Songinfos gruppiert abrufen
               - ftuiMedialist löschen wenn Playlist leer ist
@@ -22,6 +23,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
+  170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
   170625 0041 - MAC-Adresse besser überprüfen
               - Initialisierung der Readings über readingsBulkUpdate
               - NOTIFYDEV verwenden
@@ -112,6 +115,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170820 0086 - Attribut ftuiSupport erweitert
+  170804 0085 - SB_PLAYER_ftuiMedialist wurde manchmal aufgerufen bevor die nötigen Readings gesetzt waren
+              - Ausführungszeit von SB_PLAYER_tcb_ftuiMedialist überwachen (verbose 3)
   170804 0084 - Songinfos weiter verzögern (Probleme mit langsamer Hardware)
               - Songinfos gruppiert abrufen
               - ftuiMedialist löschen wenn Playlist leer ist
