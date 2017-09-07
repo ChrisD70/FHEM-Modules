@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0086 2017-08-20 18:24:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0087 2017-09-07 22:16:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -735,6 +735,7 @@ sub SB_PLAYER_Define( $$ ) {
         $hash->{helper}{amplifierDelayOffPower}=0;  # CD 0043
         $hash->{helper}{amplifierDelayOffPause}=0;  # CD 0043
         $hash->{helper}{lmsvolume}=0;               # CD 0065
+        $hash->{helper}{amplifierLastStatus}='x';   # CD 0087
     }
 
     $hash->{helper}{songinfoquery}='';              # CD 0084
@@ -4406,8 +4407,9 @@ sub SB_PLAYER_Amplifier( $ ) {
 
     Log3( $hash, 4, "SB_PLAYER_Amplifier($name): called" );
 
+    my $thestatus = ''; # CD 0087
     if( AttrVal( $name, "amplifier", "play" ) eq "play" ) {
-        my $thestatus = ReadingsVal( $name, "playStatus", "pause" );
+        $thestatus = ReadingsVal( $name, "playStatus", "pause" );
 
         Log3( $hash, 5, "SB_PLAYER_Amplifier($name): with mode play " .
               "and status:$thestatus" );
@@ -4426,7 +4428,7 @@ sub SB_PLAYER_Amplifier( $ ) {
             $setvalue = "off";
         }
     } elsif( AttrVal( $name, "amplifier", "on" ) eq "on" ) {
-        my $thestatus = ReadingsVal( $name, "power", "off" );
+        $thestatus = ReadingsVal( $name, "power", "off" );
 
         Log3( $hash, 5, "SB_PLAYER_Amplifier($name): with mode on " .
               "and status:$thestatus" );
@@ -4468,7 +4470,10 @@ sub SB_PLAYER_Amplifier( $ ) {
             return;
         }
         # CD 0012 end
-        fhem( "set $hash->{AMPLIFIER} $setvalue" );
+        if($hash->{helper}{amplifierLastStatus} ne $thestatus) {    # CD 0087
+            fhem( "set $hash->{AMPLIFIER} $setvalue" );
+            $hash->{helper}{amplifierLastStatus}=$thestatus;        # CD 0087
+        }
 
         Log3( $hash, 5, "SB_PLAYER_Amplifier($name): amplifier changed to " .
               $setvalue );
