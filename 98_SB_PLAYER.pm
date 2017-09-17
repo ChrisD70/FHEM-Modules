@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0086 2017-08-20 18:24:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0088 2017-09-17 21:07:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -175,6 +175,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
     $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt
+    $hash->{AttrList}  .= "amplifierMode:exclusive,shared ";            # CD 0088
     $hash->{AttrList}  .= $readingFnAttributes;
 
     # CD 0036 aus 37_sonosBookmarker
@@ -735,6 +736,7 @@ sub SB_PLAYER_Define( $$ ) {
         $hash->{helper}{amplifierDelayOffPower}=0;  # CD 0043
         $hash->{helper}{amplifierDelayOffPause}=0;  # CD 0043
         $hash->{helper}{lmsvolume}=0;               # CD 0065
+        $hash->{helper}{amplifierLastStatus}='x';   # CD 0087
     }
 
     $hash->{helper}{songinfoquery}='';              # CD 0084
@@ -2009,7 +2011,7 @@ sub SB_PLAYER_ftuiMedialist($) {
                 }
             } else {
                 $ftuimedialist.="\"Title\":\"no data\",";   # CD 0076
-                Log3( $hash, 3, "SB_PLAYER_Parse: $name: no songinfo for id $_" );  # CD 0072
+                Log3( $hash, 4, "SB_PLAYER_Parse: $name: no songinfo for id $_" );  # CD 0072
             }
             $ftuimedialist.="\"Album\":\"-\",";
             $ftuimedialist.="\"Time\":\"0\",";
@@ -4394,6 +4396,8 @@ sub SB_PLAYER_Amplifier( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
+    Log3( $hash, 4, "SB_PLAYER_Amplifier($name): called" );
+
     if( ( $hash->{AMPLIFIER} eq "none" ) ||
         ( !defined( $defs{$hash->{AMPLIFIER}} ) ) ) {
         # amplifier not specified
@@ -4401,15 +4405,25 @@ sub SB_PLAYER_Amplifier( $ ) {
         return;
     }
 
+    # CD 0088 start
+    my $amplifierShared=(AttrVal($name,'amplifierMode','exclusive') eq 'shared');
+    
+    if (defined($hash->{IODev}) && defined($hash->{IODev}->{NAME}) && $amplifierShared) {
+        if(ReadingsVal($hash->{IODev}->{NAME},'state','x') ne 'opened') {
+            Log3( $hash, 3, "SB_PLAYER_Amplifier($name): SB Server not connected, ignoring" );
+            return;
+        }
+    }
+    # CD 0088 end
+    
     my $setvalue = "off";
     my $delayAmp=0.01;  # CD 0043
 
-    Log3( $hash, 4, "SB_PLAYER_Amplifier($name): called" );
-
+    my $thestatus = ''; # CD 0087
     if( AttrVal( $name, "amplifier", "play" ) eq "play" ) {
-        my $thestatus = ReadingsVal( $name, "playStatus", "pause" );
+        $thestatus = ReadingsVal( $name, "playStatus", "pause" );
 
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): with mode play " .
+        Log3( $hash, 3, "SB_PLAYER_Amplifier($name): with mode play " .
               "and status:$thestatus" );
 
         if( ( $thestatus eq "playing" ) || (( $thestatus eq "paused" ) && ($hash->{helper}{amplifierDelayOffPause}==0)) ) { # CD 0043 DelayOffPause abfragen
@@ -4426,9 +4440,9 @@ sub SB_PLAYER_Amplifier( $ ) {
             $setvalue = "off";
         }
     } elsif( AttrVal( $name, "amplifier", "on" ) eq "on" ) {
-        my $thestatus = ReadingsVal( $name, "power", "off" );
+        $thestatus = ReadingsVal( $name, "power", "off" );
 
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): with mode on " .
+        Log3( $hash, 3, "SB_PLAYER_Amplifier($name): with mode on " .
               "and status:$thestatus" );
 
         if( $thestatus eq "on" ) {
@@ -4445,7 +4459,14 @@ sub SB_PLAYER_Amplifier( $ ) {
 
     my $actualState = ReadingsVal( "$hash->{AMPLIFIER}", "state", "off" );
 
-    Log3( $hash, 5, "SB_PLAYER_Amplifier($name): actual:$actualState " .
+    # CD 0088 start
+    if (($thestatus eq "?") && $amplifierShared) {
+        Log3( $hash, 3, "SB_PLAYER_Amplifier($name): player state unknown, ignoring");
+        return;
+    }
+    # CD 0088 end
+    
+    Log3( $hash, 3, "SB_PLAYER_Amplifier($name): actual:$actualState " .
           "and set:$setvalue" );
 
     if ( $actualState ne $setvalue) {
@@ -4455,25 +4476,31 @@ sub SB_PLAYER_Amplifier( $ ) {
         if (!defined($hash->{helper}{AMPLIFIERDELAYOFF})) {
             # CD 0043 Timer nicht neu starten wenn Zustand sich nicht geändert hat
             if ((!defined($hash->{helper}{AMPLIFIERACTIVETIMER})) || ($hash->{helper}{AMPLIFIERACTIVETIMER} ne ($actualState.$setvalue))) {
-                Log3( $hash, 5, "SB_PLAYER_Amplifier($name): delaying amplifier on/off by $delayAmp" );
-                RemoveInternalTimer( "DelayAmplifier:$name");
-                InternalTimer( gettimeofday() + $delayAmp,
-                    "SB_PLAYER_tcb_DelayAmplifier",  # CD 0014 Name geändert
-                    "DelayAmplifier:$name",
-                    0 );
-                $hash->{helper}{AMPLIFIERACTIVETIMER}=$actualState.$setvalue; # CD 0043
+                if(($hash->{helper}{amplifierLastStatus} ne $thestatus) || !$amplifierShared) {    # CD 0088
+                    Log3( $hash, 3, "SB_PLAYER_Amplifier($name): delaying amplifier on/off by $delayAmp" );
+                    RemoveInternalTimer( "DelayAmplifier:$name");
+                    InternalTimer( gettimeofday() + $delayAmp,
+                        "SB_PLAYER_tcb_DelayAmplifier",  # CD 0014 Name geändert
+                        "DelayAmplifier:$name",
+                        0 );
+                    $hash->{helper}{AMPLIFIERACTIVETIMER}=$actualState.$setvalue; # CD 0043
+                } else {
+                    Log3( $hash, 3, "SB_PLAYER_Amplifier($name): player state didn't change, ignoring" );
+                }
             } else {
-                Log3( $hash, 5, "SB_PLAYER_Amplifier($name): delay already active" );
+                Log3( $hash, 3, "SB_PLAYER_Amplifier($name): delay already active" );
             }
             return;
         }
         # CD 0012 end
-        fhem( "set $hash->{AMPLIFIER} $setvalue" );
-
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): amplifier changed to " .
-              $setvalue );
+        if(($hash->{helper}{amplifierLastStatus} ne $thestatus) || !$amplifierShared) {    # CD 0087
+            fhem( "set $hash->{AMPLIFIER} $setvalue" );
+            $hash->{helper}{amplifierLastStatus}=$thestatus;        # CD 0087
+            Log3( $hash, 3, "SB_PLAYER_Amplifier($name): amplifier changed to " .
+                  $setvalue );
+        }
     } else {
-        Log3( $hash, 5, "SB_PLAYER_Amplifier($name): no amplifier " .
+        Log3( $hash, 3, "SB_PLAYER_Amplifier($name): no amplifier " .
               "state change" );
     }
     delete($hash->{helper}{AMPLIFIERDELAYOFF}) if (defined($hash->{helper}{AMPLIFIERDELAYOFF}));
