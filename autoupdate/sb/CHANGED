@@ -7,19 +7,12 @@
   170618 0040 - Reading scanduration hinzugefügt
   170617 0039 - scan*-Readings aktualisieren
 98_SB_PLAYER:
+  170917 0088 - zusätzliches Logging für Amplifier (verbose 3)
+              - Attribut ampliferMode hinzugefügt
   170907 0087 - Amplifier nur bei Zustandsänderung schalten
   170820 0086 - Attribut ftuiSupport erweitert
   170804 0085 - SB_PLAYER_ftuiMedialist wurde manchmal aufgerufen bevor die nötigen Readings gesetzt waren
               - Ausführungszeit von SB_PLAYER_tcb_ftuiMedialist überwachen (verbose 3)
-  170804 0084 - Songinfos weiter verzögern (Probleme mit langsamer Hardware)
-              - Songinfos gruppiert abrufen
-              - ftuiMedialist löschen wenn Playlist leer ist
-              - Aufbau ftuiMedialist korrigiert wenn Songinfos fehlen
-  170803 0083 - Songinfos verzögert abrufen
-  170722 0082 - ftui-Readings automatisch aktualisieren wenn ftuiSupport gesetzt wird
-              - Cover, Artist und Titel von Remote-Streams in ftuiMedialist aktualisieren
-              - zusätzliche Größen für CoverArt
-              - alarmFadeSeconds hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -116,6 +109,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  170917 0088 - zusätzliches Logging für Amplifier (verbose 3)
+              - Attribut ampliferMode hinzugefügt
   170907 0087 - Amplifier nur bei Zustandsänderung schalten
   170820 0086 - Attribut ftuiSupport erweitert
   170804 0085 - SB_PLAYER_ftuiMedialist wurde manchmal aufgerufen bevor die nötigen Readings gesetzt waren
