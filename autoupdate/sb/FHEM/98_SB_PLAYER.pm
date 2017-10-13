@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0088 2017-09-17 21:07:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0089 2017-10-13 22:14:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -454,10 +454,15 @@ sub SB_PLAYER_Define( $$ ) {
         # the MAC adress is valid
         $hash->{PLAYERMAC} = lc($a[ 0 ]);       # CD 0026 lc added
     } else {
-        my $msg = "SB_PLAYER_Define: playerid ist keine MAC Adresse " .
-            "im Format xx:xx:xx:xx:xx:xx oder xx-xx-xx-xx-xx-xx";
-        Log3( $hash, 1, $msg );
-        return( $msg );
+        # CD 0089 auf IP-Adresse prüfen
+        if( SB_PLAYER_IsValidIPV4( $a[ 0] ) == 1 ) {
+            $hash->{PLAYERMAC} = $a[ 0 ];
+        } else {
+            my $msg = "SB_PLAYER_Define: playerid ist keine MAC Adresse " .
+                "im Format xx:xx:xx:xx:xx:xx oder xx-xx-xx-xx-xx-xx";
+            Log3( $hash, 1, $msg );
+            return( $msg );
+        }
     }
 
     # shift the MAC away
@@ -886,10 +891,19 @@ sub SB_PLAYER_Parse( $$ ) {
             # this line supports autocreate
             return( "UNDEFINED SB_PLAYER_$id SB_PLAYER $idbuf" );
         } else {
-            # the MAC adress is not valid
-            Log3( undef, 3, "SB_PLAYER_Parse: the unknown ID $id is NOT " .
-                  "a valid MAC Adress" );
-            return( undef );
+            # CD 0089 auf IP-Adresse prüfen
+            if( SB_PLAYER_IsValidIPV4( $id ) == 1 ) {
+                $hash->{PLAYERMAC} = $id;
+                Log3( undef, 3, "SB_PLAYER_Parse: the unknown ID $id is a valid " .
+                      "IPv4 Adress" );
+                # this line supports autocreate
+                return( "UNDEFINED SB_PLAYER_$id SB_PLAYER $id" );
+            } else {
+                # the MAC adress is not valid
+                Log3( undef, 3, "SB_PLAYER_Parse: the unknown ID $id is NOT " .
+                      "a valid MAC Adress" );
+                return( undef );
+            }
         }
     }
 
@@ -1405,6 +1419,7 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "state", "off" );
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
+            $hash->{WILLSLEEPIN} = '?'; # CD 0089
         } else {
             # should be "?" normally
         }
@@ -1501,6 +1516,7 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "playStatus", "stopped" );
             RemoveInternalTimer( $hash );
             RemoveInternalTimer( "QueryElapsedTime:$name");
+            $hash->{WILLSLEEPIN} = '?'; # CD 0089
             # CD 0074 end
             SB_PLAYER_Amplifier( $hash );
             # CD 0031 wenn Player während TTS verschwindet Zustand zurücksetzen
@@ -1559,6 +1575,7 @@ sub SB_PLAYER_Parse( $$ ) {
                     #readingsBulkUpdate( $hash, "presence", "absent" );       # CD 0013 deaktiviert, power sagt nichts über presence
                     readingsBulkUpdate( $hash, "state", "off" );
                     readingsBulkUpdate( $hash, "power", "off" );
+                    $hash->{WILLSLEEPIN} = '?'; # CD 0089
                     SB_PLAYER_Amplifier( $hash );
                     delete($hash->{helper}{playAfterPowerOn}) if(defined($hash->{helper}{playAfterPowerOn}));   # CD 0030
                     # CD 0031 wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
@@ -1891,6 +1908,10 @@ sub SB_PLAYER_Parse( $$ ) {
            "ftuiMedialist:$name",
            0 );
     # CD 0065 end
+    # CD 0089 start
+    } elsif( $cmd eq "sleep" ) {
+        $hash->{WILLSLEEPIN} = int($args[0])." secs" if defined($args[ 0 ]);
+    # CD 0089 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for
         # autocreate
@@ -2734,8 +2755,13 @@ sub SB_PLAYER_Set( $@ ) {
                     $tl='';
 
                     $filename = $1;
-                    $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
-                    $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
+                    # CD 0089 kein Dateiname sondern Optionen/Befehle
+                    if($filename=~/^opt:(.*)/) {
+                    
+                    } else {
+                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
+                        $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
+                    }
                     push(@textlines, '|'.$filename.'|');
                     $filename=undef;
                 # CD 0038 Leerzeichen in Dateinamen zulassen
@@ -2747,8 +2773,13 @@ sub SB_PLAYER_Set( $@ ) {
                     push(@textlines,$tl) if($tl ne '');
                     $tl='';
 
-                    $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
-                    $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
+                    # CD 0089 kein Dateiname sondern Optionen/Befehle
+                    if($filename=~/^opt:(.*)/) {
+                    
+                    } else {
+                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
+                        $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
+                    }
                     push(@textlines, '|'.$filename.'|');
                     $filename=undef;
                 # CD 0038
@@ -3195,16 +3226,34 @@ sub SB_PLAYER_LoadTalk($) {
     if(defined($hash->{helper}{ttsqueue})) {
         if(($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST)||($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE)) {
             IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" ) if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST);
-            for (@{$hash->{helper}{ttsqueue}}) {
-                if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST) {
-                    # ich bin Master und talk ist nicht aktiv
-                    IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $_ . "\n" );
-                } else {
-                    # talk ist aktiv und ein anderer Player ist Master
-                    IOWrite( $hash, $hash->{helper}{ttsMaster}." fhemrelay ttsadd ".$_."\n" );
+            my $arr = $hash->{helper}{ttsqueue};
+            my $playlistadd=0;
+            if(defined($arr)) {
+                # CD 0089 Optionen hinzugefügt
+                while(@{$arr} > 0) {
+                    my $qe=$arr->[0];
+                    Log 0,$qe;
+                    if($qe=~/^opt%3A(.*)/) {
+                        my @opts=split '=',uri_unescape($1);
+                        if(($opts[0] eq 'ttsvolume') && (@opts==2)) {
+                            last if($playlistadd==1);   # wenn bereits Elemente in die Playlist eingefügt wurden warten bis diese abgespielt wurden
+                            SB_PLAYER_SetTTSVolume($hash,$opts[1],0);
+                        }
+                    } else {
+                        if($hash->{helper}{ttsstate}==TTS_LOADPLAYLIST) {
+                            # ich bin Master und talk ist nicht aktiv
+                            IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $qe . "\n" );
+                            $playlistadd=1;
+                        } else {
+                            # talk ist aktiv und ein anderer Player ist Master
+                            IOWrite( $hash, $hash->{helper}{ttsMaster}." fhemrelay ttsadd ". $qe ."\n" );
+                            $playlistadd=1;
+                        }
+                    }
+                    shift(@{$arr});
                 }
+                delete($hash->{helper}{ttsqueue}) if(@{$arr} == 0);
             }
-            delete($hash->{helper}{ttsqueue});
 
             if($hash->{helper}{ttsstate}!=TTS_SYNCGROUPACTIVE) {
                 # andere Player in Gruppe informieren
@@ -3245,14 +3294,25 @@ sub SB_PLAYER_PrepareTalk($) {
     IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 0\n" );
     IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
     if(defined($hash->{helper}{ttsVolume})) {
-        SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0);
-        my $vol=$hash->{helper}{ttsVolume};
-        $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $hash->{helper}{ttsVolume} > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
-        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $vol)."\n" );   # CD 0065 SB_PLAYER_FHEM2LMSVolume
-        SB_PLAYER_SetSyncedVolume($hash,$hash->{helper}{ttsVolume},1);
+        SB_PLAYER_SetTTSVolume($hash,$hash->{helper}{ttsVolume},1);
     }
     SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
 }
+
+# CD 0089 start
+sub SB_PLAYER_SetTTSVolume($$$) {
+    my ( $hash, $ttsvolume, $changestate ) = @_;
+    my $name = $hash->{NAME};
+
+    return unless defined($ttsvolume);
+    
+    SB_PLAYER_SetTTSState($hash,TTS_SETVOLUME,0,0) if($changestate==1);
+    my $vol=$ttsvolume;
+    $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $ttsvolume > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsOptions}{ignorevolumelimit})); # CD 0031
+    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $vol)."\n" );   # CD 0065 SB_PLAYER_FHEM2LMSVolume
+    SB_PLAYER_SetSyncedVolume($hash,$ttsvolume,1);
+}
+# CD 0089 end
 
 # CD 0014 start
 # ----------------------------------------------------------------------------
@@ -4360,6 +4420,31 @@ sub SB_PLAYER_IsValidMAC( $ ) {
     }
 }
 
+# CD 0089 start
+# ----------------------------------------------------------------------------
+#  used for checking, if the string contains a valid IP v4 (decimal) address
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_IsValidIPV4( $ ) {
+    my $instr = shift( @_ );
+
+    if( $instr =~ m/^(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)$/ )
+    {
+        if($1 <= 255 && $2 <= 255 && $3 <= 255 && $4 <= 255)
+        {
+            return( 1 );
+        }
+        else
+        {
+            return( 0 );
+        }
+    }
+    else
+    {
+        return( 0 );
+    }
+}
+# CD 0089 end
+
 # ----------------------------------------------------------------------------
 #  used to turn on our server
 # ----------------------------------------------------------------------------
@@ -4681,6 +4766,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     # CD 0003 end
 
     my $lastId=0;   # CD 0030
+    my $willsleepinfound=0; # CD 0089
 
     # loop through the results
     foreach( @data2 ) {
@@ -4827,7 +4913,8 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             next;
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
-            $hash->{WILLSLEEPIN} = "$2 secs";
+            $hash->{WILLSLEEPIN} = int($2)." secs";
+            $willsleepinfound=1;
             next;
 
         } elsif( $cur =~ /^(mixervolume:)(.*)/ ) {
@@ -4929,6 +5016,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
         }
     }
+    $hash->{WILLSLEEPIN} = '?' unless $willsleepinfound==1; # CD 0089
     $hash->{helper}{playerStatusOK}=1;  # CD 0042
 
     # CD 0065 start

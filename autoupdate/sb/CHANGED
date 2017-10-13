@@ -1,12 +1,14 @@
 ﻿97_SB_SERVER:
+  171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
   170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
   170625 0041 - MAC-Adresse besser überprüfen
               - Initialisierung der Readings über readingsBulkUpdate
               - NOTIFYDEV verwenden
-  170618 0040 - Reading scanduration hinzugefügt
-  170617 0039 - scan*-Readings aktualisieren
 98_SB_PLAYER:
+  171013 0089 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
+              - Lautstärke während TTS ändern (|ttsvolume=xx|)
+              - Internal WILLSLEEPIN geändert
   170917 0088 - zusätzliches Logging für Amplifier (verbose 3)
               - Attribut ampliferMode hinzugefügt
   170907 0087 - Amplifier nur bei Zustandsänderung schalten
@@ -17,6 +19,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
   170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
   170625 0041 - MAC-Adresse besser überprüfen
@@ -109,6 +112,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  171013 0089 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
+              - Lautstärke während TTS ändern (|ttsvolume=xx|)
+              - Internal WILLSLEEPIN geändert
   170917 0088 - zusätzliches Logging für Amplifier (verbose 3)
               - Attribut ampliferMode hinzugefügt
   170907 0087 - Amplifier nur bei Zustandsänderung schalten
