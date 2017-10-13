@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0043 2017-08-20 18:19:00Z CD $
+# $Id: 97_SB_SERVER.pm 0044 2017-10-13 22:14:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0043';
+use constant SB_SERVER_VERSION => '0044';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -1635,6 +1635,31 @@ sub SB_SERVER_ParseAppResponse( $$ ) {
 }
 # CD 0032 end
 
+# CD 0044 start
+# ----------------------------------------------------------------------------
+#  used for checking, if the string contains a valid IP v4 (decimal) address
+# ----------------------------------------------------------------------------
+sub SB_SERVER_IsValidIPV4( $ ) {
+    my $instr = shift( @_ );
+
+    if( $instr =~ m/^(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)$/ )
+    {
+        if($1 <= 255 && $2 <= 255 && $3 <= 255 && $4 <= 255)
+        {
+            return( 1 );
+        }
+        else
+        {
+            return( 0 );
+        }
+    }
+    else
+    {
+        return( 0 );
+    }
+}
+# CD 0044 end
+
 # CD 0041 start
 # ----------------------------------------------------------------------------
 #  used for checking if the string contains a valid MAC adress
@@ -1674,7 +1699,7 @@ sub SB_SERVER_DispatchCommandLine( $$ ) {
     # Player ID is MAC adress, hence : included
     my @id = split( ":", $id1 );
     
-    if( SB_SERVER_IsValidMAC($id1) == 1 ) { # CD 0041 SB_SERVER_IsValidMAC verwenden
+    if(( SB_SERVER_IsValidMAC($id1) == 1 ) || ( SB_SERVER_IsValidIPV4($id1) == 1)) { # CD 0041 SB_SERVER_IsValidMAC verwenden # CD 0044 auf IP-Adresse prüfen
         # CD 0032 start
         # check for app response
         if(SB_SERVER_ParseAppResponse($hash,$buf)==0) {
@@ -2359,6 +2384,19 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    }
         $nameactive=0;  # CD 0030
 	    next;
+    # CD 0044 auf IP-Adresse prüfen
+	} elsif( $_ =~ /^(playerid:)(.*)/ ) {
+        if (SB_PLAYER_IsValidIPV4( $2 ) == 1) {
+            if( $addplayers == true ) {
+                $players{$2}{ID} = $2;
+                $players{$2}{MAC} = $2;
+                $players{$2}{isplayer} = "1";   # für virtuellen Player der angelegt wird wenn stream.mp3 abgerufen wird
+                $currentplayerid = $2;
+            }
+        }
+        $nameactive=0;
+	    next;
+    # CD 0044 end
 	} elsif( $_ =~ /^(name:)(.*)/ ) {
 	    if( $currentplayerid ne "none" ) {
 		$players{$currentplayerid}{name} = $2;
@@ -2397,7 +2435,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    next;
 	} elsif( $_ =~ /^(isplayer:)([0|1])/ ) {
 	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{isplayer} = $2;
+            $players{$currentplayerid}{isplayer} = $2 unless defined($players{$currentplayerid}{isplayer});     # CD 0044 Hack für Zugriff über stream.mp3
 	    }
         $nameactive=0;  # CD 0030
 	    next;
