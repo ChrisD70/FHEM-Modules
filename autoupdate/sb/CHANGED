@@ -6,6 +6,7 @@
               - Initialisierung der Readings über readingsBulkUpdate
               - NOTIFYDEV verwenden
 98_SB_PLAYER:
+  171019 0090 - Debugausgabe deaktiviert
   171013 0089 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
               - Lautstärke während TTS ändern (|ttsvolume=xx|)
               - Internal WILLSLEEPIN geändert
@@ -112,6 +113,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  171019 0090 - Debugausgabe deaktiviert
   171013 0089 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
               - Lautstärke während TTS ändern (|ttsvolume=xx|)
               - Internal WILLSLEEPIN geändert

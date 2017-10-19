@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0089 2017-10-13 22:14:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0090 2017-10-19 20:44:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3232,7 +3232,7 @@ sub SB_PLAYER_LoadTalk($) {
                 # CD 0089 Optionen hinzugefügt
                 while(@{$arr} > 0) {
                     my $qe=$arr->[0];
-                    Log 0,$qe;
+                    # Log 0,$qe;
                     if($qe=~/^opt%3A(.*)/) {
                         my @opts=split '=',uri_unescape($1);
                         if(($opts[0] eq 'ttsvolume') && (@opts==2)) {
