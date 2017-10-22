@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0044 2017-10-13 22:14:00Z CD $
+# $Id: 97_SB_SERVER.pm 0045 2017-10-22 22:04:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0044';
+use constant SB_SERVER_VERSION => '0045';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -2604,6 +2604,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
         push @SB_SERVER_SM, "ADD $players{$player}{name} " .
                       "$players{$player}{MAC} $uniqueid" # CD 0029 aufteilen wenn Hardware zu schwach
     }
+    push @SB_SERVER_SM,'DONE';  # CD 0045
     # CD 0029 start
     if(scalar(@SB_SERVER_SM)>0) {
         RemoveInternalTimer( "SB_SERVER_tcb_SendSyncMasters:$name");
@@ -2632,14 +2633,14 @@ sub SB_SERVER_tcb_SendSyncMasters( $ ) {
     my $t=time();
 
     do {
-        $a=pop @SB_SERVER_SM;
+        $a=shift @SB_SERVER_SM; # CD 0045 Reihenfolge beibehalten
         if (defined($a)) {
             SB_SERVER_Broadcast( $hash, "SYNCMASTER", $a, undef );
         }
     } while ((time()<$t+0.05) && defined($a));
 
     if(scalar(@SB_SERVER_SM)>0) {
-    Log 0,"SB_SERVER_tcb_SendSyncMasters: ".scalar(@SB_SERVER_SM)." entries remaining";
+    #Log 0,"SB_SERVER_tcb_SendSyncMasters: ".scalar(@SB_SERVER_SM)." entries remaining";
         InternalTimer( gettimeofday() + 0.05,
                    "SB_SERVER_tcb_SendSyncMasters",
                    "SB_SERVER_tcb_SendSyncMasters:$name",
@@ -2867,7 +2868,7 @@ sub SB_SERVER_tcb_SendFavorites( $ ) {
     my $t=time();
 
     do {
-        $a=pop @SB_SERVER_FAVS;
+        $a=shift @SB_SERVER_FAVS;   # CD 0045 Reihenfolge beibehalten
         if (defined($a)) {
             SB_SERVER_Broadcast( $hash, "FAVORITES", $a, undef );     # CD 0009 URL an Player schicken
         }
@@ -3034,7 +3035,7 @@ sub SB_SERVER_tcb_SendAlarmPlaylists( $ ) {
     my $t=time();
 
     do {
-        $a=pop @SB_SERVER_AL_PLS;
+        $a=shift @SB_SERVER_AL_PLS; # CD 0045 Reihenfolge beibehalten
         if (defined($a)) {
             my $i1=index($a," title:");
             my $i2=index($a," url:");
@@ -3165,7 +3166,7 @@ sub SB_SERVER_tcb_SendPlaylists( $ ) {
     my $t=time();
 
     do {
-        $a=pop @SB_SERVER_PLS;
+        $a=shift @SB_SERVER_PLS;    # CD 0045 Reihenfolge beibehalten
         if (defined($a)) {
             SB_SERVER_Broadcast( $hash, "PLAYLISTS", $a, undef );
         }
