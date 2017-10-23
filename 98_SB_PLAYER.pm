@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0091 2017-10-22 22:04:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0092 2017-10-23 22:08:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1448,8 +1448,11 @@ sub SB_PLAYER_Parse( $$ ) {
 
     } elsif( $cmd eq "connected" ) {
         readingsBulkUpdate( $hash, "connected", $args[ 0 ] );
-        readingsBulkUpdate( $hash, "presence", "present" );
-
+        if($args[0] eq '1') {   # CD 0092 nur bei 1 auf present setzen
+            readingsBulkUpdate( $hash, "presence", "present" );
+        } else {
+            SB_PLAYER_SetPlayerAbsent($hash);   # CD 0092
+        }
     } elsif( $cmd eq "name" ) {
         $hash->{PLAYERNAME} = join( " ", @args );
 
