@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0092 2017-10-23 22:08:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0093 2017-10-29 21:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1803,23 +1803,29 @@ sub SB_PLAYER_Parse( $$ ) {
         readingsBulkUpdate( $hash, "currentTrackPosition",int($args[ 0 ]+0.5));  # CD 0047
         delete($hash->{helper}{saveLocked}) if (($hash->{helper}{ttsstate}==TTS_IDLE) && defined($hash->{helper}{saveLocked}));
         # CD 0091 Hänger erkennen
-        $hash->{helper}{elapsedTime}{last}=$args[ 0 ] unless defined($hash->{helper}{elapsedTime}{last});
-        if($hash->{helper}{elapsedTime}{last} eq $args[ 0 ]) {
-            $hash->{helper}{elapsedTime}{count}=0 unless defined($hash->{helper}{elapsedTime}{count});
-            $hash->{helper}{elapsedTime}{count}++;
-            if($hash->{helper}{elapsedTime}{count}>10) {
-                # Player noch vorhanden, Status abfragen
-                if(ReadingsVal($name,"presence","x") eq "present") {
-                    Log3( $hash, 2, "SB_PLAYER_Parse($name): currentTrackPosition frozen, player present, sending status request");
-                    delete($hash->{helper}{disableGetStatus}) if defined($hash->{helper}{disableGetStatus});
-                    SB_PLAYER_GetStatus( $hash );
-                    $hash->{helper}{elapsedTime}{count}=0;
+        # CD 0093 nur wenn abgespielt wird
+        if(ReadingsVal($name,'playStatus','x') eq 'playing') {
+            $hash->{helper}{elapsedTime}{last}=$args[ 0 ] unless defined($hash->{helper}{elapsedTime}{last});
+            if($hash->{helper}{elapsedTime}{last} eq $args[ 0 ]) {
+                $hash->{helper}{elapsedTime}{count}=0 unless defined($hash->{helper}{elapsedTime}{count});
+                $hash->{helper}{elapsedTime}{count}++;
+                if($hash->{helper}{elapsedTime}{count}>10) {
+                    # Player noch vorhanden, Status abfragen
+                    if(ReadingsVal($name,"presence","x") eq "present") {
+                        Log3( $hash, 2, "SB_PLAYER_Parse($name): currentTrackPosition frozen, player present, sending status request");
+                        delete($hash->{helper}{disableGetStatus}) if defined($hash->{helper}{disableGetStatus});
+                        SB_PLAYER_GetStatus( $hash );
+                        $hash->{helper}{elapsedTime}{count}=0;
+                    }
+                    if(ReadingsVal($name,"presence","x") eq "absent") {
+                        Log3( $hash, 2, "SB_PLAYER_Parse($name): currentTrackPosition frozen, player absent, trying to stop...");
+                        IOWrite( $hash, "$hash->{PLAYERMAC} stop\n" );
+                        $hash->{helper}{elapsedTime}{count}=0;
+                    }
                 }
-                if(ReadingsVal($name,"presence","x") eq "absent") {
-                    Log3( $hash, 2, "SB_PLAYER_Parse($name): currentTrackPosition frozen, player absent, trying to stop...");
-                    IOWrite( $hash, "$hash->{PLAYERMAC} stop\n" );
-                    $hash->{helper}{elapsedTime}{count}=0;
-                }
+            } else {
+                $hash->{helper}{elapsedTime}{count}=0;
+                $hash->{helper}{elapsedTime}{last}=$args[ 0 ];
             }
         } else {
             $hash->{helper}{elapsedTime}{count}=0;
@@ -5151,7 +5157,19 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
                 readingsBulkUpdate( $hash, "synced", $syncgroup );
             } else {
             # CD 0055 end
-                readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}" );    # Matthew 0019 hinzugefügt
+                if(defined($hash->{SYNCMASTERPN})) {
+                    if(defined($hash->{SYNCGROUPPN})) {
+                        readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}" );    # Matthew 0019 hinzugefügt
+                    } else {
+                        readingsBulkUpdate( $hash, "synced", "$hash->{SYNCMASTERPN}" );
+                    }
+                } else {
+                    if(defined($hash->{SYNCGROUPPN})) {
+                        readingsBulkUpdate( $hash, "synced", "$hash->{SYNCGROUPPN}" );
+                    } else {
+                        readingsBulkUpdate( $hash, "synced", '' );
+                    }
+                }
             }
             next;
 

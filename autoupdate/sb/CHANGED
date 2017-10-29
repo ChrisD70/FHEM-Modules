@@ -4,6 +4,7 @@
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
   170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
 98_SB_PLAYER:
+  171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
   171022 0091 - Attribut 'disable' hinzugefügt
               - wenn ein Player hinzugefügt wird automatisch statusRequest beim Server ausführen damit alles initialisiert wird
@@ -119,6 +120,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
   171022 0091 - Attribut 'disable' hinzugefügt
               - wenn ein Player hinzugefügt wird automatisch statusRequest beim Server ausführen damit alles initialisiert wird
