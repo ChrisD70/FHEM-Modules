@@ -1,8 +1,9 @@
 ﻿97_SB_SERVER:
+  171104 0046 - Attribut disable hinzugefügt
+              - Hostname in der Definition möglich
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
   171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
-  170805 0042 - Ausführungszeit von SB_SERVER_Read überwachen (verbose 3)
 98_SB_PLAYER:
   171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
@@ -26,6 +27,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  171104 0046 - Attribut disable hinzugefügt
+              - Hostname in der Definition möglich
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
   171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref

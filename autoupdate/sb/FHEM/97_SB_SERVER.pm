@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0045 2017-10-22 22:04:00Z CD $
+# $Id: 97_SB_SERVER.pm 0046 2017-11-04 20:02:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0045';
+use constant SB_SERVER_VERSION => '0046';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -108,6 +108,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "doalivecheck:true,false ";
     $hash->{AttrList} .= "maxcmdstack ";
     $hash->{AttrList} .= "httpport ";
+    $hash->{AttrList} .= "disable:0,1 ";    # CD 0046
     $hash->{AttrList} .= "enablePlugins ";
     $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     $hash->{AttrList} .= $readingFnAttributes;
@@ -126,6 +127,7 @@ sub SB_SERVER_SetAttrList( $ ) {
     $attrList .= "doalivecheck:true,false ";
     $attrList .= "maxcmdstack ";
     $attrList .= "httpport ";
+    $attrList .= "disable:0,1 ";    # CD 0046
     $attrList .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     my $applist="enablePlugins";
     if (defined($hash->{helper}{apps})) {
@@ -142,6 +144,35 @@ sub SB_SERVER_SetAttrList( $ ) {
 }
 # CD 0032 end
 
+# CD 0046 start
+# ----------------------------------------------------------------------------
+# connect to server
+# ----------------------------------------------------------------------------
+sub SB_SERVER_TryConnect( $ ) {
+    my ($hash) = @_;
+
+    return if ($hash->{CLICONNECTION} eq 'on');
+    return if (IsDisabled($hash->{NAME}));
+    
+    delete $hash->{helper}{disableReconnect} if (defined($hash->{helper}{disableReconnect}));
+
+    if(SB_SERVER_IsValidIPV4($hash->{IP})) {
+        return DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit");
+    } else {
+        return DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit", \&SB_SERVER_DevIoCallback)
+    }
+}
+
+sub SB_SERVER_DevIoCallback($$)
+{
+    my ($hash, $err) = @_;
+    my $name = $hash->{NAME};
+    
+    if($err)
+    {
+        Log3 $name, 2, "SB_SERVER_DevIoCallback ($name) - unable to connect: $err";
+    }
+}
 # ----------------------------------------------------------------------------
 #  called when defining a module
 # ----------------------------------------------------------------------------
@@ -178,9 +209,18 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{USERNAME} = "?";
     $hash->{PASSWORD} = "?";
 
+    # CD 0046 Hostnamen statt IP-Adresse zulassen
+    $hash->{DeviceName} = $a[0];
+    if($a[0] =~ m/^(.+):([0-9]+)$/) {
+        $hash->{IP} = $1;
+        $hash->{CLIPORT}  = $2;
+    } else {
+        $hash->{IP} = $a[0];
+    }
+
     my ($user,$password);
     my @newDef;
-
+    
     # CD 0041 start
     my @notifyregexp;
     push @notifyregexp,"global";
@@ -355,7 +395,7 @@ sub SB_SERVER_Define( $$ ) {
                0 );
             $ret=undef;
         } else {
-            $ret= DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit" );
+            $ret= SB_SERVER_TryConnect($hash);
         }
     }
 
@@ -434,6 +474,8 @@ sub SB_SERVER_Ready( $ ) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
+    return if (IsDisabled($name));  # CD 0046
+
     #Log3( $hash, 4, "SB_SERVER_Ready: called" );
 
     # check for bad/missing password
@@ -489,7 +531,7 @@ sub SB_SERVER_Ready( $ ) {
                 $reconnect=1;
             }
             if (($reconnect==1)&&(!defined($hash->{helper}{disableReconnect}))) {
-                return( DevIo_OpenDev( $hash, 1, "SB_SERVER_DoInit") );
+                return( SB_SERVER_TryConnect( $hash ));
             } else {
                 return undef;
             }
@@ -545,6 +587,7 @@ sub SB_SERVER_Attr( @ ) {
                      $args[ 1 ] );
         }
     } elsif( $args[ 0 ] eq "enablePlugins" ) {
+        return "$name: device is disabled, modifying enablePlugins is not possible" if(IsDisabled($name));   # CD 0046
         # CD 0070 bei Änderung Status abfragen
         if( $cmd eq "set" ) {
             if($init_done>0) {
@@ -572,6 +615,43 @@ sub SB_SERVER_Attr( @ ) {
             delete($hash->{helper}{appcmd}) if(defined($hash->{helper}{appcmd}));
             DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         }
+    # CD 0046 start
+    } elsif( $args[ 0 ] eq 'disable' ) {
+        if( $cmd eq 'set' ) {
+            if($args[ 1 ] eq '1') {
+                DevIo_SimpleWrite( $hash, 'listen 0\n', 0 );
+                SB_SERVER_RemoveInternalTimers( $hash );
+                DevIo_Disconnected( $hash );
+                delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});
+                $hash->{CLICONNECTION} = 'off';
+                SB_SERVER_setStates($hash, 'disabled');
+            } else {
+                if ($hash->{CLICONNECTION} ne 'on') {
+                    SB_SERVER_setStates($hash, 'disconnected');
+                    if(!defined($hash->{helper}{disableReconnect})) {
+                        readingsSingleUpdate( $hash, 'power', 'off', 0 );
+                        delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});
+                        InternalTimer( gettimeofday() + 0.1,
+                           "SB_SERVER_tcb_Alive",
+                           "SB_SERVER_Alive:$name",
+                           0 );
+                    }
+                }
+            }
+        } elsif( $cmd eq 'del' ) {
+            if ($hash->{CLICONNECTION} ne 'on') {
+                SB_SERVER_setStates($hash, 'disconnected');
+                if(!defined($hash->{helper}{disableReconnect})) {
+                    readingsSingleUpdate( $hash, 'power', 'off', 0 );
+                    delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});
+                    InternalTimer( gettimeofday() + 0.1,
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name",
+                       0 );
+                }
+            }
+        }
+    # CD 0046 end
     }
     return; # 0033 betateilchen/mahowi
 }
@@ -612,6 +692,8 @@ sub SB_SERVER_Set( $@ ) {
         $res .= "recall:$out ";
 
         return( $res );
+    } elsif( IsDisabled($name) ) {  # CD 0046
+        return;
     } elsif( $cmd eq "on" ) {
 	if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
         # the server is off, try to reactivate it
@@ -638,6 +720,7 @@ sub SB_SERVER_Set( $@ ) {
                 readingsSingleUpdate( $hash, "power", "off", 1 );
                 SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
                 DevIo_Disconnected( $hash );
+                $hash->{CLICONNECTION} = 'off'; # CD 0046
                 InternalTimer( gettimeofday() + 5,
                            "SB_SERVER_tcb_Alive",
                            "SB_SERVER_Alive:$name",
@@ -658,6 +741,7 @@ sub SB_SERVER_Set( $@ ) {
             readingsSingleUpdate( $hash, "power", "off", 1 );
             SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
             SB_SERVER_RemoveInternalTimers( $hash );
+            $hash->{CLICONNECTION} = 'off'; # CD 0046
         }
     } elsif( $cmd eq "statusRequest" ) {
         Log3( $hash, 5, "SB_SERVER_Set: statusRequest" );
@@ -973,6 +1057,7 @@ sub SB_SERVER_tcb_StartTalk($) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
+    return if (IsDisabled($name));  # CD 0046
     return unless defined($hash->{helper}{sgTalkActivePlayer});
 
     # alle gesynced ?
@@ -1135,6 +1220,8 @@ sub SB_SERVER_Read( $ ) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
+    return if (IsDisabled($name));  # CD 0046
+
     #my $start = time;   # CD 0019
 
     Log3( $hash, 4, "SB_SERVER_Read($name): called" );
@@ -1269,6 +1356,8 @@ sub SB_SERVER_Write( $$$ ) {
 
     Log3( $hash, 4, "SB_SERVER_Write($name): called with FN:$fn" ); # unless($fn=~m/\?/);  # CD TEST 4
 
+    return if (IsDisabled($name));  # CD 0046
+
     if( !defined( $fn ) ) {
 	return( undef );
     }
@@ -1331,6 +1420,8 @@ sub SB_SERVER_Write( $$$ ) {
 sub SB_SERVER_DoInit( $ ) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
+
+    return if (IsDisabled($name));  # CD 0046
 
     Log3( $hash, 4, "SB_SERVER_DoInit($name): called" );
 
@@ -1691,6 +1782,8 @@ sub SB_SERVER_DispatchCommandLine( $$ ) {
 
     Log3( $hash, 4, "SB_SERVER_DispatchCommandLine($name): Line:$buf..." );
 
+    return if (IsDisabled($name));  # CD 0046
+
     # try to extract the first answer to the SPACE
     my $indx = index( $buf, " " );
     my $id1  = substr( $buf, 0, $indx );
@@ -2022,6 +2115,8 @@ sub SB_SERVER_Alive( $ ) {
     my $name = $hash->{NAME};
     my $state=ReadingsVal($name, "state", "unknown");   # CD 0038
 
+    return if (IsDisabled($name));  # CD 0046
+
     # CD 0004 set default to off
     #my $rccstatus = "on";
     #my $pingstatus = "on";
@@ -2111,7 +2206,7 @@ sub SB_SERVER_Alive( $ ) {
             # first time we realized server is away
             if( $state eq "disconnected" ) {        # CD 0038 state statt STATE verwenden
                 delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});                  # CD 0007 remove delay for reconnect
-                DevIo_OpenDev( $hash, 1, "SB_SERVER_DoInit" );
+                SB_SERVER_TryConnect( $hash );
             }
 
             readingsSingleUpdate( $hash, "power", "on", 1 );
@@ -2228,6 +2323,8 @@ sub SB_SERVER_Broadcast( $$@ ) {
     my $iodevhash;
 
     Log3( $hash, 4, "SB_SERVER_Broadcast($name): called with $cmd - $msg" );
+
+    return if (IsDisabled($name));  # CD 0046
 
     if( !defined( $bin ) ) {
 	$bin = 0;
@@ -2927,6 +3024,8 @@ sub SB_SERVER_CMDStackPush( $$ ) {
 
     my $name = $hash->{NAME};
 
+    return if (IsDisabled($name));  # CD 0046
+
     my $n = $SB_SERVER_CmdStack{$name}{last_n};
 
     $n=0 if(!defined($n));                                          # CD 0007
@@ -3188,6 +3287,8 @@ sub SB_SERVER_CheckConnection($) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
+    return if (IsDisabled($name));  # CD 0046
+
     Log3( $hash, 3, "SB_SERVER_CheckConnection($name): STATE: " . ReadingsVal($name, "state", "unknown") . " power: ". ReadingsVal( $name, "power", "X" )); # CD 0009 level 2->3 # CD 0038 state statt STATE verwenden
     if(ReadingsVal( $name, "power", "X" ) ne "on") {
         Log3( $hash, 3, "SB_SERVER_CheckConnection($name): forcing power on");      # CD 0009 level 2->3
@@ -3225,9 +3326,11 @@ sub SB_SERVER_Notify( $$ ) {
     my $name = $hash->{NAME}; # own name / hash
     my $devName = $dev_hash->{NAME}; # Device that created the events
 
+    return if (IsDisabled($name));  # CD 0046
+
     # CD start
     if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
-        DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit" ) unless defined($hash->{helper}{disableReconnect}); # CD 0038
+        SB_SERVER_TryConnect( $hash ) unless defined($hash->{helper}{disableReconnect}); # CD 0038
     }
     # CD end
     #Log3( $hash, 3, "SB_SERVER_Notify($name): called" .
@@ -3321,6 +3424,8 @@ sub SB_SERVER_Notify( $$ ) {
 sub SB_SERVER_LMS_Status( $ ) {
     my ( $hash ) = @_;
     my $name = $hash->{NAME}; # own name / hash
+
+    return if (IsDisabled($name));  # CD 0046
 
     # CD 0007 login muss als erstes gesendet werden
     $hash->{helper}{SB_SERVER_LMS_Status}=time();
@@ -3795,7 +3900,7 @@ sub SB_SERVER_readPassword($)
   <a name="SBserverdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
     This module allows you in combination with the module SB_PLAYER to control a
@@ -3895,7 +4000,7 @@ sub SB_SERVER_readPassword($)
   <a name="SBserverdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_SERVER &lt;ip[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
     Diese Modul erm&ouml;glicht es - zusammen mit dem Modul SB_PLAYER - einen
