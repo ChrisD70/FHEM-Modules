@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0093 2017-10-29 21:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0094 2017-11-27 21:38:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3278,7 +3278,7 @@ sub SB_PLAYER_Set( $@ ) {
                 my $dev=$_;
                 my $mac;
                 # CD 0018 end
-                if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC} ) ) {
+                if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev} && defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC} ) )) {   # CD 0094 zuerst auf {$dev} prüfen
                     $mac=$hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC};
                 } else {
                     # CD 0038 Player nicht gefunden, testen ob Name zu einem FHEM-Gerät passt
@@ -3296,10 +3296,14 @@ sub SB_PLAYER_Set( $@ ) {
                     if((@arg == 2) && ($arg[1] eq "asSlave")) {
                         IOWrite( $hash, "$mac sync " .
                                  "$hash->{PLAYERMAC}\n" );
+                        # CD 0094 nur zum Test
+                        Log3( $hash, 2, "SB_PLAYER_Set($name): sync $dev ($mac) <- $name ($hash->{PLAYERMAC})");
                     } else {
                     # CD 0038 end
                         IOWrite( $hash, "$hash->{PLAYERMAC} sync " .
                                  "$mac\n" );
+                        # CD 0094 nur zum Test
+                        Log3( $hash, 2, "SB_PLAYER_Set($name): sync $dev ($mac) -> $name ($hash->{PLAYERMAC})");
                     }
                     $doGetStatus=1;
                 }

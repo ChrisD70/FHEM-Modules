@@ -5,6 +5,8 @@
   171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
   170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
 98_SB_PLAYER:
+  171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
+              - zusätzliches Logging für sync
   171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
   171022 0091 - Attribut 'disable' hinzugefügt
@@ -123,6 +125,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
+              - zusätzliches Logging für sync
   171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
   171022 0091 - Attribut 'disable' hinzugefügt
