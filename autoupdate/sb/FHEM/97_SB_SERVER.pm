@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0046 2017-11-04 20:02:00Z CD $
+# $Id: 97_SB_SERVER.pm 0047 2017-12-26 19:32:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0046';
+use constant SB_SERVER_VERSION => '0047';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -148,8 +148,8 @@ sub SB_SERVER_SetAttrList( $ ) {
 # ----------------------------------------------------------------------------
 # connect to server
 # ----------------------------------------------------------------------------
-sub SB_SERVER_TryConnect( $ ) {
-    my ($hash) = @_;
+sub SB_SERVER_TryConnect( $$ ) {
+    my ($hash,$reopen) = @_;    # CD 0047 reopen hinzugefügt
 
     return if ($hash->{CLICONNECTION} eq 'on');
     return if (IsDisabled($hash->{NAME}));
@@ -157,9 +157,9 @@ sub SB_SERVER_TryConnect( $ ) {
     delete $hash->{helper}{disableReconnect} if (defined($hash->{helper}{disableReconnect}));
 
     if(SB_SERVER_IsValidIPV4($hash->{IP})) {
-        return DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit");
+        return DevIo_OpenDev($hash, $reopen, "SB_SERVER_DoInit");
     } else {
-        return DevIo_OpenDev($hash, 0, "SB_SERVER_DoInit", \&SB_SERVER_DevIoCallback)
+        return DevIo_OpenDev($hash, $reopen, "SB_SERVER_DoInit", \&SB_SERVER_DevIoCallback)
     }
 }
 
@@ -204,7 +204,12 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{IP} = "127.0.0.1";
     $hash->{CLIPORT}  = 9090;
     $hash->{WOLNAME} = "none";
+    $hash->{helper}{wolSetCmd}=' ';         # CD 0047
+    $hash->{helper}{wolSetValue}='on';      # CD 0047
     $hash->{PRESENCENAME} = "none";         # CD 0007
+    $hash->{helper}{presenceReading}='state';           # CD 0047
+    $hash->{helper}{presenceValuePresent}='present';    # CD 0047
+    $hash->{helper}{presenceValueAbsent}='absent';      # CD 0047
     $hash->{RCCNAME} = "none";
     $hash->{USERNAME} = "?";
     $hash->{PASSWORD} = "?";
@@ -235,13 +240,20 @@ sub SB_SERVER_Define( $$ ) {
         push @notifyregexp,$2;              # CD 0041
 	    next;
 	} elsif( $_ =~ /^(WOL:)(.*)/ ) {
-	    $hash->{WOLNAME} = $2;
         push @newDef,$_;
+        my @pp=split ':',$2;                # CD 0047
+        $hash->{WOLNAME} = $pp[0];
+        $hash->{helper}{wolSetCmd}=$pp[1] if defined($pp[1]);        # CD 0047
+        $hash->{helper}{wolSetValue}=$pp[2] if defined($pp[2]);      # CD 0047
 	    next;
 	} elsif( $_ =~ /^(PRESENCE:)(.*)/ ) {   # CD 0007
-	    $hash->{PRESENCENAME} = $2;         # CD 0007
         push @newDef,$_;
-        push @notifyregexp,$2;              # CD 0041
+        my @pp=split ':',$2;                # CD 0047
+        $hash->{PRESENCENAME} = $pp[0];     # CD 0007 CD 0047
+        $hash->{helper}{presenceReading}=$pp[1] if defined($pp[1]);      # CD 0047
+        $hash->{helper}{presenceValuePresent}=$pp[2] if defined($pp[2]); # CD 0047
+        $hash->{helper}{presenceValueAbsent}=$pp[3] if defined($pp[3]);  # CD 0047
+        push @notifyregexp,$pp[0];              # CD 0041
 	    next;                               # CD 0007
 	} elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{3,5})/ ) {
 	    $hash->{IP} = $1;
@@ -255,11 +267,11 @@ sub SB_SERVER_Define( $$ ) {
 	    next;
 	} elsif( $_ =~ /^(USER:)(.*)/ ) {
         $user=$2 if($2 ne 'yes');
-	    $hash->{USERNAME} = 'yes';
+        $hash->{USERNAME} = 'yes';
         push @newDef,'USER:yes';
 	} elsif( $_ =~ /^(PASSWORD:)(.*)/ ) {
         $password=$2 if($2 ne 'yes');
-	    $hash->{PASSWORD} = 'yes';
+        $hash->{PASSWORD} = 'yes';
         push @newDef,'PASSWORD:yes';
 	} else {
         push @newDef,$_;
@@ -395,7 +407,7 @@ sub SB_SERVER_Define( $$ ) {
                0 );
             $ret=undef;
         } else {
-            $ret= SB_SERVER_TryConnect($hash);
+            $ret= SB_SERVER_TryConnect($hash,0);
         }
     }
 
@@ -527,11 +539,11 @@ sub SB_SERVER_Ready( $ ) {
                     delete($hash->{helper}{WOLFastReconnectNext});
                 }
             }
-            if( ReadingsVal( $hash->{PRESENCENAME}, "state", "present" ) eq "present" ) {
+            if( ReadingsVal( $hash->{PRESENCENAME}, $hash->{helper}{presenceReading}, $hash->{helper}{presenceValuePresent} ) eq $hash->{helper}{presenceValuePresent} ) {  # CD 0047 erweitert
                 $reconnect=1;
             }
             if (($reconnect==1)&&(!defined($hash->{helper}{disableReconnect}))) {
-                return( SB_SERVER_TryConnect( $hash ));
+                return( SB_SERVER_TryConnect( $hash , 1 ));
             } else {
                 return undef;
             }
@@ -698,7 +710,7 @@ sub SB_SERVER_Set( $@ ) {
 	if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
         # the server is off, try to reactivate it
         if( $hash->{WOLNAME} ne "none" ) {
-            fhem( "set $hash->{WOLNAME} on" );
+            fhem( "set $hash->{WOLNAME} $hash->{helper}{wolSetCmd} $hash->{helper}{wolSetValue}" ); # CD 0047 Befehl und Wert konfigurierbar
             $hash->{helper}{WOLFastReconnectUntil}=time()+120;   # CD 0007
             $hash->{helper}{WOLFastReconnectNext}=time()+30;    # CD 0007
         }
@@ -2141,10 +2153,10 @@ sub SB_SERVER_Alive( $ ) {
         # CD 0007 start
         if (($hash->{PRESENCENAME} ne "none")
             && defined($defs{$hash->{PRESENCENAME}})
-            && defined($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL})
-            && (($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) < AttrVal( $name, "alivetimer", 30 ))) {
+            && ((defined($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL})
+            && (($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) < AttrVal( $name, "alivetimer", 30 ))) || (GetType($hash->{PRESENCENAME},'x') ne 'PRESENCE'))) {
             Log3( $hash, 4,"SB_SERVER_Alive($name): using $hash->{PRESENCENAME}");                      # CD 0009 level 2->4
-            if( ReadingsVal( $hash->{PRESENCENAME}, "state", "absent" ) eq "present" ) {
+            if( ReadingsVal( $hash->{PRESENCENAME}, $hash->{helper}{presenceReading}, "xxxxxxx" ) eq $hash->{helper}{presenceValuePresent} ) {  # CD 0047 erweitert
                 $pingstatus = "on";
                 $hash->{helper}{pingCounter}=0;
             } else {
@@ -2206,7 +2218,7 @@ sub SB_SERVER_Alive( $ ) {
             # first time we realized server is away
             if( $state eq "disconnected" ) {        # CD 0038 state statt STATE verwenden
                 delete($hash->{NEXT_OPEN}) if($hash->{NEXT_OPEN});                  # CD 0007 remove delay for reconnect
-                SB_SERVER_TryConnect( $hash );
+                SB_SERVER_TryConnect( $hash , 1);
             }
 
             readingsSingleUpdate( $hash, "power", "on", 1 );
@@ -3330,7 +3342,7 @@ sub SB_SERVER_Notify( $$ ) {
 
     # CD start
     if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
-        SB_SERVER_TryConnect( $hash ) unless defined($hash->{helper}{disableReconnect}); # CD 0038
+        SB_SERVER_TryConnect( $hash , 0) unless defined($hash->{helper}{disableReconnect}); # CD 0038
     }
     # CD end
     #Log3( $hash, 3, "SB_SERVER_Notify($name): called" .
@@ -3390,16 +3402,29 @@ sub SB_SERVER_Notify( $$ ) {
         return( "" );
     # CD 0007 start
     } elsif( $devName eq $hash->{PRESENCENAME} ) {
-        if(grep (m/^present$|^absent$/,@{$dev_hash->{CHANGED}})) {
-            Log3( $hash, 3, "SB_SERVER_Notify($name): $devName changed to ". join(" ",@{$dev_hash->{CHANGED}}));    # CD 0023 loglevel 2->3
-            # CD 0023 start
-            if (defined($hash->{helper}{lastPRESENCEstate})) {
-                if($hash->{helper}{lastPRESENCEstate} eq $dev_hash->{CHANGED}[0]) {
-                    # nichts geändert
-                    return( undef );
-                }
+        my $pp=0;
+        my $pa=0;
+        my $ps;
+        
+        foreach my $line (@{$dev_hash->{CHANGED}}) {
+            my @args=split(':',$line);
+            my $ps;
+            # Spezialfall 'state'
+            $ps=trim($args[0]) if ((@args==1) && ($hash->{helper}{presenceReading} eq 'state'));
+            
+            # Reading: Value
+            $ps=trim($args[1]) if ((@args==2) && ($hash->{helper}{presenceReading} eq trim($args[0])));
+
+            if (defined($ps)) {
+                Log3( $hash, 3, "SB_SERVER_Notify($name): $devName changed to ". $ps);    # CD 0023 loglevel 2->3
+                $pp=$ps eq $hash->{helper}{presenceValuePresent};
+                $pa=$ps eq $hash->{helper}{presenceValueAbsent};
             }
-            $hash->{helper}{lastPRESENCEstate}=$dev_hash->{CHANGED}[0];
+        }
+        
+        # Serverstatus geändert ?
+        if (($pa)||($pp)) {
+            $hash->{helper}{lastPRESENCEstate}=$ps;
             # CD 0023 end
             SB_SERVER_RemoveInternalTimers( $hash );
             # do an update of the status, but SB CLI must come up
@@ -3409,9 +3434,8 @@ sub SB_SERVER_Notify( $$ ) {
                        "SB_SERVER_Alive:$name",
                        0 );
             return( "" );
-        } else {
-            return( undef );
         }
+        return( undef );
     # CD 0007 end
     } else {
         return( undef );
@@ -3900,7 +3924,7 @@ sub SB_SERVER_readPassword($)
   <a name="SBserverdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;[:&lt;command&gt;[:&lt;value&gt;]]] [PRESENCE:&lt;PRESENCE&gt;[:&lt;reading&gt;[:&lt;value for present&gt;[:&lt;value for absent&gt;]]]] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
     <br><br>
 
     This module allows you in combination with the module SB_PLAYER to control a
@@ -3912,8 +3936,11 @@ sub SB_SERVER_readPassword($)
     <b>Optional</b>
     <ul>
       <li><code>&lt;[RCC]&gt;</code>: You can define a FHEM RCC Device, if you want to wake it up when you set the SB_SERVER on.  </li>
-      <li><code>&lt;[WOL]&gt;</code>: You can define a FHEM WOL Device, if you want to wake it up when you set the SB_SERVER on.  </li>
-      <li><code>&lt;[PRESENCE]&gt;</code>: You can define a FHEM PRESENCE Device that is used to check if the server is reachable.  </li>
+      <li><code>&lt;[WOL]&gt;</code>: You can define a FHEM WOL Device, if you want to wake it up when you set the SB_SERVER on.
+      Command and value can be optionally configured, by default command is empty and 'on' is used as value.</li>
+      <li><code>&lt;[PRESENCE]&gt;</code>: You can define a FHEM PRESENCE Device that is used to check if the server is reachable.
+      Optionally a reading and values for present and absent can be added,
+      by default the reading 'state' and the values 'present' and 'absent' are used.</li>
       <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: If your LMS is password protected you can define the credentials here.  </li>
     </ul><br>
   </ul>
@@ -4000,7 +4027,7 @@ sub SB_SERVER_readPassword($)
   <a name="SBserverdefine"></a>
   <b>Define</b>
   <ul>
-    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;] [PRESENCE:&lt;PRESENCE&gt;] [USER:&lt;username&gt;] [PASSWORD:&lt;password&gt;]</code>
+    <code>define &lt;name&gt; SB_SERVER &lt;ip|hostname[:cliserverport]&gt; [RCC:&lt;RCC&gt;] [WOL:&lt;WOL&gt;[:&lt;Befehl&gt;[:&lt;Wert&gt;]]] [PRESENCE:&lt;PRESENCE&gt;[:&lt;Reading&gt;[:&lt;Wert für anwesend&gt;[:&lt;Wert für abwesend&gt;]]]] [USER:&lt;Benutzername&gt;] [PASSWORD:&lt;Passwort&gt;]</code>
     <br><br>
 
     Diese Modul erm&ouml;glicht es - zusammen mit dem Modul SB_PLAYER - einen
@@ -4014,9 +4041,13 @@ sub SB_SERVER_readPassword($)
     <b>Optionen</b>
     <ul>
       <li><code>&lt;[RCC]&gt;</code>: Hier kann ein FHEM RCC Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
-      <li><code>&lt;[WOL]&gt;</code>: Hier kann ein FHEM WOL Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.</li>
-      <li><code>&lt;[PRESENCE]&gt;</code>: Hier kann ein FHEM PRESENCE Device angegeben werden mit dem die Erreichbarkeit des Servers &uuml;berpr&uuml;ft werden kann.</li>
-      <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&ouml;nnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
+      <li><code>&lt;[WOL]&gt;</code>: Hier kann ein FHEM WOL Device angegeben werden mit dem der Server aufgeweckt und eingeschaltet werden kann.
+      Optional k&ouml;nnen Befehl und Wert mit angegeben werden, voreingestellt ist kein Befehl und der Wert 'on'.</li>
+      <li><code>&lt;[PRESENCE]&gt;</code>: Hier kann ein FHEM PRESENCE Device angegeben
+      werden mit dem die Erreichbarkeit des Servers &uuml;berpr&uuml;ft werden kann.
+      Optional k&ouml;nnen Reading und Werte f&uuml;r an/abwesend mit angegeben werden,
+      voreingestellt ist das Reading 'state' und die Werte 'present' und 'absent'.</li>
+      <li><code>&lt;Benutzername&gt;</code> und <code>&lt;Passwort&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&ouml;nnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
     </ul><br>
   </ul>
   <a name="SBserverset"></a>

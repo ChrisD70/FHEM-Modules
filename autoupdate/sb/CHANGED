@@ -1,9 +1,11 @@
 ﻿97_SB_SERVER:
+  171226 0047 - Connect/Reconnect geändert
+              - WOL: Befehl und Wert konfigurierbar
+              - PRESENCE: Reading und Werte konfigurierbar
   171104 0046 - Attribut disable hinzugefügt
               - Hostname in der Definition möglich
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
   171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
-  170820 0043 - alle Zeilenenden nach Linux konvertiert wegen commandref
 98_SB_PLAYER:
   171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
               - zusätzliches Logging für sync
@@ -29,6 +31,9 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  171226 0047 - Connect/Reconnect geändert
+              - WOL: Befehl und Wert konfigurierbar
+              - PRESENCE: Reading und Werte konfigurierbar
   171104 0046 - Attribut disable hinzugefügt
               - Hostname in der Definition möglich
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
