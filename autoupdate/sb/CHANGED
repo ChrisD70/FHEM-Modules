@@ -1,4 +1,6 @@
 ﻿97_SB_SERVER:
+  171227 0048 - diverse Zeichen aus IP-Adresse filtern
+              - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
   171226 0047 - Connect/Reconnect geändert
               - WOL: Befehl und Wert konfigurierbar
               - PRESENCE: Reading und Werte konfigurierbar
@@ -31,6 +33,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  171227 0048 - diverse Zeichen aus IP-Adresse filtern
+              - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
   171226 0047 - Connect/Reconnect geändert
               - WOL: Befehl und Wert konfigurierbar
               - PRESENCE: Reading und Werte konfigurierbar

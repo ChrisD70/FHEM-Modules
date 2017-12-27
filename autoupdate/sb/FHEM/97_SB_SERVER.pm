@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0047 2017-12-26 19:32:00Z CD $
+# $Id: 97_SB_SERVER.pm 0048 2017-12-27 15:40:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0047';
+use constant SB_SERVER_VERSION => '0048';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -171,6 +171,9 @@ sub SB_SERVER_DevIoCallback($$)
     if($err)
     {
         Log3 $name, 2, "SB_SERVER_DevIoCallback ($name) - unable to connect: $err";
+        SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
+        DevIo_Disconnected( $hash );    # CD 0048 wird nicht von DevIo gemacht ?
+        SB_SERVER_setStates($hash, "disconnected"); # CD 0048 wird nicht von DevIo gemacht ?
     }
 }
 # ----------------------------------------------------------------------------
@@ -213,6 +216,11 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{RCCNAME} = "none";
     $hash->{USERNAME} = "?";
     $hash->{PASSWORD} = "?";
+
+    # CD 0048 versuchen Namen/Adresse zu säubern
+    $a[0] =~ s/^https:\/\///;
+    $a[0] =~ s/^http:\/\///;
+    $a[0] =~ s/\/$//;
 
     # CD 0046 Hostnamen statt IP-Adresse zulassen
     $hash->{DeviceName} = $a[0];
@@ -2189,12 +2197,19 @@ sub SB_SERVER_Alive( $ ) {
                     $pingstatus = "on";
                     $hash->{helper}{pingCounter}=0;
                 } else {
-                    if( $p->ping( $hash->{IP}, 2 ) ) {
+                    eval {  # CD 0048 ungültige Adressen bringen FHEM zum Absturz
+                        if( $p->ping( $hash->{IP}, 2 ) ) {
+                            $pingstatus = "on";
+                            $hash->{helper}{pingCounter}=0;                                 # CD 0004
+                        } else {
+                            $pingstatus = "off";
+                            $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                        }
+                    };
+                    if($@) {
+                        Log3( $hash,1,"SB_SERVER_Alive($name): internal ping failed with $@");
                         $pingstatus = "on";
-                        $hash->{helper}{pingCounter}=0;                                 # CD 0004
-                    } else {
-                        $pingstatus = "off";
-                        $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;    # CD 0004
+                        $hash->{helper}{pingCounter}=0;
                     }
                     # close our ping mechanism again
                     $p->close( );
