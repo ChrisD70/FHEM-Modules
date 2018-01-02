@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0093 2017-10-29 21:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0095 2018-01-02 22:08:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -833,7 +833,8 @@ sub SB_PLAYER_tcb_DeleteRecallPause($) {
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
-    delete($hash->{helper}{recallPause});
+    delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));
+    delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
 }
 
 sub SB_PLAYER_QueryElapsedTime($) {
@@ -916,6 +917,8 @@ sub SB_PLAYER_SetPlayerAbsent( $ ) {
     RemoveInternalTimer( $hash );
     RemoveInternalTimer( "QueryElapsedTime:$name");
     $hash->{WILLSLEEPIN} = '?'; # CD 0089
+    delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
+    delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
     # CD 0074 end
     SB_PLAYER_Amplifier( $hash );
     # CD 0031 wenn Player während TTS verschwindet Zustand zurücksetzen
@@ -1042,7 +1045,7 @@ sub SB_PLAYER_Parse( $$ ) {
 
 
     } elsif( $cmd eq "play" ) {
-        if(!defined($hash->{helper}{recallPause})) {    # CD 0014
+        if(!defined($hash->{helper}{recallPause}) && !defined($hash->{helper}{pauseAfterPlay})) {    # CD 0014 CD 0095
             readingsBulkUpdate( $hash, "playStatus", "playing" );
             SB_PLAYER_Amplifier( $hash );
         } # CD 0014
@@ -1065,8 +1068,24 @@ sub SB_PLAYER_Parse( $$ ) {
         Log3( $hash, 5, "SB_PLAYER_Parse($name): mode:$cmd args:$args[0]" );
         if( $args[ 0 ] eq "play" ) {
             # CD 0014 start
-            if(defined($hash->{helper}{recallPause})) {
+            # CD 0095 pause muss an alle Player der Gruppe geschickt werden
+            if(defined($hash->{helper}{recallPause}) || defined($hash->{helper}{pauseAfterPlay})) { # CD 0095
                 IOWrite( $hash, "$hash->{PLAYERMAC} pause 1\n" );
+                if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    my @pl=split(",",$hash->{SYNCGROUP});
+                    foreach (@pl) {
+                        if ($hash->{PLAYERMAC} ne $_) {
+                            IOWrite( $hash, "$_ pause 1\n" );
+                        }
+                    }
+                }
+                # CD 0095 start
+                RemoveInternalTimer( "recallPause:$name");
+                InternalTimer( gettimeofday() + 2.0,    # CD 0095 Zeit eventuell nicht ausreichend bei vielen oder langsamen Playern
+                   "SB_PLAYER_tcb_DeleteRecallPause",
+                   "recallPause:$name",
+                   0 );
+                # CD 0095 end
             } else {
             # CD 0014 end
                 readingsBulkUpdate( $hash, "playStatus", "playing" );
@@ -1208,7 +1227,7 @@ sub SB_PLAYER_Parse( $$ ) {
             # CD 0000 end
 
             # CD 0014 start
-            if(defined($hash->{helper}{recallPause})) {
+            if(defined($hash->{helper}{recallPause}) || defined($hash->{helper}{pauseAfterPlay})) { # CD 0095
                 IOWrite( $hash, "$hash->{PLAYERMAC} pause 1\n" );
                 RemoveInternalTimer( "recallPause:$name");
                 InternalTimer( gettimeofday() + 0.5,
@@ -1522,6 +1541,8 @@ sub SB_PLAYER_Parse( $$ ) {
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
             $hash->{WILLSLEEPIN} = '?'; # CD 0089
+            delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
+            delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
         } else {
             # should be "?" normally
         }
@@ -1660,6 +1681,8 @@ sub SB_PLAYER_Parse( $$ ) {
                     $hash->{WILLSLEEPIN} = '?'; # CD 0089
                     SB_PLAYER_Amplifier( $hash );
                     delete($hash->{helper}{playAfterPowerOn}) if(defined($hash->{helper}{playAfterPowerOn}));   # CD 0030
+                    delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
+                    delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
                     # CD 0031 wenn Player während TTS ausgeschaltet wird nicht wieder einschalten
                     if(($hash->{helper}{ttsstate}>TTS_IDLE)&&($hash->{helper}{ttsstate}<TTS_RESTORE)) {
                         $hash->{helper}{savedPlayerState}{power}="off" if(defined($hash->{helper}{savedPlayerState}));
@@ -3083,7 +3106,7 @@ sub SB_PLAYER_Set( $@ ) {
         if (@arg>1) {
             my $outstr = uri_escape(decode('utf-8',join( " ", @arg[1..$#arg])));        # CD 0017
 
-            Log3( $hash, 5, "SB_PLAYER_Set($name): playlists command = $arg[ 0 ] param = $outstr" );
+            Log3( $hash, 5, "SB_PLAYER_Set($name): playlist command = $arg[ 0 ] param = $outstr" );
 
             if( $arg[ 0 ] eq "track" ) {
                 IOWrite( $hash, "$hash->{PLAYERMAC} playlist loadtracks " .
@@ -3278,7 +3301,7 @@ sub SB_PLAYER_Set( $@ ) {
                 my $dev=$_;
                 my $mac;
                 # CD 0018 end
-                if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC} ) ) {
+                if( defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev} && defined( $hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC} ) )) {   # CD 0094 zuerst auf {$dev} prüfen
                     $mac=$hash->{helper}{SB_PLAYER_SyncMasters}{$dev}{MAC};
                 } else {
                     # CD 0038 Player nicht gefunden, testen ob Name zu einem FHEM-Gerät passt
@@ -3296,10 +3319,14 @@ sub SB_PLAYER_Set( $@ ) {
                     if((@arg == 2) && ($arg[1] eq "asSlave")) {
                         IOWrite( $hash, "$mac sync " .
                                  "$hash->{PLAYERMAC}\n" );
+                        # CD 0094 nur zum Test
+                        Log3( $hash, 2, "SB_PLAYER_Set($name): sync $dev ($mac) <- $name ($hash->{PLAYERMAC})");
                     } else {
                     # CD 0038 end
                         IOWrite( $hash, "$hash->{PLAYERMAC} sync " .
                                  "$mac\n" );
+                        # CD 0094 nur zum Test
+                        Log3( $hash, 2, "SB_PLAYER_Set($name): sync $dev ($mac) -> $name ($hash->{PLAYERMAC})");
                     }
                     $doGetStatus=1;
                 }
@@ -3316,7 +3343,7 @@ sub SB_PLAYER_Set( $@ ) {
         }
         # CD 0028 end
     } elsif( $cmd eq "playlists" ) {
-        if( @arg == 1 ) {
+        if(( @arg == 1 )||( @arg == 2 )) {
             my $msg;
             if( defined( $hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{ID} ) ) {
                 if($hash->{helper}{SB_PLAYER_Playlists}{$arg[0]}{SOURCE} eq 'LMS') {    # CD 0070
@@ -3329,6 +3356,11 @@ sub SB_PLAYER_Set( $@ ) {
                 Log3( $hash, 5, "SB_PLAYER_Set($name): playlists command = " .
                       $msg . " ........  with $arg[0]" );
                 IOWrite( $hash, $msg . "\n" );
+                # CD 0095 Player auf stop oder pause setzen
+                if(defined($arg[1])) {
+                    $hash->{helper}{pauseAfterPlay}=1 if($arg[1] eq 'paused');
+                    IOWrite( $hash, $hash->{PLAYERMAC} . " stop\n" ) if($arg[1] eq 'stopped');
+                }
                 readingsSingleUpdate( $hash, "playlists", "$arg[ 0 ]", 1 );
                 SB_PLAYER_GetStatus( $hash );
             } else {
