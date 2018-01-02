@@ -9,26 +9,11 @@
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
   171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
 98_SB_PLAYER:
+  180102 0095 - stopped und paused zu playlists-Befehl hinzugefügt
   171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
               - zusätzliches Logging für sync
   171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
   171023 0092 - Auswertung der connected-Abfrage geändert
-  171022 0091 - Attribut 'disable' hinzugefügt
-              - wenn ein Player hinzugefügt wird automatisch statusRequest beim Server ausführen damit alles initialisiert wird
-              - Player auf 'absent' setzen wenn er nicht mehr im Statusabfrage des Servers enthalten ist
-              - mode abfragen wenn presence sich geändert hat aber keine Info über power vorhanden ist
-              - Fehlermeldung entfernt wenn keine Playlists definiert sind
-              - Playlist-URL vom LMS die HASH enthalten ignorieren
-              - wenn sich currentTrackPosition nicht mehr ändert statusRequest an Player schicken
-              - Stop-Timer für TTS korrigiert
-              - TTS wurde manchmal abgebrochen obschon noch Text in der Queue war
-              - TTS wurde nicht immer gestartet wenn der Player zuerst eingeschaltet werden musste
-              - TTS: diverse Timer aufräumen
-              - TTS: die Daten wurden nicht immer an den aktiven Player der Gruppe übertragen
-              - TTS: die Optionen nosaverestore,forcegroupon,ignorevolumelimit und eventondone können im Befehl mit übergeben werden (|opt:xxxxxx|)
-              - TTS: die Sprache kann mit |opt:l=xx| im talk-Befehl übergeben werden
-              - TTS: die Lautstärke kann mit |opt:v=xx| im talk-Befehl übergeben werden
-              - TTS: mit |opt:replace| wird die aktuelle Wiedergabe unterbrochen und die neue sofort gestartet
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -134,6 +119,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  180102 0095 - stopped und paused zu playlists-Befehl hinzugefügt
   171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
               - zusätzliches Logging für sync
   171029 0093 - Hänger nur überwachen wenn Wiedergabe läuft
