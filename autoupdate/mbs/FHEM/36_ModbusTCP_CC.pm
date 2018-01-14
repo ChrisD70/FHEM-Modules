@@ -1,11 +1,12 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0006 2017-05-28 14:18:00Z CD $
+# $Id: 36_ModbusTCP_CC.pm 0007 2018-01-14 11:16:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
 # 170205 0004 fixed writing 16-bit integers
 # 170527 0005 added FC 1, 2 and 15
 # 170528 0006 performance improvements, updated documentation
+# 180114 0007 ignore unknown format specifiers on WRITE_*_REGISTERS
 
 package main;
 
@@ -321,6 +322,8 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                       elsif($mbd[4] eq 'FB') {
                         # ignorieren
                         $ext=1;
+                      } else {
+                        $sval=$val;
                       }
                     } else {
                         $sval=$val;
@@ -414,6 +417,8 @@ sub ModbusTCP_CC_Parse($$) {####################################################
                               $found=1;
                             }
                             $ext=1;
+                          } else {
+                            $sval=$val;
                           }
                         } else {
                             $sval=$val;
