@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0048 2017-12-27 15:40:00Z CD $
+# $Id: 97_SB_SERVER.pm 0049 2018-01-27 09:47:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0048';
+use constant SB_SERVER_VERSION => '0049';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -319,8 +319,11 @@ sub SB_SERVER_Define( $$ ) {
     }
 
     # the port of the HTTP interface as needed for the coverart url
+    # CD 0049 auf $hash->{helper}{httpport} umgestellt
     if( !defined( $attr{$name}{httpport} ) ) {
-	$attr{$name}{httpport} = "9000";
+        $hash->{helper}{httpport}='9000';
+    } else {
+        $hash->{helper}{httpport}=$attr{$name}{httpport};
     }
 
     # Preset our readings if undefined
@@ -602,9 +605,12 @@ sub SB_SERVER_Attr( @ ) {
     } elsif( $args[ 0 ] eq "httpport" ) {
         # CD 0015 bei Änderung des Ports diesen an Clients schicken
         if( $cmd eq "set" ) {
+            $hash->{helper}{httpport}=$args[ 1 ];
             SB_SERVER_Broadcast( $hash, "SERVER",
                      "IP " . $hash->{IP} . ":" .
                      $args[ 1 ] );
+        } elsif( $cmd eq 'del' ) {
+            DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );               # CD 0049
         }
     } elsif( $args[ 0 ] eq "enablePlugins" ) {
         return "$name: device is disabled, modifying enablePlugins is not possible" if(IsDisabled($name));   # CD 0046
@@ -772,6 +778,7 @@ sub SB_SERVER_Set( $@ ) {
                    0 );
         DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
         DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
+        DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );               # CD 0049
         # CD 0032 start
         DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
         if(defined($hash->{helper}{apps})) {
@@ -1335,6 +1342,7 @@ sub SB_SERVER_Read( $ ) {
         DevIo_SimpleWrite( $hash, "favorites items 0 " .
                    AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",        # CD 0009 url mit abfragen
                    0 );
+        DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );     # CD 0049
         DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
     }
     # CD 0009 end
@@ -1468,7 +1476,7 @@ sub SB_SERVER_DoInit( $ ) {
             SB_SERVER_Broadcast( $hash, "SERVER",  "OFF" );
             SB_SERVER_Broadcast( $hash, "SERVER",
                      "IP " . $hash->{IP} . ":" .
-                     AttrVal( $name, "httpport", "9000" ) );
+                     $hash->{helper}{httpport} );
         }
         return( 1 );
     } elsif( $state eq "opened" ) { # CD 0038 state statt STATE verwenden
@@ -1490,7 +1498,7 @@ sub SB_SERVER_DoInit( $ ) {
 
             SB_SERVER_Broadcast( $hash, "SERVER",
                      "IP " . $hash->{IP} . ":" .
-                     AttrVal( $name, "httpport", "9000" ) );
+                     $hash->{helper}{httpport} );
             $hash->{helper}{doBroadcast}=1;                                 # CD 0007
 
             SB_SERVER_LMS_Status( $hash );
@@ -1856,7 +1864,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
 	    SB_SERVER_Broadcast( $hash, "SERVER",
 				 "IP " . $hash->{IP} . ":" .
-				 AttrVal( $name, "httpport", "9000" ) );
+                 $hash->{helper}{httpport} );
         delete ($hash->{helper}{doBroadcast});
     }
     # CD 0007 end
@@ -1871,7 +1879,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
 	    SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
 	    SB_SERVER_Broadcast( $hash, "SERVER",
 				 "IP " . $hash->{IP} . ":" .
-				 AttrVal( $name, "httpport", "9000" ) );
+                 $hash->{helper}{httpport} );
 	}
 
     } elsif( $cmd eq "pref" ) {
@@ -1905,7 +1913,17 @@ sub SB_SERVER_ParseCmds( $$ ) {
 		      "result for authorize received. Should be 0 or 1" );
 	    }
 	}
-
+    # CD 0049
+        if( $args[ 0 ] eq "httpport" ) {
+            if (defined($args[1]) && ($args[1] =~ /^([0-9])*/ )) {
+                if(!defined(AttrVal( $name, "httpport", undef ))) {
+                    $hash->{helper}{httpport}=$args[1]; 
+                    SB_SERVER_Broadcast( $hash, "SERVER",
+                         "IP " . $hash->{IP} . ":" .
+                         $hash->{helper}{httpport} );
+                }
+            }
+        }    
     } elsif( $cmd eq "login" ) {
 	if( ( $args[ 1 ] eq $hash->{USERNAME} ) &&
 	    ( $args[ 2 ] eq "******" ) ) {
@@ -3324,7 +3342,7 @@ sub SB_SERVER_CheckConnection($) {
 
         SB_SERVER_Broadcast( $hash, "SERVER",
                  "IP " . $hash->{IP} . ":" .
-                 AttrVal( $name, "httpport", "9000" ) );
+                 $hash->{helper}{httpport} );
         $hash->{helper}{doBroadcast}=1;
 
         SB_SERVER_LMS_Status( $hash );
@@ -3494,6 +3512,7 @@ sub SB_SERVER_LMS_Status( $ ) {
     DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
     DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );  # CD 0029
+    DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );     # CD 0049
     # CD 0032 start
     if(defined($hash->{helper}{apps})) {
         my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
@@ -4016,8 +4035,8 @@ sub SB_SERVER_readPassword($)
     <li><code>enablePlugins &lt;plugin1[,pluginX]&gt;</code><br>
     Adds the playlists and favorites (if available) of the specified LMS-plugins.</li>
     <li><code>httpport &lt;port&gt;</code><br>
-    Normally the http-port is set to 9000. If this ist NOT the case, you have to enter here the new
-    port-number. You can check the port-number of the LMS within its setup under Setup – Network – Web Server Port Number.</li>
+    Normally the http-port is automatically detected. This attribute can be used to override the detected value.
+    You can check the port-number of the LMS within its setup under Setup – Network – Web Server Port Number.</li>
     <li><a name="SBserver_attribut_ignoredIPs"><code>ignoredIPs &lt;IP-Address[,IP-Address]&gt;</code>
     </a><br />With this attribute you can define IP-addresses of players which will to be ignored by the server, e.g. "192.168.0.11,192.168.0.37"</li>
     <li><a name="SBserver_attribut_ignoredMACs"><code>ignoredMACs &lt;MAC-Address[,MAC-Address]&gt;</code>
@@ -4126,8 +4145,8 @@ sub SB_SERVER_readPassword($)
     <li><code>enablePlugins &lt;plugin1[,pluginX]&gt;</code><br>
     Bindet die Wiedergabelisten und Favoriten (soweit vorhanden) von LMS-Plugins (z.B. Spotify) ein.</li>
     <li><code>httpport &lt;port&gt;</code><br>
-    Im Normalfall ist der http-Port auf 9000 eingestellt. Sollte dies NICHT der Fall sein muss hier die ge&auml;nderte
-    Portnummer eingetragen werden. Zur &Uuml;berpr&uuml;fung kann im Server unter Einstellungen – Erweitert –Netzwerk
+    Im Normalfall wird der http-Port automatisch ermittelt. Sollte dies NICHT funktionieren kann er über das Attribut fest vorgegeben werden.
+    Zur &Uuml;berpr&uuml;fung kann im Server unter Einstellungen – Erweitert –Netzwerk
     - Anschlussnummer des Webservers nachgeschlagen werden.</li>
     <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Adresse&gt;[,IP-Adresse]</code></b>
     </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&auml;te durch die Angabe derer IP-Adressen unterdrückt werden, z.B. "192.168.0.11,192.168.0.37"</li>
