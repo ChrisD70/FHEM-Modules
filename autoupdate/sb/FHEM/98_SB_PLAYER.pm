@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0095 2018-01-02 22:08:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0096 2018-01-27 09:28:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -4532,7 +4532,7 @@ sub SB_PLAYER_ParseAlarms( $@ ) {
         shift( @data );
     }
 
-    fhem( "deletereading $name alarmid.*" );        # CD 0015 alte readings entfernen
+    fhem( "deletereading $name alarmid.*" ) if(ReadingsVal($name,'alarmid1','__xxx__') ne '__xxx__');        # CD 0015 alte readings entfernen # CD 0096 aber nur wenn es die Readings noch gibt, führt zu Hänger (83228)
 
     my $alarmcounter=0; # CD 0015
 

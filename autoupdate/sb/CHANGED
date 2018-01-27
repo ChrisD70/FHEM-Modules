@@ -1,4 +1,5 @@
 ﻿97_SB_SERVER:
+  180127 0049 - httpport automatisch vom Server lesen, kann aber über Attribut httpport überschrieben werden
   171227 0048 - diverse Zeichen aus IP-Adresse filtern
               - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
   171226 0047 - Connect/Reconnect geändert
@@ -7,8 +8,8 @@
   171104 0046 - Attribut disable hinzugefügt
               - Hostname in der Definition möglich
   171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
-  171013 0044 - Player mit IP-Adresse als ID unterstützen (stream.mp3)
 98_SB_PLAYER:
+  180127 0096 - Hänger in ParseAlarms behoben (Danke an Ronny für die Fehleranalyse)
   180102 0095 - stopped und paused zu playlists-Befehl hinzugefügt
   171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
               - zusätzliches Logging für sync
@@ -18,6 +19,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  180127 0049 - httpport automatisch vom Server lesen, kann aber über Attribut httpport überschrieben werden
   171227 0048 - diverse Zeichen aus IP-Adresse filtern
               - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
   171226 0047 - Connect/Reconnect geändert
@@ -119,6 +121,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  180127 0096 - Hänger in ParseAlarms behoben (Danke an Ronny für die Fehleranalyse)
   180102 0095 - stopped und paused zu playlists-Befehl hinzugefügt
   171127 0094 - keine leeren Einträge unter {helper}{SB_PLAYER_SyncMasters} anlegen
               - zusätzliches Logging für sync
