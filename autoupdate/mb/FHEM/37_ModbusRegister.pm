@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0023 $
+﻿# $Id: 37_ModbusRegister.pm 0024 2018-02-06 21:22:00Z CD $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
