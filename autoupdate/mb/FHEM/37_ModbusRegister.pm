@@ -22,6 +22,7 @@
 # 160128 0021 fixed wago address conversion for MD and MF
 # 160305 0022 added precision to conversion, changes for Wago I/O addressing
 # 160330 0023 added TIME and DT
+# 180206 0024 added DATE
 # TODO:
 
 package main;
@@ -60,7 +61,7 @@ ModbusRegister_Initialize($)
   $hash->{ParseFn}   = "ModbusRegister_Parse";
   $hash->{AttrFn}    = "ModbusRegister_Attr";
   $hash->{AttrList}  = "IODev ".
-                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,3WORD_S,3WORD_S_BE,QWORD,QWORD_BE,TIME,DT ".
+                       "plcDataType:WORD,INT,DWORD,DWORD_BE,DINT,DINT_BE,REAL,REAL_BE,3WORD,3WORD_BE,3WORD_S,3WORD_S_BE,QWORD,QWORD_BE,TIME,DT,DATE ".
                        "conversion ".
                        "updateInterval updateIntervall alignUpdateInterval ".
                        "disableRegisterMapping:0,1 ".
@@ -184,7 +185,7 @@ ModbusRegister_Define($$)
   $modules{ModbusRegister}{defptr}{$hash->{helper}{addr}}{$name} = $hash;
 
   if(defined($attr{$name}{plcDataType}) && !defined($hash->{helper}{wago})) {
-    if(($attr{$name}{plcDataType}=~/^DWORD/) || ($attr{$name}{plcDataType}=~/^DINT/) || ($attr{$name}{plcDataType}=~/^REAL/) || ($attr{$name}{plcDataType}=~/^TIME/) || ($attr{$name}{plcDataType}=~/^DT/)) { # 0023 CD added TIME and DT
+    if(($attr{$name}{plcDataType}=~/^DWORD/) || ($attr{$name}{plcDataType}=~/^DINT/) || ($attr{$name}{plcDataType}=~/^REAL/) || ($attr{$name}{plcDataType}=~/^TIME/) || ($attr{$name}{plcDataType}=~/^DT/) || ($attr{$name}{plcDataType}=~/^DATE/)) { # 0023 CD added TIME and DT # CD 0024 added DATE
       $hash->{helper}{nread}=2;
     }
     # CD 0007 start
@@ -208,6 +209,7 @@ ModbusRegister_Define($$)
     $modules{$hash->{TYPE}}{AttrList} =~ s/updateIntervall.//;
     $modules{$hash->{TYPE}}{AttrList} =~ s/enableUpdate.//;
   }
+  notifyRegexpChanged($hash, "global"); # CD 0024
   return undef;
 }
 
@@ -243,7 +245,7 @@ ModbusRegister_Set($@)
     return SetExtensions($hash, $list, @a); 
   }
 
-  if(($na==2) && (ModbusRegister_is_float($a[1]) || (ModbusRegister_GetDataType($hash) eq 'TIME') || (ModbusRegister_GetDataType($hash) eq 'DT'))) {
+  if(($na==2) && (ModbusRegister_is_float($a[1]) || (ModbusRegister_GetDataType($hash) eq 'TIME') || (ModbusRegister_GetDataType($hash) eq 'DT') || (ModbusRegister_GetDataType($hash) eq 'DATE'))) {
     $a[2]=$a[1];
     $a[1]="value";
     $na=3;
@@ -280,6 +282,15 @@ ModbusRegister_Set($@)
       }
     }
     # CD 0023 end
+    # CD 0024 start
+    if(ModbusRegister_GetDataType($hash) eq 'DATE') {
+      if($a[2]=~/^((?:19|20)\d\d)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])$/) {
+        $a[2]=timegm(0,0,0,$3,$2-1,$1);
+      } else {
+        return "invalid date value $a[2], format must be yyyy-mm-dd";
+      }
+    }
+    # CD 0024 end
     return "invalid value for set" if(($na>3)||!ModbusRegister_is_float($a[2])||($a[2]<$hash->{helper}{cnv}{min})||($a[2]>$hash->{helper}{cnv}{max}));
     my $v=$a[2];
     my $wlen=1;
@@ -303,7 +314,7 @@ ModbusRegister_Set($@)
           }
         }
       }
-      if(($plcDataType=~ /^DWORD/)||($plcDataType=~ /^TIME/)||($plcDataType=~ /^DT/)) {
+      if(($plcDataType=~ /^DWORD/)||($plcDataType=~ /^TIME/)||($plcDataType=~ /^DT/)||($plcDataType=~ /^DATE/)) {
         $wlen=2;
       }
       if($plcDataType=~ /^3WORD/) {
@@ -434,7 +445,7 @@ ModbusRegister_GetDataType($)
       $plcDataType='REAL' unless ($plcDataType=~/^REAL/);
     }
     if ($hash->{helper}{wagoDataType} eq 'D') {
-      $plcDataType='DWORD' unless (($plcDataType=~/^DINT/) || ($plcDataType=~/^DT/) || ($plcDataType=~/^TIME/));  # 0023 CD added TIME and DT
+      $plcDataType='DWORD' unless (($plcDataType=~/^DINT/) || ($plcDataType=~/^DT/) || ($plcDataType=~/^TIME/) || ($plcDataType=~/^DATE/));  # 0023 CD added TIME and DT # CD 0024 added DATE
     }
     if ($hash->{helper}{wagoDataType} eq 'W') {
       $plcDataType='WORD' unless ($plcDataType eq 'INT');
@@ -567,6 +578,15 @@ ModbusRegister_Parse($$)
         }
         # CD 0023 end
         
+        # CD 0024 start
+        if($plcDataType eq 'DATE'){
+          $v=($vals[1]<<16)+$vals[0];
+          my @t = gmtime($v);
+          $v=sprintf("%04d-%02d-%02d",$t[5]+1900, $t[4]+1, $t[3]);
+          $docnv=0;
+        }
+        # CD 0024 end
+
         if(defined($lh->{helper}{cnv}) && ($docnv==1)) {
           $v=$v*$lh->{helper}{cnv}{a}+$lh->{helper}{cnv}{b};
           if(defined($lh->{helper}{cnv}{pr}) && ($lh->{helper}{cnv}{pr}>=0)) {  # CD 0022
@@ -622,7 +642,7 @@ ModbusRegister_Attr(@)
       $hash->{helper}{nread}=1;
       if ($cmd eq "set") {
         #$attr{$name}{plcDataType} = $attrVal;
-        if(($attrVal eq "DWORD") || ($attrVal eq "DINT") || ($attrVal eq "REAL") || ($attrVal eq "DWORD_BE") || ($attrVal eq "DINT_BE") || ($attrVal eq "REAL_BE") || ($attrVal eq "DT") || ($attrVal eq "TIME")) { # 0023 CD added TIME and DT
+        if(($attrVal eq "DWORD") || ($attrVal eq "DINT") || ($attrVal eq "REAL") || ($attrVal eq "DWORD_BE") || ($attrVal eq "DINT_BE") || ($attrVal eq "REAL_BE") || ($attrVal eq "DT") || ($attrVal eq "TIME") || ($attrVal eq "DATE")) { # 0023 CD added TIME and DT # CD 0024 added DATE
           $hash->{helper}{nread}=2;
         }
         # CD 0007 start
@@ -647,7 +667,7 @@ ModbusRegister_Attr(@)
         return 'invalid datatype for defined address' unless ($attrVal =~ /^REAL/);
       }
       if($hash->{helper}{wagoDataType} eq 'D') {
-        return 'invalid datatype for defined address' unless (($attrVal =~ /^DWORD/) || ($attrVal =~ /^DINT/) || ($attrVal =~ /^DT/) || ($attrVal =~ /^TIME/)); # 0023 CD added TIME and DT
+        return 'invalid datatype for defined address' unless (($attrVal =~ /^DWORD/) || ($attrVal =~ /^DINT/) || ($attrVal eq 'DT') || ($attrVal eq 'TIME') || ($attrVal eq 'DATE')); # 0023 CD added TIME and DT # CD 0024 added DATE
       }
     }
   }
@@ -823,7 +843,7 @@ ModbusRegister_SetMinMax($)
     $vmin=-32768;
     $vmax=32767;
   }
-  if(($plcDataType=~ /^DWORD/) || ($plcDataType=~ /^TIME/) || ($plcDataType=~ /^DT/)) {
+  if(($plcDataType=~ /^DWORD/) || ($plcDataType eq 'TIME') || ($plcDataType eq 'DT') || ($plcDataType eq 'DATE')) {
     $vmin=0;
     $vmax=0xffffffff;
   }
@@ -876,6 +896,8 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
 1;
 
 =pod
+=item device 
+=item summary    Modbus Register
 =begin html
 
 <a name="ModbusRegister"></a>
@@ -945,6 +967,7 @@ sub ModbusRegister_is_float {   # CD 0007 renamed
             <li>REAL, 2 registers, IEEE 754 single precision floating point number, little endian</li>
             <li>REAL_BE, 2 registers, IEEE 754 single precision floating point number, big endian</li>
             <li>DT, 2 registers, 32 bit unsigned, UNIX timestamp, little endian</li>
+            <li>DATE, 2 registers, 32 bit unsigned, UNIX timestamp, little endian, only date part</li>
             <li>TIME, 2 registers, 32 bit unsigned, milliseconds since 00:00:00, little endian</li>
         </ul></li><br>
     <li><a name="">stateAlias</a><br>

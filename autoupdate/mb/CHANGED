@@ -13,7 +13,7 @@
               documentation update
               fix Wago DO address calculation
 37_ModbusRegister:
-  160410 0023 added TIME and DT
+  180206 0024 added DATE
                                                                                                  .    
 all changes:
                                                                                                  .    
@@ -76,6 +76,7 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  180206 0024 added DATE
   160410 0023 added TIME and DT
   160305 0022 added precision to conversion, changes for Wago I/O addressing
   160128 0021 fixed wago address conversion for MD and MF
