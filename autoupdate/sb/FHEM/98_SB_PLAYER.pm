@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0096 2018-01-27 09:28:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0097 2018-03-03 20:14:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -64,6 +64,7 @@ use constant { true => 1, false => 0 };
 sub SB_PLAYER_SonginfoHandleQueue($);   # CD 0075
 sub SB_PLAYER_RemoveInternalTimers($);  # CD 0078
 sub SB_PLAYER_ftuiMedialist($);         # CD 0082
+sub SB_PLAYER_TTSLogPlayerState($$);    # CD 0097
 
 # the list of favorites
 # CD 0010 moved to $hash->{helper}{SB_PLAYER_Favs}, fixes problem on module reload
@@ -1434,6 +1435,7 @@ sub SB_PLAYER_Parse( $$ ) {
             if(defined($hash->{helper}{recallPending})) {
                 delete($hash->{helper}{recallPending});
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,1);
+                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - play" );  # CD 0097
                 IOWrite( $hash, "$hash->{PLAYERMAC} play 300\n" );
                 IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{recallPendingElapsedTime}\n" ) if defined($hash->{helper}{recallPendingElapsedTime});    # CD 0047, Position setzen korrigiert
                 delete($hash->{helper}{recallPendingElapsedTime});  # CD 0047
@@ -1442,6 +1444,7 @@ sub SB_PLAYER_Parse( $$ ) {
             if(defined($hash->{helper}{recallPending})) {
                 delete($hash->{helper}{recallPending});
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,1);
+                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - play" );  # CD 0097
                 IOWrite( $hash, "$hash->{PLAYERMAC} play 300\n" );
                 IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{recallPendingElapsedTime}\n" );    # CD 0047, Position setzen korrigiert
                 delete($hash->{helper}{recallPendingElapsedTime});  # CD 0047
@@ -1921,12 +1924,14 @@ sub SB_PLAYER_Parse( $$ ) {
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,1,0);
                 # CD 0030 start
                 if(defined($hash->{helper}{ttspoweroffafterstop})) {
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - power off" );  # CD 0097
                     IOWrite( $hash, "$hash->{PLAYERMAC} power 0\n" );
                     delete($hash->{helper}{ttspoweroffafterstop});
                 }
                 # CD 0030 end
                 # CD 0031 Lautstärke zurücksetzen
                 if(defined($hash->{helper}{ttsRestoreVolumeAfterStop})) {
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - restore volume after stop" );  # CD 0097
                     IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $hash->{helper}{ttsRestoreVolumeAfterStop})."\n" ); # CD 0065 SB_PLAYER_FHEM2LMSVolume
                     delete($hash->{helper}{ttsRestoreVolumeAfterStop});
                 }
@@ -2004,8 +2009,19 @@ sub SB_PLAYER_Parse( $$ ) {
             } elsif( $_ =~ /^(url:)(.*)/ ) {
                 $hash->{helper}{playlistInfo}{$trackid}{url}=$2;
                 $flush=7;
-            } elsif( $_ =~ /^(artwork_url:)(http.*)/ ) {
-                $hash->{helper}{playlistInfo}{$trackid}{artwork_url}=$2;
+#            } elsif( $_ =~ /^(artwork_url:)(http.*)/ ) {
+            } elsif( $_ =~ /^(artwork_url:)(.*)/ ) {    # CD 0097 urls beginnen nicht immmer mit http://
+                my $url=$2;
+                # url beginnt mit http -> direkt übernehmen
+                if($url =~ /^http.*/) {
+                    $hash->{helper}{playlistInfo}{$trackid}{artwork_url}=$url;
+                } elsif ($url =~ /^\/imageproxy.*/) {
+                    # url beginnt mit /imageproxy -> Adresse vom Server hinzufügen
+                    $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . $url;
+                } else {
+                    # ...
+                    $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . $url;
+                }
                 $flush=7;
             } elsif( $_ =~ /^(.*:)(.*)/ ) {
                 $flush=7;
@@ -2238,6 +2254,7 @@ sub SB_PLAYER_tcb_TimeoutTTSWaitForPlay( $ ) {
     return if(IsDisabled($name));   # CD 0091
 
     if($hash->{helper}{ttsstate}==TTS_WAITFORPLAY) {
+      Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - timeout waiting for play" );  # CD 0097
       readingsBeginUpdate( $hash );
       SB_PLAYER_TTSStopped($hash);
       if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
@@ -2259,6 +2276,7 @@ sub SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn( $ ) {
     return if(IsDisabled($name));   # CD 0091
 
     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
+        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - timeout waiting for power on" );  # CD 0097
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);
     }
 }
@@ -2995,6 +3013,9 @@ sub SB_PLAYER_Set( $@ ) {
                 }
             }
             # CD 0091 end
+            
+            SB_PLAYER_TTSLogPlayerState($hash, 'not active, starting...'); # CD 0097 Zustand aller Player ausgeben
+            
             # talk ist nicht aktiv
             # CD 0038 Player zuerst einschalten
             if(ReadingsVal($name,"power","x") ne "on") {
@@ -3285,6 +3306,7 @@ sub SB_PLAYER_Set( $@ ) {
             IOWrite( $hash, "$hash->{PLAYERMAC} sync -\n" );
             # CD 0028 start
             if($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) {
+                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - cancel tts, sync group changed" );  # CD 0097
                 SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);  # CD 0066 single statt bulk update
             }
             # CD 0028 end
@@ -3339,6 +3361,7 @@ sub SB_PLAYER_Set( $@ ) {
         SB_PLAYER_GetStatus( $hash );
         # CD 0028 start
         if($hash->{helper}{ttsstate}==TTS_SYNCGROUPACTIVE) {
+            Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - cancel tts, sync group changed" );  # CD 0097
             SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);  # CD 0066 single statt bulk update
         }
         # CD 0028 end
@@ -3376,6 +3399,7 @@ sub SB_PLAYER_Set( $@ ) {
     } elsif( $cmd eq "resetTTS" ) {
         delete($hash->{helper}{saveLocked}) if (defined($hash->{helper}{saveLocked}));  # CD 0056
         delete $hash->{helper}{sgTalkActive} if defined($hash->{helper}{sgTalkActive}); # CD 0063
+        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - reset tts" );  # CD 0097
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,1);
     # CD 0047 start
     } elsif( lc($cmd) eq "currenttrackposition" ) {
@@ -3638,6 +3662,7 @@ sub SB_PLAYER_Recall($$) {
             }
             # CD 0028 start
             if ((($hash->{helper}{savedPlayerState}{$statename}{power} eq "off") && ($forceon!=1))||($forceoff==1)) {  # CD 0036 added $forceon and $forceoff
+                Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - stop and power off" );  # CD 0097
                 IOWrite( $hash, "$hash->{PLAYERMAC} stop\n" );  # CD 0091
                 IOWrite( $hash, "$hash->{PLAYERMAC} power 0\n" );
                 if($hash->{helper}{ttsstate}==TTS_RESTORE) {
@@ -3647,6 +3672,7 @@ sub SB_PLAYER_Recall($$) {
             } else {
             # CD 0028 end
                 if ((($hash->{helper}{savedPlayerState}{$statename}{playStatus} eq "stopped" ) && ($forceplay!=1))||($forcestop==1)) { # CD 0036 added $forceplay and $forcestop
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - stop" );  # CD 0097
                     IOWrite( $hash, "$hash->{PLAYERMAC} stop\n" );
                     # CD 0028 start
                     if($hash->{helper}{ttsstate}==TTS_RESTORE) {
@@ -3655,6 +3681,7 @@ sub SB_PLAYER_Recall($$) {
                     }
                     # CD 0028 end
                 } elsif(( $hash->{helper}{savedPlayerState}{$statename}{playStatus} eq "playing" )||($forceplay==1)) {  # CD 0036 added $forceplay
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - play" );  # CD 0097
                     my @secbuf = split(',',AttrVal( $name, "fadeinsecs", '10,10' )); # CD 0050 split hinzugefügt
                     IOWrite( $hash, "$hash->{PLAYERMAC} play ".$secbuf[0]."\n" );
                     IOWrite( $hash, "$hash->{PLAYERMAC} time $hash->{helper}{savedPlayerState}{$statename}{elapsedTime}\n" ) if(defined($hash->{helper}{savedPlayerState}{$statename}{elapsedTime}));
@@ -3753,6 +3780,8 @@ sub SB_PLAYER_SetTTSState($$$$) {
                0 );
         }
         IOWrite( $hash, "$name fhemrelay ttsdone" );
+
+        SB_PLAYER_TTSLogPlayerState($hash, 'idle'); # CD 0097 Zustand aller Player ausgeben
     }
     # CD 0062 end
     
@@ -3763,6 +3792,37 @@ sub SB_PLAYER_SetTTSState($$$$) {
     RemoveInternalTimer( "TTSRestore:$name") if($state==TTS_IDLE);
     RemoveInternalTimer( "TTSStartAfterPowerOn:$name") if($state==TTS_IDLE);
 }
+
+# CD 0097 start
+# ----------------------------------------------------------------------------
+#  log player state for tts
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_TTSLogPlayerState($$) {
+    my ( $hash, $msg ) = @_;
+    my $name = $hash->{NAME};
+
+    if(defined($hash->{helper}{ttsOptions}{debug})) {
+        Log3($hash, 0,"$name: ttsdebug - $msg"); 
+        if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+            my @pl=split(",",$hash->{SYNCGROUP}.",".$hash->{SYNCMASTER});
+            Log3($hash, 0,"$name: ttsdebug - SM: " . SB_PLAYER_MACToFHEMPlayername($hash,$hash->{SYNCMASTER})); 
+            
+            foreach (@pl) {
+                my $pn=SB_PLAYER_MACToFHEMPlayername($hash,$_);
+                Log3($hash, 0,"$name: ttsdebug - $pn power: " . ReadingsVal($pn,'power','x')); 
+                Log3($hash, 0,"$name: ttsdebug - $pn presence: " . ReadingsVal($pn,'presence','x')); 
+                Log3($hash, 0,"$name: ttsdebug - $pn playStatus: " . ReadingsVal($pn,'playStatus','x')); 
+                Log3($hash, 0,"$name: ttsdebug - $pn volume: " . ReadingsVal($pn,'volume','x')); 
+            }
+        } else {
+                Log3($hash, 0,"$name: ttsdebug - power: " . ReadingsVal($name,'power','x')); 
+                Log3($hash, 0,"$name: ttsdebug - presence: " . ReadingsVal($name,'presence','x')); 
+                Log3($hash, 0,"$name: ttsdebug - playStatus: " . ReadingsVal($name,'playStatus','x')); 
+                Log3($hash, 0,"$name: ttsdebug - volume: " . ReadingsVal($name,'volume','x')); 
+        }
+    }
+}
+# CD 0097 end
 
 # ----------------------------------------------------------------------------
 #  save player state
@@ -5370,6 +5430,29 @@ sub SB_PLAYER_MACToLMSPlayername( $$ ) {
     return $dev;
 }
 # CD 0018 end
+
+# CD 0097 start
+# ----------------------------------------------------------------------------
+#  search FHEM device for given MAC
+# ----------------------------------------------------------------------------
+sub SB_PLAYER_MACToFHEMPlayername( $$ ) {
+    my( $hash, $mac ) = @_;
+    my $name = $hash->{NAME};
+
+    return $name if($hash->{PLAYERMAC} eq $mac);
+
+    my @players=devspec2array("TYPE=SB_PLAYER");
+
+    foreach (@players) {
+        my $phash=$defs{$_};
+        if($phash->{PLAYERMAC} eq $mac) {
+            return $_;
+        }
+    }
+    
+    return undef;
+}
+# CD 0097 end
 
 # CD 0014 start
 # ----------------------------------------------------------------------------
