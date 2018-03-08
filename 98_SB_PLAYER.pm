@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0097 2018-03-03 20:14:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0098 2018-03-08 18:52:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2020,7 +2020,12 @@ sub SB_PLAYER_Parse( $$ ) {
                     $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . $url;
                 } else {
                     # ...
-                    $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . $url;
+                    # CD 0098 / einfügen wenn URL nicht mit / beginnt
+                    if ($url =~ /^\//) {
+                        $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . $url;
+                    } else {
+                        $hash->{helper}{playlistInfo}{$trackid}{artwork_url}="http://" . $hash->{SBSERVER} . '/' . $url;
+                    }
                 }
                 $flush=7;
             } elsif( $_ =~ /^(.*:)(.*)/ ) {
