@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0098 2018-03-08 18:52:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0099 2018-05-22 21:52:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -178,6 +178,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt
     $hash->{AttrList}  .= "amplifierMode:exclusive,shared ";            # CD 0088
     $hash->{AttrList}  .= "disable:0,1 ";                           # CD 0091
+    $hash->{AttrList}  .= "ignoreUnknownSonginfoTags:0,1 ";         # CD 0099
     $hash->{AttrList}  .= $readingFnAttributes;
 
     # CD 0036 aus 37_sonosBookmarker
@@ -1965,6 +1966,15 @@ sub SB_PLAYER_Parse( $$ ) {
         
         foreach( @args ) {
             $flush=0;
+            # + a	artist	Artist name.
+            # + c	coverid	coverid to use when constructing an artwork URL, such as /music/$coverid/cover.jpg
+            # + d	duration	Song duration in seconds.
+            # + K	artwork_url	A full URL to remote artwork. Only available for certain plugins such as Pandora and Rhapsody.
+            # + l	album	Album name. Only if known.
+            #   N	remote_title	Title of the internet radio station.
+            # + t	tracknum	Track number. Only if known.
+            # + u	url	Song file url.
+            # + x	remote	If 1, this is a remote track.
             if( $_ =~ /^(id:)(-?[0-9]*)/ ) {
                 $trackid=$2;
                 # bereits bekannt -> abbrechen
@@ -1996,6 +2006,8 @@ sub SB_PLAYER_Parse( $$ ) {
                 $flush=7;
             } elsif( $_ =~ /^(remote:)(.*)/ ) {
                 $hash->{helper}{playlistInfo}{$trackid}{remote}=1;
+                $flush=7;
+            } elsif( $_ =~ /^(remote_title:)(.*)/ ) {
                 $flush=7;
             } elsif( $_ =~ /^(duration:)(.*)/ ) {
                 $hash->{helper}{playlistInfo}{$trackid}{duration}=$2;
@@ -2029,7 +2041,15 @@ sub SB_PLAYER_Parse( $$ ) {
                 }
                 $flush=7;
             } elsif( $_ =~ /^(.*:)(.*)/ ) {
-                $flush=7;
+                # CD 0099
+                if(AttrVal( $name, 'ignoreUnknownSonginfoTags', '1' ) ne '1') {
+                    $title.=" ".$_ if($title ne "");
+                    $album.=" ".$_ if($album ne "");
+                    $artist.=" ".$_ if($artist ne "");
+                    next;
+                } else {
+                    $flush=7;
+                }
             } else {
                 $title.=" ".$_ if($title ne "");
                 $album.=" ".$_ if($album ne "");
@@ -5971,6 +5991,9 @@ sub SB_PLAYER_RemoveInternalTimers($) {
     <li>ftuiSupport 0|1|favorites|playlists|medialist<br>
       Create additional readings for FTUI integration. Warning: Using 1 or medialist may cause high cpu usage and unresponsiveness
       on slower systems.</li>
+    <li>ignoreUnknownSonginfoTags 0|1<br>
+      If not set or set to 1 unknown tags in songinfo requests will be ignored. If set to 0 unknown tags will be added to the last
+      known tag which may solve problems with missing title parts.
     <li>sortFavorites 0|1<br>
       If set to 1 the favorites will be sorted alphabetically.</li>
     <li>sortPlaylists 0|1<br>
