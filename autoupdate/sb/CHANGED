@@ -1,14 +1,15 @@
 ﻿97_SB_SERVER:
+  180617 0050 - Anpassungen für PRESENCE ab Version 15969
+              - Reconnect korrigiert nach DISCONNECT-Event
+              - Link zu Doku_SB-Server-Player hinzugefügt
   180127 0049 - httpport automatisch vom Server lesen, kann aber über Attribut httpport überschrieben werden
   171227 0048 - diverse Zeichen aus IP-Adresse filtern
               - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
   171226 0047 - Connect/Reconnect geändert
               - WOL: Befehl und Wert konfigurierbar
               - PRESENCE: Reading und Werte konfigurierbar
-  171104 0046 - Attribut disable hinzugefügt
-              - Hostname in der Definition möglich
-  171022 0045 - Reihenfolge bei der Übertragung von Favoriten, Playlisten,... an die Player beibehalten
 98_SB_PLAYER:
+  180617 0100 - Fehler in CommandRef-Struktur korrigiert
   180522 0099 - Attribut ignoreUnknownSonginfoTags hinzugefügt
   180308 0098 - Artwork-Url für FTUI-Medialist geändert
   180303 0097 - zusätzliches Logging für TTS
@@ -19,6 +20,9 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  180617 0050 - Anpassungen für PRESENCE ab Version 15969
+              - Reconnect korrigiert nach DISCONNECT-Event
+              - Link zu Doku_SB-Server-Player hinzugefügt
   180127 0049 - httpport automatisch vom Server lesen, kann aber über Attribut httpport überschrieben werden
   171227 0048 - diverse Zeichen aus IP-Adresse filtern
               - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
@@ -121,6 +125,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  180617 0100 - Fehler in CommandRef-Struktur korrigiert
   180522 0099 - Attribut ignoreUnknownSonginfoTags hinzugefügt
   180308 0098 - Artwork-Url für FTUI-Medialist geändert
   180303 0097 - zusätzliches Logging für TTS

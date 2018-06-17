@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0049 2018-01-27 09:47:00Z CD $
+# $Id: 97_SB_SERVER.pm 0050 2018-06-17 21:42:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0049';
+use constant SB_SERVER_VERSION => '0050';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -509,8 +509,8 @@ sub SB_SERVER_Ready( $ ) {
                 $hash->{LASTANSWER}='invalid username or password ?';
                 Log( 1, "SB_SERVER_Ready($name): invalid username or password ?" );
             } else {
-                $hash->{LASTANSWER}='missing username and password ?';
-                Log( 1, "SB_SERVER_Ready($name): missing username and password ?" );
+                $hash->{LASTANSWER}='wrong port or missing username and password ?';
+                Log( 1, "SB_SERVER_Ready($name): wrong port or missing username and password ?" );
             }
             $hash->{NEXT_OPEN}=time()+60;
         }
@@ -2177,20 +2177,36 @@ sub SB_SERVER_Alive( $ ) {
         }
 
         # CD 0007 start
-        if (($hash->{PRESENCENAME} ne "none")
-            && defined($defs{$hash->{PRESENCENAME}})
-            && ((defined($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL})
-            && (($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) < AttrVal( $name, "alivetimer", 30 ))) || (GetType($hash->{PRESENCENAME},'x') ne 'PRESENCE'))) {
-            Log3( $hash, 4,"SB_SERVER_Alive($name): using $hash->{PRESENCENAME}");                      # CD 0009 level 2->4
-            if( ReadingsVal( $hash->{PRESENCENAME}, $hash->{helper}{presenceReading}, "xxxxxxx" ) eq $hash->{helper}{presenceValuePresent} ) {  # CD 0047 erweitert
-                $pingstatus = "on";
-                $hash->{helper}{pingCounter}=0;
-            } else {
-                $pingstatus = "off";
-                $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;
-                $nexttime = gettimeofday() + 15;
+        my $presenceOk=0;   # CD 0050
+        if (($hash->{PRESENCENAME} ne "none") && defined($defs{$hash->{PRESENCENAME}})) {
+            # alte PRESENCE-Version
+            if ((defined($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) && (($defs{$hash->{PRESENCENAME}}->{TIMEOUT_NORMAL}) < AttrVal( $name, "alivetimer", 30 )))) {
+                $presenceOk=1;
             }
-        } else {
+            # neue PRESENCE-Version
+            if ((defined($defs{$hash->{PRESENCENAME}}->{INTERVAL_NORMAL}) && (($defs{$hash->{PRESENCENAME}}->{INTERVAL_NORMAL}) < AttrVal( $name, "alivetimer", 30 )))) {
+                $presenceOk=1;
+            }
+            # user-defined
+            if (GetType($hash->{PRESENCENAME},'x') ne 'PRESENCE') {
+                $presenceOk=1;
+            }
+            if ($presenceOk==1) {
+                Log3( $hash, 4,"SB_SERVER_Alive($name): using $hash->{PRESENCENAME}");                      # CD 0009 level 2->4
+                if( ReadingsVal( $hash->{PRESENCENAME}, $hash->{helper}{presenceReading}, "xxxxxxx" ) eq $hash->{helper}{presenceValuePresent} ) {  # CD 0047 erweitert
+                    $pingstatus = "on";
+                    $hash->{helper}{pingCounter}=0;
+                } else {
+                    $pingstatus = "off";
+                    $hash->{helper}{pingCounter}=$hash->{helper}{pingCounter}+1;
+                    $nexttime = gettimeofday() + 15;
+                }
+            } else {
+                Log3( $hash, 1,"SB_SERVER_Alive($name): cannot use PRESENCE device $hash->{PRESENCENAME}") unless defined($hash->{helper}{warnPresenceOnce});
+                $hash->{helper}{warnPresenceOnce}=1;
+            }
+        }
+        if ($presenceOk==0) {
         # CD 0007 end
             # CD 0021 start
             my $ipp=AttrVal($name, "internalPingProtocol", "tcp" );
@@ -3392,7 +3408,14 @@ sub SB_SERVER_Notify( $$ ) {
     if($devName eq $name ) {
         if (grep (m/^DISCONNECTED$/,@{$dev_hash->{CHANGED}})) {
             Log3( $hash, 3, "SB_SERVER_Notify($name): DISCONNECTED - STATE: " . ReadingsVal($name, "state", "unknown") . " power: ". ReadingsVal( $name, "power", "X" ));   # CD 0009 level 2->3
-            RemoveInternalTimer( "CheckConnection:$name");
+            # CD 0050 start
+            $hash->{CLICONNECTION} = "off";
+            SB_SERVER_RemoveInternalTimers( $hash );
+            InternalTimer( gettimeofday() + 10,
+                       "SB_SERVER_tcb_Alive",
+                       "SB_SERVER_Alive:$name",
+                       0 );
+            # CD 0050 end
         }
         if (grep (m/^CONNECTED$/,@{$dev_hash->{CHANGED}})) {
             Log3( $hash, 3, "SB_SERVER_Notify($name): CONNECTED - STATE: " . ReadingsVal($name, "state", "unknown") . " power: ". ReadingsVal( $name, "power", "X" ));      # CD 0009 level 2->3
@@ -3977,6 +4000,10 @@ sub SB_SERVER_readPassword($)
       by default the reading 'state' and the values 'present' and 'absent' are used.</li>
       <li><code>&lt;username&gt;</code> and <code>&lt;password&gt;</code>: If your LMS is password protected you can define the credentials here.  </li>
     </ul><br>
+    Additional informations and configuration examples:
+    <ul><br>
+        <a href="https://forum.fhem.de/index.php?action=dlattach;topic=17667.0;attach=60257">Doku_SB-Server-Player (german only)</a>
+    </ul><br>
   </ul>
   <a name="SBserverset"></a>
   <b>Set</b>
@@ -4082,6 +4109,10 @@ sub SB_SERVER_readPassword($)
       Optional k&ouml;nnen Reading und Werte f&uuml;r an/abwesend mit angegeben werden,
       voreingestellt ist das Reading 'state' und die Werte 'present' und 'absent'.</li>
       <li><code>&lt;Benutzername&gt;</code> und <code>&lt;Passwort&gt;</code>: Falls der Server durch ein Passwort gesichert wurde, k&ouml;nnen hier die notwendigen Angaben für den Serverzugang angegeben werden.</li>
+    </ul><br>
+    Zus&auml;tzliche Informationen und Konfigurationsbeispiele:
+    <ul><br>
+        <a href="https://forum.fhem.de/index.php?action=dlattach;topic=17667.0;attach=60257">Doku_SB-Server-Player</a>
     </ul><br>
   </ul>
   <a name="SBserverset"></a>

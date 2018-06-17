@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0099 2018-05-22 21:52:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0100 2018-06-17 21:47:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -5993,7 +5993,7 @@ sub SB_PLAYER_RemoveInternalTimers($) {
       on slower systems.</li>
     <li>ignoreUnknownSonginfoTags 0|1<br>
       If not set or set to 1 unknown tags in songinfo requests will be ignored. If set to 0 unknown tags will be added to the last
-      known tag which may solve problems with missing title parts.
+      known tag which may solve problems with missing title parts.</li>
     <li>sortFavorites 0|1<br>
       If set to 1 the favorites will be sorted alphabetically.</li>
     <li>sortPlaylists 0|1<br>
