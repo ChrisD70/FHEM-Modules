@@ -9,12 +9,11 @@
               - WOL: Befehl und Wert konfigurierbar
               - PRESENCE: Reading und Werte konfigurierbar
 98_SB_PLAYER:
+  180926 0102 - Perl-Fehler behoben wenn SYNCMASTERPN oder SYNCGROUPPN leer sind
   180806 0101 - TTS bei ausgeschalteten Playern korrigiert
   180617 0100 - Fehler in CommandRef-Struktur korrigiert
   180522 0099 - Attribut ignoreUnknownSonginfoTags hinzugefügt
   180308 0098 - Artwork-Url für FTUI-Medialist geändert
-  180303 0097 - zusätzliches Logging für TTS
-              - Artwork-Url für FTUI-Medialist geändert
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -124,6 +123,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  180926 0102 - Perl-Fehler behoben wenn SYNCMASTERPN oder SYNCGROUPPN leer sind
   180806 0101 - TTS bei ausgeschalteten Playern korrigiert
   180617 0100 - Fehler in CommandRef-Struktur korrigiert
   180522 0099 - Attribut ignoreUnknownSonginfoTags hinzugefügt

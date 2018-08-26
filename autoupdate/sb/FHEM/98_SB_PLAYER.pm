@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0101 2018-08-05 22:09:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0102 2018-08-26 16:09:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -5249,7 +5249,12 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
             # CD 0018 end
             # CD 0055 start
             if(AttrVal($name, "syncedNamesSource", "LMS") eq "FHEM") {
-                my @pn=split ',',"$hash->{SYNCMASTERPN},$hash->{SYNCGROUPPN}";
+                # CD 0102 start
+                my $pls="";
+                $pls=$hash->{SYNCMASTERPN} if(defined($hash->{SYNCMASTERPN}));
+                $pls=$pls . ",$hash->{SYNCGROUPPN}" if(defined($hash->{SYNCGROUPPN}));
+                # CD 0102 end
+                my @pn=split ',',$pls;
                 my @players=devspec2array("TYPE=SB_PLAYER");
                 $syncgroup=undef;
 
