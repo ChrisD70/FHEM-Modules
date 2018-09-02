@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0050 2018-06-17 21:42:00Z CD $
+# $Id: 97_SB_SERVER.pm 0051 2018-09-02 20:27:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0050';
+use constant SB_SERVER_VERSION => '0051';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -216,6 +216,9 @@ sub SB_SERVER_Define( $$ ) {
     $hash->{RCCNAME} = "none";
     $hash->{USERNAME} = "?";
     $hash->{PASSWORD} = "?";
+    $hash->{helper}{genres}{reread}=1; # CD 0051
+    $hash->{helper}{artists}{reread}=1; # CD 0051
+    $hash->{helper}{albums}{reread}=1; # CD 0051
 
     # CD 0048 versuchen Namen/Adresse zu säubern
     $a[0] =~ s/^https:\/\///;
@@ -771,6 +774,9 @@ sub SB_SERVER_Set( $@ ) {
         }
     } elsif( $cmd eq "statusRequest" ) {
         Log3( $hash, 5, "SB_SERVER_Set: statusRequest" );
+        $hash->{helper}{genres}{reread}=1; # CD 0051
+        $hash->{helper}{artists}{reread}=1; # CD 0051
+        $hash->{helper}{albums}{reread}=1; # CD 0051
         DevIo_SimpleWrite( $hash, "version ?\n", 0 );
         DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
         DevIo_SimpleWrite( $hash, "favorites items 0 " .
@@ -1337,6 +1343,9 @@ sub SB_SERVER_Read( $ ) {
     {
         Log3( $hash, 1,"SB_SERVER_Read: SB_SERVER_VERSION changed from ".$hash->{helper}{SB_SERVER_VERSION}." to ".SB_SERVER_VERSION);  # CD 0012
         $hash->{helper}{SB_SERVER_VERSION}=SB_SERVER_VERSION;
+        $hash->{helper}{genres}{reread}=1; # CD 0051
+        $hash->{helper}{artists}{reread}=1; # CD 0051
+        $hash->{helper}{albums}{reread}=1; # CD 0051
         DevIo_SimpleWrite( $hash, "version ?\n", 0 );
         DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
         DevIo_SimpleWrite( $hash, "favorites items 0 " .
@@ -1976,6 +1985,9 @@ sub SB_SERVER_ParseCmds( $$ ) {
     } elsif( $cmd eq "rescan" ) {
         if( $args[0] eq "done" ) {
         	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+            $hash->{helper}{genres}{reread}=1; # CD 0051
+            $hash->{helper}{artists}{reread}=1; # CD 0051
+            $hash->{helper}{albums}{reread}=1; # CD 0051
             # CD 0036 start - refresh favorites and playlists after rescan
             DevIo_SimpleWrite( $hash, "favorites items 0 " .
                    AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",
@@ -2022,7 +2034,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
         # CD 0039 end
     # CD 0016 end
     # CD 0030 start
-    } elsif( $cmd eq "artists" ) {
+    } elsif( $cmd eq "artistsxxx" ) {
         if(defined($hash->{helper}{getData}) && defined($hash->{helper}{getData}{artists})) {
             my ($dev,$reading)=split(':',$hash->{helper}{getData}{artists}{reading});
             if ($hash->{helper}{getData}{artists}{format} eq 'raw') {
@@ -2125,8 +2137,14 @@ sub SB_SERVER_ParseCmds( $$ ) {
             }
         }
     # CD 0032 end
-
-    # CD 0032 end
+    # CD 0051 start
+    } elsif( $cmd eq "genres" ) {
+        SB_SERVER_ParseGenreAlbumArtist($hash,$cmd,@args);
+    } elsif( $cmd eq "albums" ) {
+        SB_SERVER_ParseGenreAlbumArtist($hash,$cmd,@args);
+    } elsif( $cmd eq "artists" ) {
+        SB_SERVER_ParseGenreAlbumArtist($hash,$cmd,@args);
+    # CD 0051 end
     } else {
 	# unkown
     }
@@ -2523,15 +2541,30 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    next;
 	} elsif( $_ =~ /^(infototalalbums:)([0-9]*)/ ) {
 	    readingsBulkUpdate( $hash, "db_albums", $2 );
+        # CD 0051
+        if (defined($hash->{helper}{albums}{reread})) {
+            DevIo_SimpleWrite( $hash, "albums 0 $2\n", 0 );
+            delete $hash->{helper}{albums}{reread};
+        }
 	    next;
 	} elsif( $_ =~ /^(infototalartists:)([0-9]*)/ ) {
 	    readingsBulkUpdate( $hash, "db_artists", $2 );
+        # CD 0051
+        if (defined($hash->{helper}{artists}{reread})) {
+            DevIo_SimpleWrite( $hash, "artists 0 $2\n", 0 );
+            delete $hash->{helper}{artists}{reread};
+        }
 	    next;
 	} elsif( $_ =~ /^(infototalsongs:)([0-9]*)/ ) {
 	    readingsBulkUpdate( $hash, "db_songs", $2 );
 	    next;
 	} elsif( $_ =~ /^(infototalgenres:)([0-9]*)/ ) {
 	    readingsBulkUpdate( $hash, "db_genres", $2 );
+        # CD 0051
+        if (defined($hash->{helper}{genres}{reread})) {
+            DevIo_SimpleWrite( $hash, "genres 0 $2\n", 0 );
+            delete $hash->{helper}{genres}{reread};
+        }
 	    next;
 	} elsif( $_ =~ /^(playerid:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
 	    my $id = join( "", split( ":", $2 ) );
@@ -2807,6 +2840,120 @@ sub SB_SERVER_tcb_SendSyncMasters( $ ) {
 }
 # CD 0029 end
 
+# CD 0051 start
+# ----------------------------------------------------------------------------
+#  Parse the return values of the genre/album/artist items
+# ----------------------------------------------------------------------------
+sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
+    my ( $hash, $cmd, @args ) = @_;
+
+    my $name = $hash->{NAME};
+
+    Log3( $hash, 5, "SB_SERVER_ParseGenreAlbumArtist($name): called" );
+
+    my $buf = "";
+    my $indata = 0;
+    my $data="";
+    my $ids="";
+
+    foreach( @args ) {
+        if( $_ =~ /^(id:)([0-9]*)/ ) {
+            if ($ids eq "") {
+                $ids=$2;
+            } else {
+                $ids.=":$2";
+            }
+            if($indata==1) {
+                $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+                $buf=~ s/"//g;
+                if($data eq "") {
+                    $data=$buf;
+                } else {
+                    $data.=":$buf";
+                }
+                $buf="";
+            }
+            next;
+        } elsif( $_ =~ /^(genre:)(.*)/ ) {
+            $buf=$2;
+            $indata=1;
+            next;
+        } elsif( $_ =~ /^(album:)(.*)/ ) {
+            $buf=$2;
+            $indata=1;
+            next;
+        } elsif( $_ =~ /^(artist:)(.*)/ ) {
+            $buf=$2;
+            $indata=1;
+            next;
+        } elsif( $_ =~ /^(count:)(.*)/ ) {
+            next;
+        } elsif ($indata==1) {
+            $buf.=" $_";
+        }
+    }
+    
+    if($indata==1) {
+        $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+        $buf=~ s/"//g;
+        if($data eq "") {
+            $data=$buf;
+        } else {
+            $data.=":$buf";
+        }
+        $buf="";
+    }
+    
+    my $doBroadcast=0;
+    
+    if($cmd eq 'genres') {
+        $hash->{helper}{genres}{data}=$data;
+        $hash->{helper}{genres}{ids}=$ids;
+        $hash->{helper}{genres}{broadcast}=1;
+        $doBroadcast=1;
+    }
+    if($cmd eq 'artists') {
+        $hash->{helper}{artists}{data}=$data;
+        $hash->{helper}{artists}{ids}=$ids;
+        $hash->{helper}{artists}{broadcast}=1;
+        $doBroadcast=1;
+    }
+    if($cmd eq 'albums') {
+        $hash->{helper}{albums}{data}=$data;
+        $hash->{helper}{albums}{ids}=$ids;
+        $hash->{helper}{albums}{broadcast}=1;
+        $doBroadcast=1;
+    }
+
+    if ($doBroadcast==1) {
+        RemoveInternalTimer( "BroadcastGAA:$name");
+        InternalTimer( gettimeofday() + 2.00,
+           "SB_SERVER_tcb_BroadcastGAA",
+           "StartTalk:$name",
+           0 );
+    }
+}    
+
+sub SB_SERVER_tcb_BroadcastGAA( $ ) {
+    my($in ) = shift;
+    my(undef,$name) = split(':',$in);
+    my $hash = $defs{$name};
+
+    if(defined($hash->{helper}{genres}{broadcast})) {
+        SB_SERVER_Broadcast( $hash, "GENRES", "UPDATE " . uri_escape($hash->{helper}{genres}{data}) . ' ' . $hash->{helper}{genres}{ids}, undef );
+        delete $hash->{helper}{genres}{broadcast};
+    }
+    if(defined($hash->{helper}{artists}{broadcast})) {
+        SB_SERVER_Broadcast( $hash, "ARTISTS", "UPDATE " . uri_escape($hash->{helper}{artists}{data}) . ' ' . $hash->{helper}{artists}{ids}, undef );
+        delete $hash->{helper}{artists}{broadcast};
+    }
+    if(defined($hash->{helper}{albums}{broadcast})) {
+        SB_SERVER_Broadcast( $hash, "ALBUMS", "UPDATE " . uri_escape($hash->{helper}{albums}{data}) . ' ' . $hash->{helper}{albums}{ids}, undef );
+        delete $hash->{helper}{albums}{broadcast};
+    }
+}
+# CD 0051 end
+    
 # ----------------------------------------------------------------------------
 #  Parse the return values of the favorites items
 # ----------------------------------------------------------------------------
