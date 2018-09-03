@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0103 2018-09-02 20:27:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0104 2018-09-03 12:27:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -175,7 +175,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
-    $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists,genres,albums,artists ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt # CD 0103 genres, albums und artists hinzugefügt
+    $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists,genres,albums,artists,all ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt # CD 0103 genres, albums und artists hinzugefügt # CD 0104 all hinzugefügt
     $hash->{AttrList}  .= "amplifierMode:exclusive,shared ";            # CD 0088
     $hash->{AttrList}  .= "disable:0,1 ";                           # CD 0091
     $hash->{AttrList}  .= "ignoreUnknownSonginfoTags:0,1 ";         # CD 0099
@@ -380,12 +380,12 @@ sub SB_PLAYER_Attr( @ ) {
         $hash->{helper}{ftuiSupport}{enable}=($args[1] eq '0')?0:1;
             
         for my $opt (@options) {
-            $hash->{helper}{ftuiSupport}{favorites}=1 if($opt=~ m/favorites/)||($opt eq '1');
-            $hash->{helper}{ftuiSupport}{playlists}=1 if($opt=~ m/playlists/)||($opt eq '1');
-            $hash->{helper}{ftuiSupport}{medialist}=1 if($opt=~ m/medialist/)||($opt eq '1');
-            $hash->{helper}{ftuiSupport}{genres}=1 if($opt=~ m/genres/)||($opt eq '1');     # CD 0103
-            $hash->{helper}{ftuiSupport}{albums}=1 if($opt=~ m/albums/)||($opt eq '1');     # CD 0103
-            $hash->{helper}{ftuiSupport}{artists}=1 if($opt=~ m/artists/)||($opt eq '1');   # CD 0103
+            $hash->{helper}{ftuiSupport}{favorites}=1 if($opt=~ m/favorites/)||($opt eq '1')||($opt eq 'all');
+            $hash->{helper}{ftuiSupport}{playlists}=1 if($opt=~ m/playlists/)||($opt eq '1')||($opt eq 'all');
+            $hash->{helper}{ftuiSupport}{medialist}=1 if($opt=~ m/medialist/)||($opt eq '1')||($opt eq 'all');
+            $hash->{helper}{ftuiSupport}{genres}=1 if($opt=~ m/genres/)||($opt eq 'all');     # CD 0103
+            $hash->{helper}{ftuiSupport}{albums}=1 if($opt=~ m/albums/)||($opt eq 'all');     # CD 0103
+            $hash->{helper}{ftuiSupport}{artists}=1 if($opt=~ m/artists/)||($opt eq 'all');   # CD 0103
         }
         
         if(defined($hash->{helper}{ftuiSupport})) {
@@ -6112,9 +6112,10 @@ sub SB_PLAYER_RemoveInternalTimers($) {
       Only changes in the readings currentAlbum, currentArtist, currentTitle cause an event.</li><br>
     <li>fadeinsecs &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Fade-in period in seconds. A second comma separated value optionally specifies the period to use on unpause.</li>
-    <li>ftuiSupport 0|1|favorites|playlists|medialist<br>
+    <li>ftuiSupport 0|1|favorites|playlists|medialist|genres|albums|artists|all<br>
       Create additional readings for FTUI integration. Warning: Using 1 or medialist may cause high cpu usage and unresponsiveness
-      on slower systems.</li>
+      on slower systems. Setting the attribute to 1 will create readings for favorites, playlists and medialist. Setting it to 'all' 
+      will create all available readings for FTUI.</li>
     <li>ignoreUnknownSonginfoTags 0|1<br>
       If not set or set to 1 unknown tags in songinfo requests will be ignored. If set to 0 unknown tags will be added to the last
       known tag which may solve problems with missing title parts.</li>
@@ -6385,9 +6386,10 @@ sub SB_PLAYER_RemoveInternalTimers($) {
       Fade in f&uuml;r Beginn von Playlisten und neuen Soundfiles. Bezeichnet die Dauer des Vorganges, in der die
       Lautst&auml;rke auf den vorgegebenen Wert ansteigt und wird in Sekunden angegeben. Ein zweiter, durch Komma
       getrennter optionaler Wert, gibt die Dauer des Fadein beim Verlassen des Pausenzustandes an.</li>
-    <li>ftuiSupport 0|1|favorites|playlists|medialist<br>
+    <li>ftuiSupport 0|1|favorites|playlists|medialist|genres|albums|artists|all<br>
       Zus&auml;tzliche Readings f&uuml;r die Integration in FTUI erzeugen. Achtung: Die Verwendung von 1 oder medialist kann kurzzeitig zu
-      erh&ouml;ter Systemlast und H&auml;ngern auf langsamen Systemen f&uuml;hren.</li>
+      erh&ouml;ter Systemlast und H&auml;ngern auf langsamen Systemen f&uuml;hren. Wenn der Wert auf 1 steht werden automatisch die Readings
+      f&uuml;r Favoriten, Wiedergabelisten und Abspielliste angelegt. Wenn der Wert auf 'all' steht werden alle Readings angelegt.</li>
     <li>statusRequestInterval &lt;sec&gt;<br>
       Aktualisierungsintervall der automatischen Status-Abfrage. Default: 300</li>
     <li>sortFavorites 0|1<br>
