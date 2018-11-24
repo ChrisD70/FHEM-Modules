@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0007 2018-01-14 11:16:00Z CD $
+# $Id: 36_ModbusTCP_CC.pm 0008 2018-11-24 14:15:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
@@ -7,6 +7,7 @@
 # 170527 0005 added FC 1, 2 and 15
 # 170528 0006 performance improvements, updated documentation
 # 180114 0007 ignore unknown format specifiers on WRITE_*_REGISTERS
+# 181124 0008 added MASK_WRITE_REGISTER
 
 package main;
 
@@ -27,6 +28,7 @@ use constant WRITE_SINGLE_COIL                           => 0x05;
 use constant WRITE_SINGLE_REGISTER                       => 0x06;
 use constant WRITE_MULTIPLE_COILS                        => 0x0F;
 use constant WRITE_MULTIPLE_REGISTERS                    => 0x10;
+use constant MASK_WRITE_REGISTER                         => 0x16;
 use constant MODBUS_ENCAPSULATED_INTERFACE               => 0x2B;
 ## Modbus except code
 use constant EXP_ILLEGAL_FUNCTION                        => 0x01;
@@ -356,6 +358,115 @@ sub ModbusTCP_CC_Parse($$) {####################################################
         }
         if ($found) {
           $msg = pack("nnnCCnn", $rx_hd_tr_id, $rx_hd_pr_id, 6, $rx_hd_unit_id, $rx_bd_fc, $adr,$oval);
+        } else {
+          $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+        }
+      } else {
+        $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
+      }
+    } elsif ($rx_bd_fc==MASK_WRITE_REGISTER) {
+      my ($adr,$andmask,$ormask)=unpack "nnn",$f_body;
+      if (@regs>0) {
+        my @v;
+        my $found=0;
+        foreach(@regs) {
+          my $n=$_;
+          my $c=AttrVal($n,"comment","");
+          $c =~ m/MBR:(\S+)/;
+          my @mb=split(':',$1);
+          foreach(@mb) {
+            my @mbd=split(',',$_);
+            if (@mbd>2) {
+              if (($mbd[0] eq $rx_hd_unit_id)||($mbd[0] eq '*')) {
+                if ($mbd[1] eq $adr+1) {
+                  if (($mbd[2] eq 'H')||($mbd[2] eq '*')) {
+                    my $ext=0;
+                    my $sval=0;
+                    my $set=0;
+                    my $val=0;
+                    # get actual value
+                    if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                      $val=ReadingsVal($n,$mbd[3],0);
+                    } else {
+                      $val=ReadingsVal($n,"state",0);
+                    }
+                    if (defined($mbd[4])) {
+                      if($mbd[4] =~ /^B(\d+)$/) {
+                        if(($1>=0) && ($1<16)) {
+                          my $v1=defined($mbd[6])?$mbd[6]:'on';
+                          # build 16-bit value
+                          my $rv=0;
+                          if ($val eq $v1) {
+                            $rv=1<<$1;
+                          }
+                          $val=($rv & $andmask) | (~$andmask & $ormask);
+                          if(($val & (1<<$1))>0) {
+                            $sval=defined($mbd[6])?$mbd[6]:'on';
+                          } else {
+                            $sval=defined($mbd[5])?$mbd[5]:'off';
+                          }
+                          $ext=1;
+                          $set=1;
+                          $found=1;
+                        } else {
+                          $ext=1;
+                          Log3 $hash, 2, "invalid bit $1 in $n";
+                        }
+                      }
+                      elsif($mbd[4] eq 'F') {
+                        # not supported
+                        $ext=99;
+                      }
+                      elsif($mbd[4] eq 'FB') {
+                        # not supported
+                        $ext=99;
+                      } else {
+                        $sval=$val;
+                      }
+                    } else {
+                        $sval=$val;
+                    }
+                    if($ext==0) {
+                      # build 16 bit value
+                      $val*=$mbd[5] if(defined($mbd[5]));
+                      $val+=$mbd[6] if(defined($mbd[6]));
+                      # Zweikomplement für negative Zahlen bilden
+                      if (defined($mbd[4])) {
+                        $val+=65536 if (($val<0) && ($mbd[4] eq 'T'));
+                      }
+                      # value valid ?
+                      if(($val<=65535)&&($val>=0)) {
+                        # apply mask
+                        $sval=($val & $andmask) | (~$andmask & $ormask);
+                        # calculate set value
+                        $sval-=65536 if(defined($mbd[4]) && ($sval>32767) && ($mbd[4] eq 'T'));
+                        $sval/=$mbd[5] if(defined($mbd[5]) && ($mbd[5]!=0));
+                        $sval-=$mbd[6] if(defined($mbd[6]));
+                        $set=1;
+                        $found=1;
+                      }
+                    }
+
+                    if($set==1) {
+                      if(defined($mbd[3]) && ($mbd[3] ne "")) {
+                        my $s=getAllSets($n);
+                        if ($s=~$mbd[3]) {
+                          fhem "set $n $mbd[3] $sval";
+                        } else {
+                          fhem "setreading $n $mbd[3] $sval";
+                        }
+                      } else {
+                        fhem "set $n $sval";
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if ($found) {
+          $msg = pack("nnnCCnnn", $rx_hd_tr_id, $rx_hd_pr_id, 8, $rx_hd_unit_id, $rx_bd_fc, $adr,$andmask,$ormask);
         } else {
           $msg = pack("nnnCCC", $rx_hd_tr_id, $rx_hd_pr_id, 3, $rx_hd_unit_id, $rx_bd_fc+128, EXP_DATA_ADDRESS);
         }
@@ -734,12 +845,12 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
   <ul>
   <li>&lt;unitId&gt; - the unit id (0 - 255), * for any id</li>
   <li>&lt;coil&gt; - the coil number (1 - 65536) (not address !)</li>
-  <li>&lt;type&gt; - I for input (read only), C for coil (read/write) or * for any type</li>
+  <li>&lt;type&gt; - I for input (read only), H for coil (read/write) or * for any type</li>
   <li>&lt;reading&gt; - optional, name of the reading, if none is specified, state is used</li>
   <li>B&lt;bit&gt; - optional, map value to specified bit (range 0-15)</li>
   <li>&lt;off&gt; - optional, alternative value for the off-state</li>
   <li>&lt;on&gt; - optional, alternative value for the on-state</li>
-  </ul>
+  </ul> 
   <br>Example for a Homematic switch (HM-ES-PMSw1-Pl) called sw:<br><br>
   <code>attr sw comment MBR:1,6,H,,B4</code><br><br>
   The switch state is mapped to bit 4 of register 6 on unit 1.
