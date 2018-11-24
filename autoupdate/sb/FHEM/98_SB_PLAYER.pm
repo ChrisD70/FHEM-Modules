@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0104 2018-09-03 12:27:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0105 2018-11-24 17:17:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2130,6 +2130,16 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "sleep" ) {
         $hash->{WILLSLEEPIN} = int($args[0])." secs" if defined($args[ 0 ]);
     # CD 0089 end
+    # CD 0105 start
+    } elsif( $cmd eq 'voltage' ) {
+        if(defined($args[0])) { 
+            if($args[0] ne '?') {
+                if(int($args[0])>0) {
+                    readingsBulkUpdate( $hash, 'voltage', $args[0] );
+                }
+            }
+        }
+    # CD 0105 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for
         # autocreate
@@ -4302,6 +4312,7 @@ sub SB_PLAYER_GetStatus( $ ) {
                 "$hash->{PLAYERMAC} playerpref syncVolume ?\n". # CD 0007
                 "$hash->{PLAYERMAC} playlist name ?\n".         # CD 0009
                 "$hash->{PLAYERMAC} playlist path 0 ?\n".       # CD 0048
+                "$hash->{PLAYERMAC} voltage ?\n".               # CD 0105
                 "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
         SB_PLAYER_QueryElapsedTime($hash);
     }   # CD 0014 end
