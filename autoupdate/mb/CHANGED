@@ -6,7 +6,7 @@
               added combineReads
               added support for coils
 36_ModbusTCPServer:
-  161231 0021 fixed error handling
+  181107 0022 changed detection of wago plc
 37_ModbusCoil:
   170106 0014 added writeMode SetReset
               fixed access to Wago PFC area
@@ -33,6 +33,7 @@ all changes:
   140503 0001 initial release
                                                                                                  .    
 36_ModbusTCPServer:
+  181107 0022 changed detection of wago plc
   161231 0021 fixed error handling
   160922 0020 added queueDelay
   160305 0019 added serverType, read Wago configuration, apply offset to coils
