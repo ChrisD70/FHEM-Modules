@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0021 $
+# $Id: 36_ModbusTCPServer.pm 0022 $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -21,6 +21,7 @@
 # 160305 0019 added serverType, read Wago configuration, apply offset to coils
 # 160922 0020 added queue delay
 # 161231 0021 fixed error handling
+# 181107 0022 changed detection of wago plc
 # TODO:
 
 package main;
@@ -150,6 +151,7 @@ sub ModbusTCPServer_Define($$) {################################################
   if ($init_done){
     $ret = DevIo_OpenDev($hash, 0, "ModbusTCPServer_DoInit");
   }
+  notifyRegexpChanged($hash, "global"); # CD 0022
   return $ret;
 }
 sub ModbusTCPServer_Undef($$) {##########################################################
@@ -265,7 +267,19 @@ sub ModbusTCPServer_Attr(@) {###################################################
         $hash->{helper}{Wago}{x}=1;
         if($hash->{STATE} ne "disconnected") {
           # read controller informations
-          my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 5);
+          my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 1);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+          $tx=pack("nnnCCnn", 8209, 0, 6, 0, 3, 8209, 1);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+          $tx=pack("nnnCCnn", 8210, 0, 6, 0, 3, 8210, 1);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+          $tx=pack("nnnCCnn", 8211, 0, 6, 0, 3, 8211, 1);
+          ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+          ModbusTCPServer_AddRQueue($hash, $tx,0);
+          $tx=pack("nnnCCnn", 8212, 0, 6, 0, 3, 8212, 1);
           ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
           ModbusTCPServer_AddRQueue($hash, $tx,0);
           # read I/O informations
@@ -413,13 +427,21 @@ sub ModbusTCPServer_Parse($$) {#################################################
                   RemoveInternalTimer( "poll:".$name);
                   InternalTimer(gettimeofday()+AttrVal($name,"pollInterval",0.5), "ModbusTCPServer_Poll", "poll:".$name, 0);
                 }
-                if(($rx_hd_tr_id==8208) && ($cnt==10)) {
+                if(($rx_hd_tr_id==8208) && ($cnt==2)) {
                   $hash->{helper}{Wago}{INFO_REVISION}=$v[0];
-                  $hash->{helper}{Wago}{INFO_SERIES}=$v[1];
-                  $hash->{helper}{Wago}{INFO_ITEM}=$v[2];
-                  $hash->{helper}{Wago}{INFO_MAJOR}=$v[3];
-                  $hash->{helper}{Wago}{INFO_MINOR}=$v[4];
-                  $hash->{server}="Wago ".$v[1]."-".$v[2] if($v[1]+$v[2]>0);
+                }
+                if(($rx_hd_tr_id==8209) && ($cnt==2)) {
+                  $hash->{helper}{Wago}{INFO_SERIES}=$v[0];
+                }
+                if(($rx_hd_tr_id==8210) && ($cnt==2)) {
+                  $hash->{helper}{Wago}{INFO_ITEM}=$v[0];
+                }
+                if(($rx_hd_tr_id==8211) && ($cnt==2)) {
+                  $hash->{helper}{Wago}{INFO_MAJOR}=$v[0];
+                }
+                if(($rx_hd_tr_id==8212) && ($cnt==2)) {
+                  $hash->{helper}{Wago}{INFO_MINOR}=$v[0];
+                  $hash->{server}="Wago ".($hash->{helper}{Wago}{INFO_SERIES})."-".($hash->{helper}{Wago}{INFO_ITEM}) if($hash->{helper}{Wago}{INFO_SERIES}+$hash->{helper}{Wago}{INFO_ITEM}>0);
                 }
               } else {
               # CD 0019 end
@@ -544,7 +566,19 @@ sub ModbusTCPServer_DoInit($) {#################################################
   if (defined($hash->{helper}{Wago})) {
     delete($hash->{helper}{Wago}{initDone}) if defined($hash->{helper}{Wago}{initDone});
     # read controller informations
-    my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 5);
+    my $tx=pack("nnnCCnn", 8208, 0, 6, 0, 3, 8208, 1);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+    $tx=pack("nnnCCnn", 8209, 0, 6, 0, 3, 8209, 1);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+    $tx=pack("nnnCCnn", 8210, 0, 6, 0, 3, 8210, 1);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+    $tx=pack("nnnCCnn", 8211, 0, 6, 0, 3, 8211, 1);
+    ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
+    ModbusTCPServer_AddRQueue($hash, $tx,0);
+    $tx=pack("nnnCCnn", 8212, 0, 6, 0, 3, 8212, 1);
     ModbusTCPServer_LogFrame($hash,"AddRQueue",$tx,4);
     ModbusTCPServer_AddRQueue($hash, $tx,0);
     # read I/O informations
