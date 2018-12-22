@@ -10,7 +10,8 @@
               - WOL: Befehl und Wert konfigurierbar
               - PRESENCE: Reading und Werte konfigurierbar
 98_SB_PLAYER:
-  181124 0105 - voltage auslesen
+  181222 0106 - bei playlist loadalbum UTF8 benutzen
+  181124 0105 - voltage auslesen (benötigt LMS-Plugin)
   180903 0104 - wenn ftuiSupport auf 1 steht werden die Readings für Genres, Artisten und Alben nicht angelegt
               - neuer Wert 'all' für ftuiSupport, legt alle FTUI-Readings an (auch zukünftige !)
   180902 0103 - FTUI-Unterstützung für Genres, Alben und Artisten hinzugefügt
@@ -129,7 +130,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
-  181124 0105 - voltage auslesen
+  181222 0106 - bei playlist loadalbum UTF8 benutzen
+  181124 0105 - voltage auslesen (benötigt LMS-Plugin)
   180903 0104 - wenn ftuiSupport auf 1 steht werden die Readings für Genres, Artisten und Alben nicht angelegt
               - neuer Wert 'all' für ftuiSupport, legt alle FTUI-Readings an (auch zukünftige !)
   180902 0103 - FTUI-Unterstützung für Genres, Alben und Artisten hinzugefügt

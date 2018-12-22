@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0105 2018-11-24 17:17:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0106 2018-12-22 15:22:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3256,9 +3256,9 @@ sub SB_PLAYER_Set( $@ ) {
                     }
                 }
                 if( $t>0 ) {
-                    $genre=uri_escape(decode('utf-8',$genre)) if($genre ne '*');
-                    $album=uri_escape(decode('utf-8',$album)) if($album ne '*');
-                    $artist=uri_escape(decode('utf-8',$artist)) if($artist ne '*');
+                    $genre=uri_escape_utf8(decode('utf-8',$genre)) if($genre ne '*');     # CD 0106 uri_escape_utf8 statt uri_escape verwenden
+                    $album=uri_escape_utf8(decode('utf-8',$album)) if($album ne '*');     # CD 0106 uri_escape_utf8 statt uri_escape verwenden
+                    $artist=uri_escape_utf8(decode('utf-8',$artist)) if($artist ne '*');  # CD 0106 uri_escape_utf8 statt uri_escape verwenden
                     IOWrite( $hash, "$hash->{PLAYERMAC} playlist loadalbum " .
                              "$genre $artist $album\n" );
                 }
