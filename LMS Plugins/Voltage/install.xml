@@ -1,0 +1,17 @@
+<?xml version='1.0' standalone='yes'?>
+<extension>
+  <name>PLUGIN_VOLTAGE_HEADER</name>
+  <creator>ChrisD</creator>
+  <defaultState>enabled</defaultState>
+  <description>PLUGIN_VOLTAGE_HEADER_DESC</description>
+  <email></email>
+  <homepageURL></homepageURL>
+  <module>Plugins::Voltage::Plugin</module>
+  <targetApplication>
+    <id>SlimServer</id>
+    <maxVersion>*</maxVersion>
+    <minVersion>7.0a</minVersion>
+  </targetApplication>
+  <type>2</type>
+  <version>0.1</version>
+</extension>

@@ -1,0 +1,5 @@
+PLUGIN_VOLTAGE_HEADER
+	EN	Voltage Support plugin 
+    
+PLUGIN_VOLTAGE_HEADER_DESC
+	EN	This plugin allows querying the voltage value.
