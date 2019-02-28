@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0051';
+use constant SB_SERVER_VERSION => '0052';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
