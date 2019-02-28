@@ -1,4 +1,6 @@
 ﻿97_SB_SERVER:
+  190229 0052 - Attribut maxplaylists hinzugefügt
+              - voltage auslesen, benötigt Plugin für LMS
   180902 0051 - Genres, Alben und Artisten vom Server lesen und an Player weitergeben
   180617 0050 - Anpassungen für PRESENCE ab Version 15969
               - Reconnect korrigiert nach DISCONNECT-Event
@@ -24,6 +26,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  190229 0052 - Attribut maxplaylists hinzugefügt
+              - voltage auslesen, benötigt Plugin für LMS
   180902 0051 - Genres, Alben und Artisten vom Server lesen und an Player weitergeben
   180617 0050 - Anpassungen für PRESENCE ab Version 15969
               - Reconnect korrigiert nach DISCONNECT-Event

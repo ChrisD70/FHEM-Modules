@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0051 2018-09-02 20:27:00Z CD $
+# $Id: 97_SB_SERVER.pm 0052 2019-02-28 20:59:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -105,6 +105,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{NotifyFn}  = "SB_SERVER_Notify";
 
     $hash->{AttrList} = "alivetimer maxfavorites ";
+    $hash->{AttrList} .= "maxplaylists ";  # CD 0052
     $hash->{AttrList} .= "doalivecheck:true,false ";
     $hash->{AttrList} .= "maxcmdstack ";
     $hash->{AttrList} .= "httpport ";
@@ -124,6 +125,7 @@ sub SB_SERVER_SetAttrList( $ ) {
 
     my $attrList;
     $attrList = "alivetimer maxfavorites ";
+    $attrList .= "maxplaylists ";  # CD 0052
     $attrList .= "doalivecheck:true,false ";
     $attrList .= "maxcmdstack ";
     $attrList .= "httpport ";
@@ -778,11 +780,11 @@ sub SB_SERVER_Set( $@ ) {
         $hash->{helper}{artists}{reread}=1; # CD 0051
         $hash->{helper}{albums}{reread}=1; # CD 0051
         DevIo_SimpleWrite( $hash, "version ?\n", 0 );
-        DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
         DevIo_SimpleWrite( $hash, "favorites items 0 " .
                    AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
                    0 );
-        DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
         DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
         DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );               # CD 0049
         # CD 0032 start
@@ -1347,12 +1349,12 @@ sub SB_SERVER_Read( $ ) {
         $hash->{helper}{artists}{reread}=1; # CD 0051
         $hash->{helper}{albums}{reread}=1; # CD 0051
         DevIo_SimpleWrite( $hash, "version ?\n", 0 );
-        DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
         DevIo_SimpleWrite( $hash, "favorites items 0 " .
                    AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",        # CD 0009 url mit abfragen
                    0 );
         DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );     # CD 0049
-        DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+        DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
     }
     # CD 0009 end
 
@@ -1968,7 +1970,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
         Log3( $hash, 4, "SB_SERVER_ParseCmds($name): playlists" );
         # CD 0004 Playlisten neu anfragen bei Änderung
         if(($args[0] eq "rename")||($args[0] eq "delete")) {
-            DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+            DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
             DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );   # CD 0011
         } else {
             SB_SERVER_ParseServerPlaylists( $hash, \@args );
@@ -1984,7 +1986,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
     # CD 0016 start
     } elsif( $cmd eq "rescan" ) {
         if( $args[0] eq "done" ) {
-        	DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+        	DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
             $hash->{helper}{genres}{reread}=1; # CD 0051
             $hash->{helper}{artists}{reread}=1; # CD 0051
             $hash->{helper}{albums}{reread}=1; # CD 0051
@@ -1992,7 +1994,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
             DevIo_SimpleWrite( $hash, "favorites items 0 " .
                    AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",
                    0 );
-            DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+            DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
             DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );
             # CD 0036 end
             # CD 0039 start
@@ -2662,6 +2664,12 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
         $nameactive=0;  # CD 0030
 	    next;
     # CD 0017 end
+	} elsif( $_ =~ /^(voltage:)(.*)/ ) {
+	    if( $currentplayerid ne "none" ) {
+        $players{$currentplayerid}{voltage} = $2;
+	    }
+      $nameactive=0;
+	    next;
     # CD 0030 firmware und modelname
 	} elsif( $_ =~ /^(modelname:)(.*)/ ) {
 	    if( $currentplayerid ne "none" ) {
@@ -2777,6 +2785,11 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
         if( defined( $players{$player}{power} ) ) {
             Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" .
                   "power $players{$player}{power}", undef );
+        }
+
+        if( defined( $players{$player}{voltage} ) ) {
+            Dispatch( $hash, "SB_PLAYER:$players{$player}{ID}:" .
+                  "fhemvoltage $players{$player}{voltage}", undef );
         }
     }
 
@@ -3679,7 +3692,7 @@ sub SB_SERVER_LMS_Status( $ ) {
     DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
     DevIo_SimpleWrite( $hash, "favorites items 0 " .
 		       AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
-    DevIo_SimpleWrite( $hash, "playlists 0 200\n", 0 );
+    DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
     DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );  # CD 0029
     DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );     # CD 0049
@@ -4222,7 +4235,9 @@ sub SB_SERVER_readPassword($)
     commands are buffered. After the link is reconnected, commands, that are not older than five minutes,
     are send to the LMS.</li>
     <li><code>maxfavorites &lt;number&gt;</code><br>
-    Adjust here the maximal number of the favourites.</li>
+    Adjust here the maximal number of the favourites loaded from the server.</li>
+    <li><code>maxplaylists &lt;number&gt;</code><br>
+    Adjust here the maximal number of the playlists loaded from the server.</li>
   </ul>
 </ul>
 =end html
@@ -4337,7 +4352,9 @@ sub SB_SERVER_readPassword($)
     werden bis zu &lt;Anzahl&gt; Befehle zwischengespeichert. Nach dem Verbindungsaufbau werden die Befehle,
     die nicht &auml;lter als 5 Minuten sind, an den LMS geschickt.</li>
     <li><code>maxfavorites &lt;Anzahl&gt;</code><br>
-    Die maximale Anzahl der Favoriten wird hier eingestellt.</li>
+    Die maximale Anzahl der Favoriten die vom Server geladen werden wird hier eingestellt.</li>
+    <li><code>maxplaylists &lt;Anzahl&gt;</code><br>
+    Die maximale Anzahl der Wiedergabelisten die vom Server geladen werden wird hier eingestellt.</li>
   </ul>
 </ul>
 =end html_DE
