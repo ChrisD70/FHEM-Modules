@@ -1,5 +1,5 @@
 ﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0104 2018-09-03 12:27:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0107 2019-03-24 20:57:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -156,7 +156,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "coverartwidth:50,100,200,400,800,1600 ";
     # CD 0028
     $hash->{AttrList}  .= "ttsVolume ";
-    $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone "; # CD 0062 Auswahl vorgeben
+    $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone,doubleescape "; # CD 0062 Auswahl vorgeben
 
     $hash->{AttrList}  .= "trackPositionQueryInterval "; # CD 0064
     $hash->{AttrList}  .= "sortFavorites:1,0 sortPlaylists:1,0 "; # CD 0064
@@ -175,7 +175,7 @@ sub SB_PLAYER_Initialize( $ ) {
     $hash->{AttrList}  .= "updateReadingsOnSet:true,false ";        # CD 0017
     $hash->{AttrList}  .= "statusRequestInterval ";                 # CD 0037
     $hash->{AttrList}  .= "syncedNamesSource:LMS,FHEM ";            # CD 0055
-    $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists,genres,albums,artists,all ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt # CD 0103 genres, albums und artists hinzugefügt # CD 0104 all hinzugefügt
+    $hash->{AttrList}  .= "ftuiSupport:multiple-strict,1,0,medialist,favorites,playlists,genres,albums,albumsWithArtists,artists,all ";                       # CD 0065 neu # CD 0086 Auswahl hinzugefügt # CD 0103 genres, albums und artists hinzugefügt # CD 0104 all hinzugefügt
     $hash->{AttrList}  .= "amplifierMode:exclusive,shared ";            # CD 0088
     $hash->{AttrList}  .= "disable:0,1 ";                           # CD 0091
     $hash->{AttrList}  .= "ignoreUnknownSonginfoTags:0,1 ";         # CD 0099
@@ -386,6 +386,7 @@ sub SB_PLAYER_Attr( @ ) {
             $hash->{helper}{ftuiSupport}{genres}=1 if($opt=~ m/genres/)||($opt eq 'all');     # CD 0103
             $hash->{helper}{ftuiSupport}{albums}=1 if($opt=~ m/albums/)||($opt eq 'all');     # CD 0103
             $hash->{helper}{ftuiSupport}{artists}=1 if($opt=~ m/artists/)||($opt eq 'all');   # CD 0103
+            $hash->{helper}{ftuiSupport}{albums_artists}=1 if($opt=~ m/albumsWithArtists/)||($opt eq 'all');     # CD 0107
         }
         
         if(defined($hash->{helper}{ftuiSupport})) {
@@ -424,10 +425,21 @@ sub SB_PLAYER_Attr( @ ) {
                 if(defined($hash->{helper}{albumdata})) {
                     readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
                     readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
+                    $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},undef);
                     readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
                 }
             }
             # CD 0103
+            
+            # CD 0107
+            if(defined($hash->{helper}{ftuiSupport}{albums_artists})) {
+                if(defined($hash->{helper}{albumdata})) {
+                    readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
+                    readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
+                    $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},$hash->{helper}{albumartists});
+                    readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
+                }
+            }
             
             if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
                 readingsEndUpdate( $hash, 0 );
@@ -2130,6 +2142,16 @@ sub SB_PLAYER_Parse( $$ ) {
     } elsif( $cmd eq "sleep" ) {
         $hash->{WILLSLEEPIN} = int($args[0])." secs" if defined($args[ 0 ]);
     # CD 0089 end
+    # CD 0105 start
+    } elsif( $cmd eq 'voltage' ) {
+        if(defined($args[0])) { 
+            if($args[0] ne '?') {
+                if(int($args[0])>0) {
+                    readingsBulkUpdate( $hash, 'voltage', $args[0] );
+                }
+            }
+        }
+    # CD 0105 end
     } elsif( $cmd eq "NONE" ) {
         # we shall never end up here, as cmd=NONE is used by the server for
         # autocreate
@@ -3154,7 +3176,7 @@ sub SB_PLAYER_Set( $@ ) {
 
                     $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047, CD 0048 client=tw-ob verwenden
                     $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq "Google");  # CD 0048 client=tw-ob verwenden
-                    $ttslink="http://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>" if ($ttslink eq "VoiceRSS");
+                    $ttslink="http://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>&c=AAC" if ($ttslink eq "VoiceRSS");
 
                     # alte Links anpassen
                     if($ttslink !~ m/<TEXT>/) {
@@ -3246,9 +3268,9 @@ sub SB_PLAYER_Set( $@ ) {
                     }
                 }
                 if( $t>0 ) {
-                    $genre=uri_escape(decode('utf-8',$genre)) if($genre ne '*');
-                    $album=uri_escape(decode('utf-8',$album)) if($album ne '*');
-                    $artist=uri_escape(decode('utf-8',$artist)) if($artist ne '*');
+                    $genre=uri_escape_utf8(decode('utf-8',$genre)) if($genre ne '*');     # CD 0106 uri_escape_utf8 statt uri_escape verwenden
+                    $album=uri_escape_utf8(decode('utf-8',$album)) if($album ne '*');     # CD 0106 uri_escape_utf8 statt uri_escape verwenden
+                    $artist=uri_escape_utf8(decode('utf-8',$artist)) if($artist ne '*');  # CD 0106 uri_escape_utf8 statt uri_escape verwenden
                     IOWrite( $hash, "$hash->{PLAYERMAC} playlist loadalbum " .
                              "$genre $artist $album\n" );
                 }
@@ -4302,6 +4324,7 @@ sub SB_PLAYER_GetStatus( $ ) {
                 "$hash->{PLAYERMAC} playerpref syncVolume ?\n". # CD 0007
                 "$hash->{PLAYERMAC} playlist name ?\n".         # CD 0009
                 "$hash->{PLAYERMAC} playlist path 0 ?\n".       # CD 0048
+                "$hash->{PLAYERMAC} voltage ?\n".               # CD 0105
                 "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
         SB_PLAYER_QueryElapsedTime($hash);
     }   # CD 0014 end
@@ -4638,7 +4661,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             my $ids=uri_unescape($args[2]);
             $hash->{helper}{genredata}=$data;
             $hash->{helper}{genreids}=$ids;
-            $hash->{helper}{genremedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids);
+            $hash->{helper}{genremedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
             if($hash->{helper}{ftuiSupport}{genres}) {
                 readingsSingleUpdate( $hash, "ftuiGenresAlias", $data, 1 );
                 readingsSingleUpdate( $hash, "ftuiGenresList", $ids, 1 );
@@ -4649,12 +4672,21 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
         if($args[0] eq 'UPDATE') {
             my $data=uri_unescape($args[1]);
             my $ids=uri_unescape($args[2]);
+            my $artists=uri_unescape($args[3]); # CD 0107
             $hash->{helper}{albumdata}=$data;
+            $hash->{helper}{albumartists}=$artists; # CD 0107
             $hash->{helper}{albumids}=$ids;
-            $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids);
             if($hash->{helper}{ftuiSupport}{albums}) {
                 readingsSingleUpdate( $hash, "ftuiAlbumsAlias", $data, 1 );
                 readingsSingleUpdate( $hash, "ftuiAlbumsList", $ids, 1 );
+                $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
+                readingsSingleUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist}, 1 );
+            }
+            # CD 0107
+            if($hash->{helper}{ftuiSupport}{albums_artists}) {
+                readingsSingleUpdate( $hash, "ftuiAlbumsAlias", $data, 1 );
+                readingsSingleUpdate( $hash, "ftuiAlbumsList", $ids, 1 );
+                $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,$artists);
                 readingsSingleUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist}, 1 );
             }
         }
@@ -4664,7 +4696,7 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             my $ids=uri_unescape($args[2]);
             $hash->{helper}{artistdata}=$data;
             $hash->{helper}{artistids}=$ids;
-            $hash->{helper}{artistmedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids);
+            $hash->{helper}{artistmedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
             if($hash->{helper}{ftuiSupport}{artists}) {
                 readingsSingleUpdate( $hash, "ftuiArtistsAlias", $data, 1 );
                 readingsSingleUpdate( $hash, "ftuiArtistsList", $ids, 1 );
@@ -4681,25 +4713,39 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
 # ----------------------------------------------------------------------------
 #  build list for FTUI medialist widget from genre, album or artist
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_BAA2ftuiML( $$$ ) {
-    my ( $hash, $data, $ids ) = @_;
+sub SB_PLAYER_BAA2ftuiML( $$$$ ) {
+    my ( $hash, $data, $ids, $data2 ) = @_;
 
     my $name = $hash->{NAME};
 
     my $ftuireading="";
+
+    # CD 0107 Masiwo #1936
+    if (!defined($data) || !defined($ids)) {
+      return "";
+    }
     
     my @sdata=split ':',$data;
     my @sids=split ':',$ids;
+    my @sdata2;
+    @sdata2=split ':',$data2 if defined($data2);  # CD 0107
     
     if (scalar @sdata != scalar @sids) {
-        Log3( $hash, 2, "SB_PLAYER_BAA2ftuiML($name): array size mismatch");
+        Log3( $hash, 2, "SB_PLAYER_BAA2ftuiML($name): array size mismatch (id-data)");
         return "";
     }
+    # CD 0107
+    if (defined($data2) && (scalar @sdata != scalar @sdata2)) {
+        Log3( $hash, 2, "SB_PLAYER_BAA2ftuiML($name): array size mismatch (data-data2)");
+        return "";
+    }
+    my $artist='';  # CD 0107
     for my $i (0 .. $#sdata) {
+        $artist=$sdata2[$i] if defined($data2); # CD 0107
         if ($ftuireading eq "") {
-            $ftuireading='[{"Artist":"","Title":"' . $sdata[$i] . '","Album":"","Time":"","File":"'. $sids[$i] . '","Track":"","Cover":"/fhem/images/default/empty.png"}';
+            $ftuireading='[{"Artist":"' . $artist . '","Title":"' . $sdata[$i] . '","Album":"","Time":"","File":"'. $sids[$i] . '","Track":"","Cover":"/fhem/images/default/empty.png"}';
         } else {
-            $ftuireading.=',{"Artist":"","Title":"' . $sdata[$i] . '","Album":"","Time":"","File":"'. $sids[$i] . '","Track":"","Cover":"/fhem/images/default/empty.png"}';
+            $ftuireading.=',{"Artist":"' . $artist . '","Title":"' . $sdata[$i] . '","Album":"","Time":"","File":"'. $sids[$i] . '","Track":"","Cover":"/fhem/images/default/empty.png"}';
         }
     }    
     if ($ftuireading ne "") {
