@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0052 2019-02-28 20:59:00Z CD $
+# $Id: 97_SB_SERVER.pm 0053 2019-03-24 20:47:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0052';
+use constant SB_SERVER_VERSION => '0053';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -2545,7 +2545,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    readingsBulkUpdate( $hash, "db_albums", $2 );
         # CD 0051
         if (defined($hash->{helper}{albums}{reread})) {
-            DevIo_SimpleWrite( $hash, "albums 0 $2\n", 0 );
+            DevIo_SimpleWrite( $hash, "albums 0 $2 tags:la\n", 0 ); # CD 0053 Artisten mit abfragen
             delete $hash->{helper}{albums}{reread};
         }
 	    next;
@@ -2867,6 +2867,8 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
     my $buf = "";
     my $indata = 0;
     my $data="";
+    my $data2=""; # CD 0053
+    my $albumartist = '';  # CD 0053
     my $ids="";
 
     foreach( @args ) {
@@ -2879,12 +2881,24 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
             if($indata==1) {
                 $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
                 $buf=~ s/"//g;
+                if($cmd eq 'albums') {
+                  $albumartist=' ' if(!defined($albumartist));
+                  $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+                  $albumartist=~ s/"//g;
+                  if($data2 eq "") {
+                      $data2=$albumartist;
+                  } else {
+                      $data2.=":$albumartist";
+                  }
+                  $albumartist=undef;
+                }
                 if($data eq "") {
                     $data=$buf;
                 } else {
                     $data.=":$buf";
                 }
                 $buf="";
+                $indata=0;
             }
             next;
         } elsif( $_ =~ /^(genre:)(.*)/ ) {
@@ -2896,25 +2910,43 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
             $indata=1;
             next;
         } elsif( $_ =~ /^(artist:)(.*)/ ) {
-            $buf=$2;
+            # CD 0053
+            if($cmd eq 'albums') {
+              $albumartist=$2;
+            } else {
+              $buf=$2;
+            }
             $indata=1;
             next;
         } elsif( $_ =~ /^(count:)(.*)/ ) {
             next;
         } elsif ($indata==1) {
-            $buf.=" $_";
+            if(defined($albumartist)) {
+              $albumartist.=" $_";
+            } else {
+              $buf.=" $_";
+            }
         }
     }
     
     if($indata==1) {
         $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
         $buf=~ s/"//g;
+        if($cmd eq 'albums') {
+          $albumartist=' ' if(!defined($albumartist));
+          $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+          $albumartist=~ s/"//g;
+          if($data2 eq "") {
+              $data2=$albumartist;
+          } else {
+              $data2.=":$albumartist";
+          }
+        }
         if($data eq "") {
             $data=$buf;
         } else {
             $data.=":$buf";
         }
-        $buf="";
     }
     
     my $doBroadcast=0;
@@ -2933,6 +2965,7 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
     }
     if($cmd eq 'albums') {
         $hash->{helper}{albums}{data}=$data;
+        $hash->{helper}{albums}{artists}=$data2;
         $hash->{helper}{albums}{ids}=$ids;
         $hash->{helper}{albums}{broadcast}=1;
         $doBroadcast=1;
@@ -2961,7 +2994,7 @@ sub SB_SERVER_tcb_BroadcastGAA( $ ) {
         delete $hash->{helper}{artists}{broadcast};
     }
     if(defined($hash->{helper}{albums}{broadcast})) {
-        SB_SERVER_Broadcast( $hash, "ALBUMS", "UPDATE " . uri_escape($hash->{helper}{albums}{data}) . ' ' . $hash->{helper}{albums}{ids}, undef );
+        SB_SERVER_Broadcast( $hash, "ALBUMS", "UPDATE " . uri_escape($hash->{helper}{albums}{data}) . ' ' . $hash->{helper}{albums}{ids} . ' ' . uri_escape($hash->{helper}{albums}{artists}), undef ); # CD 0053 added album artists
         delete $hash->{helper}{albums}{broadcast};
     }
 }
