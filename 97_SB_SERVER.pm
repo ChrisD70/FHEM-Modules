@@ -1,5 +1,5 @@
 ﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0053 2019-03-24 20:47:00Z CD $
+# $Id: 97_SB_SERVER.pm 0054 2019-04-15 21:42:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,7 +71,7 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0053';
+use constant SB_SERVER_VERSION => '0054';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
@@ -111,6 +111,7 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{AttrList} .= "httpport ";
     $hash->{AttrList} .= "disable:0,1 ";    # CD 0046
     $hash->{AttrList} .= "enablePlugins ";
+    $hash->{AttrList} .= "artistFilter:multiple-strict,ARTIST,COMPOSER,CONDUCTOR,BAND,ALBUMARTIST,TRACKARTIST ";   # CD 0054
     $hash->{AttrList} .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     $hash->{AttrList} .= $readingFnAttributes;
 
@@ -130,6 +131,7 @@ sub SB_SERVER_SetAttrList( $ ) {
     $attrList .= "maxcmdstack ";
     $attrList .= "httpport ";
     $attrList .= "disable:0,1 ";    # CD 0046
+    $attrList .= "artistFilter:multiple-strict,ARTIST,COMPOSER,CONDUCTOR,BAND,ALBUMARTIST,TRACKARTIST ";   # CD 0054
     $attrList .= "ignoredIPs ignoredMACs internalPingProtocol:icmp,tcp,udp,syn,stream,none ";   # CD 0021 none hinzugefügt
     my $applist="enablePlugins";
     if (defined($hash->{helper}{apps})) {
@@ -683,7 +685,12 @@ sub SB_SERVER_Attr( @ ) {
             }
         }
     # CD 0046 end
+    # CD 0054 start
+    } elsif( $args[ 0 ] eq 'artistFilter') {
+      $hash->{helper}{artists}{reread}=1; # CD 0051
+      DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
     }
+    # CD 0054 end
     return; # 0033 betateilchen/mahowi
 }
 
@@ -1076,7 +1083,11 @@ sub SB_SERVER_Set( $@ ) {
         $hash->{helper}{getData}{$a[2]}{reading}=$a[1];
 
         if($a[2] eq 'artists') {
+          if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
+            DevIo_SimpleWrite( $hash, "artists 0 5000 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
+          } else {
             DevIo_SimpleWrite( $hash, "artists 0 5000\n", 0 );
+          }
         }
     # CD 0030 end
     } else {
@@ -2553,8 +2564,12 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 	    readingsBulkUpdate( $hash, "db_artists", $2 );
         # CD 0051
         if (defined($hash->{helper}{artists}{reread})) {
+          if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
+            DevIo_SimpleWrite( $hash, "artists 0 $2 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
+          } else {
             DevIo_SimpleWrite( $hash, "artists 0 $2\n", 0 );
-            delete $hash->{helper}{artists}{reread};
+          }
+          delete $hash->{helper}{artists}{reread};
         }
 	    next;
 	} elsif( $_ =~ /^(infototalsongs:)([0-9]*)/ ) {
@@ -2868,7 +2883,7 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
     my $indata = 0;
     my $data="";
     my $data2=""; # CD 0053
-    my $albumartist = '';  # CD 0053
+    my $albumartist;  # CD 0053
     my $ids="";
 
     foreach( @args ) {
@@ -2919,6 +2934,8 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
             $indata=1;
             next;
         } elsif( $_ =~ /^(count:)(.*)/ ) {
+            next;
+        } elsif( $_ =~ /^(role_id:)(.*)/ ) {
             next;
         } elsif ($indata==1) {
             if(defined($albumartist)) {
@@ -4250,6 +4267,8 @@ sub SB_SERVER_readPassword($)
     Default: 120. Every &lt;sec&gt; seconds it is checked, whether the computer with its LMS is still reachable
     – either via an internal ping (that leads regulary to problems) or via PRESENCE (preferred, no problems)
     - and running.</li>
+    <li><code>artistFilter &lt;type1[,type2]&gt;</code><br>
+    Limits the artists to the specified types. If the attribute is not set, all artists are shown.</li>
     <li><code>doalivecheck &lt;true|false&gt;</code><br>
     Switches the LMS-monitoring on or off.</li>
     <li><code>enablePlugins &lt;plugin1[,pluginX]&gt;</code><br>
@@ -4366,6 +4385,9 @@ sub SB_SERVER_readPassword($)
     Default 120. Alle &lt;sec&gt; Sekunden wird &uuml;berpr&uuml;ft, ob der Rechner mit dem LMS noch erreichbar ist
     - entweder über internen Ping (f&uuml;hrt zu regelm&auml;&szlig;igen H&auml;ngern von FHEM) oder PRESENCE (bevorzugt,
     keine H&auml;nger) - und ob der LMS noch l&auml;uft.</li>
+    <li><code>artistFilter &lt;filter1[,filter2]&gt;</code><br>
+    Wenn das Attribut gesetzt ist werden nur die angegeben Artistentypen angezeigt. Wenn das Attribut nicht gesetzt ist
+    werden alle Artisten angezeigt.</li>
     <li><code>doalivecheck &lt;true|false&gt;</code><br>
     &Uuml;berwachung des LMS ein- oder auschalten.</li>
     <li><code>enablePlugins &lt;plugin1[,pluginX]&gt;</code><br>
