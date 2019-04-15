@@ -1,4 +1,5 @@
 ﻿97_SB_SERVER:
+  190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
   190229 0052 - Attribut maxplaylists hinzugefügt
               - voltage auslesen, benötigt Plugin für LMS
@@ -6,9 +7,6 @@
   180617 0050 - Anpassungen für PRESENCE ab Version 15969
               - Reconnect korrigiert nach DISCONNECT-Event
               - Link zu Doku_SB-Server-Player hinzugefügt
-  180127 0049 - httpport automatisch vom Server lesen, kann aber über Attribut httpport überschrieben werden
-  171227 0048 - diverse Zeichen aus IP-Adresse filtern
-              - Absturz bei ungültiger IP-Adresse bei Verwendung von internem Ping behoben
 98_SB_PLAYER:
   190324 0107 - ftuiSupport um albumsWithArtist erweitert
               - Warnung behoben beim Aufbau der ftui-Listen
@@ -25,6 +23,7 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
   190229 0052 - Attribut maxplaylists hinzugefügt
               - voltage auslesen, benötigt Plugin für LMS
