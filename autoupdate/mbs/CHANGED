@@ -1,4 +1,5 @@
 36_ModbusTCP_CC:
+    190629 0009 added attribute allowFrom
     181124 0008 added MASK_WRITE_REGISTER (FC 22)
     180114 0007 ignore unknown format specifiers on WRITE_*_REGISTERS
     170528 0006 performance improvements, updated documentation
