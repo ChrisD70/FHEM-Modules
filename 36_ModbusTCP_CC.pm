@@ -1,5 +1,5 @@
 ##############################################
-# $Id: 36_ModbusTCP_CC.pm 0008 2018-11-24 14:15:00Z CD $
+# $Id: 36_ModbusTCP_CC.pm 0009 2019-06-29 16:02:00Z CD $
 # 140221 0001 initial release
 # 160207 0002 added FC 6 and 16, modified for FHEM 5.7
 # 161231 0003 added IEEE 754 single precision (litte & big endian), added bit support for registers
@@ -8,6 +8,7 @@
 # 170528 0006 performance improvements, updated documentation
 # 180114 0007 ignore unknown format specifiers on WRITE_*_REGISTERS
 # 181124 0008 added MASK_WRITE_REGISTER
+# 190629 0009 added attribute allowFrom
 
 package main;
 
@@ -67,7 +68,7 @@ sub ModbusTCP_CC_Initialize($) {
   $hash->{DefFn}   = "ModbusTCP_CC_Define";
   $hash->{UndefFn} = "ModbusTCP_CC_Undef";
   $hash->{AttrList}= "do_not_notify:1,0 dummy:1,0 " .
-                     "maxClients " .
+                     "maxClients allowfrom " .
                      $readingFnAttributes;
 }
 
@@ -805,6 +806,18 @@ sub ModbusTCP_CC_UpdateStatistics($$$$$) {######################################
   <b>Attributes</b>
   <ul>
     <li><a href="#attrdummy">dummy</a></li><br>
+    <a name="allowfrom"></a>
+    <li>allowfrom<br>
+      Regexp of allowed ip-addresses or hostnames. If set, only connections
+      from these addresses are allowed.<br>
+      NOTE: If allowfrom is not set, and no kind allowed instance is defined,
+      and the remote has a non-local address, then the connection is rejected.
+      The following addresses are considered local:<br>
+      <ul>
+        IPV4: 127/8, 10/8, 192.168/16, 172.16/12, 169.254/16<br>
+        IPV6: ::1, fe80/10<br>
+      </ul>
+      </li><br> 
   </ul>
   <b>Usage</b><br>
   The Modbus coil/register number is configured through the comment field of the devices.<br><br>
