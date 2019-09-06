@@ -1,5 +1,5 @@
 ﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0022 $
+# $Id: 36_ModbusTCPServer.pm 0023 2019-09-06 21:05:00Z CD $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -22,6 +22,7 @@
 # 160922 0020 added queue delay
 # 161231 0021 fixed error handling
 # 181107 0022 changed detection of wago plc
+# 190906 0023 added fingerprint
 # TODO:
 
 package main;
@@ -99,6 +100,7 @@ sub ModbusTCPServer_Initialize($) {
   $hash->{SetFn}   = "ModbusTCPServer_Set";
   $hash->{NotifyFn}= "ModbusTCPServer_Notify";
   $hash->{AttrFn}  = "ModbusTCPServer_Attr";
+  $hash->{FingerprintFn}   = "ModbusTCPServer_Fingerprint"; # CD 0023
   $hash->{Clients} = ":ModbusRegister:ModbusCoil:";
   my %mc = (
     "1:ModbusRegister" => "^ModbusRegister.*",
@@ -1105,6 +1107,12 @@ sub ModbusTCPServer_UpdateStatistics($$$$$) {###################################
   $hash->{helper}{statistics}{bytesOut}+=$bo;
   $hash->{statistics} =$hash->{helper}{statistics}{pktIn} ." / " . $hash->{helper}{statistics}{pktOut} ." / " . $hash->{helper}{statistics}{bytesIn} ." / " . $hash->{helper}{statistics}{bytesOut};
 }
+
+# CD 0023
+sub
+ModbusTCPServer_Fingerprint($$)
+{
+} 
 1;
 
 =pod
