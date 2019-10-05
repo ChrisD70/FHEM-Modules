@@ -1,6 +1,7 @@
 ##############################################
-# $Id: 36_ModbusSlave.pm 0001 2018-02-24 17:24:00Z CD $
+# $Id: 36_ModbusSlave.pm 0002 2019-10-05 14:27:00Z CD $
 # 180224 0001 initial release
+# 191005 0002 added ReadyFn for Windows compatibility
 
 package main;
 
@@ -49,7 +50,7 @@ sub ModbusSlave_Initialize($) {
 # Provider
   $hash->{ReadFn}  = "ModbusSlave_Read";
 #  $hash->{WriteFn} = "ModbusSlave_Write";
-#  $hash->{ReadyFn} = "ModbusSlave_Ready";
+  $hash->{ReadyFn} = "ModbusSlave_Ready";
 #  $hash->{SetFn}   = "ModbusSlave_Set";
   $hash->{NotifyFn}= "ModbusSlave_Notify";
   $hash->{AttrFn}  = "ModbusSlave_Attr";
@@ -128,6 +129,18 @@ sub ModbusSlave_DoInit($) {#####################################################
   return undef;
 }
 
+sub ModbusSlave_Ready($) {###########################################################
+  my ($hash) = @_;
+  
+  # This is relevant for windows/USB only
+  my $po = $hash->{USBDev};
+  my ($BlockingFlags, $InBytes, $OutBytes, $ErrorFlags);
+  if($po) {
+    ($BlockingFlags, $InBytes, $OutBytes, $ErrorFlags) = $po->status;
+  }
+  return ($InBytes && $InBytes>0);
+} 
+
 sub ModbusSlave_Attr(@) {############################################################
   my ($cmd,$name, $aName,$aVal) = @_;
   
@@ -153,6 +166,7 @@ sub ModbusSlave_Attr(@) {#######################################################
 
 sub ModbusSlave_Read($) {############################################################
 # called from the global loop, when the select for hash->{FD} reports data
+Log 0,"Read";
   my ($hash) = @_;
   my $buf = DevIo_SimpleRead($hash);
   return "" if(!defined($buf));
