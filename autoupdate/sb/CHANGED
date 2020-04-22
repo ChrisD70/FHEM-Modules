@@ -8,6 +8,7 @@
               - Reconnect korrigiert nach DISCONNECT-Event
               - Link zu Doku_SB-Server-Player hinzugefügt
 98_SB_PLAYER:
+  200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
   190324 0107 - ftuiSupport um albumsWithArtist erweitert
               - Warnung behoben beim Aufbau der ftui-Listen
   181222 0106 - bei playlist loadalbum UTF8 benutzen
@@ -16,9 +17,6 @@
               - neuer Wert 'all' für ftuiSupport, legt alle FTUI-Readings an (auch zukünftige !)
   180902 0103 - FTUI-Unterstützung für Genres, Alben und Artisten hinzugefügt
   180926 0102 - Perl-Fehler behoben wenn SYNCMASTERPN oder SYNCGROUPPN leer sind
-  180806 0101 - TTS bei ausgeschalteten Playern korrigiert
-  180617 0100 - Fehler in CommandRef-Struktur korrigiert
-  180522 0099 - Attribut ignoreUnknownSonginfoTags hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -133,6 +131,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
   190324 0107 - ftuiSupport um albumsWithArtist erweitert
               - Warnung behoben beim Aufbau der ftui-Listen
   181222 0106 - bei playlist loadalbum UTF8 benutzen
