@@ -571,10 +571,16 @@ sub SB_PLAYER_Define {
     my @idbuf = split( ":", $hash->{PLAYERMAC} );
     my $uniqueid = join( "", @idbuf );
 
-    # CD 0108 check if id exists
+    # CD 0108 check if FHEMUID exists
     foreach my $key (keys %{$modules{SB_PLAYER}{defptr}}) {
       if(defined($modules{SB_PLAYER}{defptr}{$key}{FHEMUID}) && ($modules{SB_PLAYER}{defptr}{$key}{FHEMUID} eq $uniqueid)) {
-        my $msg = "SB_PLAYER_Define: player with id $uniqueid already exists, name: " . $modules{SB_PLAYER}{defptr}{$key}{NAME};
+        my $msg = "SB_PLAYER_Define: player with FHEMUID $uniqueid already exists, name: " . $modules{SB_PLAYER}{defptr}{$key}{NAME} . ", key: $key";
+        Log3( $hash, 1, $msg );
+        return( $msg );
+      }
+
+      if(defined($modules{SB_PLAYER}{defptr}{$key}{PLAYERMAC}) && ($modules{SB_PLAYER}{defptr}{$key}{PLAYERMAC} eq $hash->{PLAYERMAC})) {
+        my $msg = "SB_PLAYER_Define: player with PLAYERMAC " . $hash->{PLAYERMAC} . " already exists, name: " . $modules{SB_PLAYER}{defptr}{$key}{NAME} . ", key: $key";
         Log3( $hash, 1, $msg );
         return( $msg );
       }
