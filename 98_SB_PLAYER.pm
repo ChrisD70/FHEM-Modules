@@ -1,5 +1,5 @@
-﻿# ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0107 2019-03-24 20:57:00Z CD/MM/Matthew/Heppel $
+# ##############################################################################
+# $Id: 98_SB_PLAYER.pm 0109 2021-04-29 19:17:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -61,10 +61,10 @@ no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
 use constant { true => 1, false => 0 };
 
-sub SB_PLAYER_SonginfoHandleQueue($);   # CD 0075
-sub SB_PLAYER_RemoveInternalTimers($);  # CD 0078
-sub SB_PLAYER_ftuiMedialist($);         # CD 0082
-sub SB_PLAYER_TTSLogPlayerState($$);    # CD 0097
+#sub SB_PLAYER_SonginfoHandleQueue($);   # CD 0075
+#sub SB_PLAYER_RemoveInternalTimers($);  # CD 0078
+#sub SB_PLAYER_ftuiMedialist($);         # CD 0082
+#sub SB_PLAYER_TTSLogPlayerState($$);    # CD 0097
 
 # the list of favorites
 # CD 0010 moved to $hash->{helper}{SB_PLAYER_Favs}, fixes problem on module reload
@@ -120,11 +120,11 @@ my $SB_PLAYER_hasDataDumper = 1;        # CD 0036
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Initialize( $ ) {
+sub SB_PLAYER_Initialize {
     my ($hash) = @_;
 
     # the commands we provide to FHEM
-    # installs the respecitive call-backs for FHEM. The call back in quotes
+    # installs the respective call-backs for FHEM. The call back in quotes
     # must be realised as a sub later on in the file
     $hash->{DefFn}      = "SB_PLAYER_Define";
     $hash->{UndefFn}    = "SB_PLAYER_Undef";
@@ -184,13 +184,14 @@ sub SB_PLAYER_Initialize( $ ) {
     # CD 0036 aus 37_sonosBookmarker
     eval "use Data::Dumper";
     $SB_PLAYER_hasDataDumper = 0 if($@);
+    return;
 }
 
 # CD 0007 start
 # ----------------------------------------------------------------------------
 #  Attr functions
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Attr( @ ) {
+sub SB_PLAYER_Attr {
     my $cmd = shift( @_ );
     my $name = shift( @_ );
     my @args = @_;
@@ -224,21 +225,21 @@ sub SB_PLAYER_Attr( @ ) {
     }
     # CD 0043 start
     elsif( $args[ 0 ] eq "amplifierDelayOff" ) {
-      $hash->{helper}{amplifierDelayOffStop}=0;
-      $hash->{helper}{amplifierDelayOffPower}=0;
-      $hash->{helper}{amplifierDelayOffPause}=0;
-      if( $cmd eq "set" ) {
-        if (defined($args[1])) {
-          my @delays=split(',',$args[1]);
-          $hash->{helper}{amplifierDelayOffStop}=$delays[0]+0 if defined($delays[0]);
-          $hash->{helper}{amplifierDelayOffPower}=$delays[0]+0 if defined($delays[0]);
-          $hash->{helper}{amplifierDelayOffPause}=$delays[1]+0 if defined($delays[1]);
+        $hash->{helper}{amplifierDelayOffStop}=0;
+        $hash->{helper}{amplifierDelayOffPower}=0;
+        $hash->{helper}{amplifierDelayOffPause}=0;
+        if( $cmd eq "set" ) {
+            if (defined($args[1])) {
+                my @delays=split(',',$args[1]);
+                $hash->{helper}{amplifierDelayOffStop}=$delays[0]+0 if defined($delays[0]);
+                $hash->{helper}{amplifierDelayOffPower}=$delays[0]+0 if defined($delays[0]);
+                $hash->{helper}{amplifierDelayOffPause}=$delays[1]+0 if defined($delays[1]);
+            } else {
+                return "missing value for amplifierDelayOff";
+            }
         } else {
-            return "missing value for amplifierDelayOff";
-        }
-      } else {
 
-      }
+        }
     }
     # CD 0043 end
     # CD 0028
@@ -297,22 +298,22 @@ sub SB_PLAYER_Attr( @ ) {
     }
     # CD 0037
     elsif( $args[ 0 ] eq "statusRequestInterval" ) {
-      RemoveInternalTimer( $hash );
-      if( $cmd eq "set" ) {
-        if (defined($args[1])) {
-          InternalTimer( gettimeofday() + $args[1],
-                         "SB_PLAYER_GetStatus",
-                         $hash,
-                         0 ) if (($args[1]>0) && !IsDisabled($name));
+        RemoveInternalTimer( $hash );
+        if( $cmd eq "set" ) {
+            if (defined($args[1])) {
+                InternalTimer( gettimeofday() + $args[1],
+                             "SB_PLAYER_GetStatus",
+                             $hash,
+                             0 ) if (($args[1]>0) && !IsDisabled($name));
+            } else {
+                return "missing value for statusRequestInterval";
+            }
         } else {
-            return "missing value for statusRequestInterval";
+            InternalTimer( gettimeofday() + 5,
+                           "SB_PLAYER_GetStatus",
+                           $hash,
+                           0 ) unless(IsDisabled($name));   # CD 0091 bei disable Timer nicht starten
         }
-      } else {
-        InternalTimer( gettimeofday() + 5,
-                       "SB_PLAYER_GetStatus",
-                       $hash,
-                       0 ) unless(IsDisabled($name));   # CD 0091 bei disable Timer nicht starten
-      }
     }
     # CD 0055 start
     elsif( $args[ 0 ] eq "syncedNamesSource" ) {
@@ -321,31 +322,31 @@ sub SB_PLAYER_Attr( @ ) {
     # CD 0055 end
     # CD 0064 start
     elsif( $args[ 0 ] eq "trackPositionQueryInterval" ) {
-      if( $cmd eq "set" ) {
-        RemoveInternalTimer( "QueryElapsedTime:$name");
-        if ((ReadingsVal($name,"playStatus","x") eq "playing")&&($args[1]>0)) {
-          InternalTimer( gettimeofday() + $args[1],
-             "SB_PLAYER_tcb_QueryElapsedTime",
-             "QueryElapsedTime:$name",
-             0 ) unless(IsDisabled($name));   # CD 0091 bei disable Timer nicht starten
+        if( $cmd eq "set" ) {
+            RemoveInternalTimer( "QueryElapsedTime:$name");
+            if ((ReadingsVal($name,"playStatus","x") eq "playing")&&($args[1]>0)) {
+            InternalTimer( gettimeofday() + $args[1],
+                "SB_PLAYER_tcb_QueryElapsedTime",
+                "QueryElapsedTime:$name",
+                0 ) unless(IsDisabled($name));   # CD 0091 bei disable Timer nicht starten
+            }
         }
-      }
     }
     elsif( $args[ 0 ] eq "sortPlaylists" ) {
-      if( $cmd eq "set" ) {
-        if ($args[1] eq "1") {
-          my @radios = split(',',$hash->{SERVERPLAYLISTS});
-          $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+        if( $cmd eq "set" ) {
+            if ($args[1] eq "1") {
+                my @radios = split(',',$hash->{SERVERPLAYLISTS});
+                $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+            }
         }
-      }
     }
     elsif( $args[ 0 ] eq "sortFavorites" ) {
-      if( $cmd eq "set" ) {
-        if ($args[1] eq "1") {
-          my @radios = split(',',$hash->{FAVSTR});
-          $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+        if( $cmd eq "set" ) {
+            if ($args[1] eq "1") {
+                my @radios = split(',',$hash->{FAVSTR});
+                $hash->{FAVSTR} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+            }
         }
-      }
     }
     # CD 0064 end
     # CD 0091 start
@@ -369,136 +370,136 @@ sub SB_PLAYER_Attr( @ ) {
     # CD 0091 end
     # CD 0065 start
     elsif( $args[ 0 ] eq "ftuiSupport" ) {
-      my $dodelete=0;
+        my $dodelete=0;
 
-      return "$name: device is disabled, changing ftuiSupport is not possible" if(IsDisabled($name));   # CD 0091
- 
-      if( $cmd eq "set" ) {
-        # CD 0086 Readings einzeln aktivierbar
-        my @options=split(',',$args[1]);
-        delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
-        $hash->{helper}{ftuiSupport}{enable}=($args[1] eq '0')?0:1;
-            
-        for my $opt (@options) {
-            $hash->{helper}{ftuiSupport}{favorites}=1 if($opt=~ m/favorites/)||($opt eq '1')||($opt eq 'all');
-            $hash->{helper}{ftuiSupport}{playlists}=1 if($opt=~ m/playlists/)||($opt eq '1')||($opt eq 'all');
-            $hash->{helper}{ftuiSupport}{medialist}=1 if($opt=~ m/medialist/)||($opt eq '1')||($opt eq 'all');
-            $hash->{helper}{ftuiSupport}{genres}=1 if($opt=~ m/genres/)||($opt eq 'all');     # CD 0103
-            $hash->{helper}{ftuiSupport}{albums}=1 if($opt=~ m/albums/)||($opt eq 'all');     # CD 0103
-            $hash->{helper}{ftuiSupport}{artists}=1 if($opt=~ m/artists/)||($opt eq 'all');   # CD 0103
-            $hash->{helper}{ftuiSupport}{albums_artists}=1 if($opt=~ m/albumsWithArtists/)||($opt eq 'all');     # CD 0107
-        }
-        
-        if(defined($hash->{helper}{ftuiSupport})) {
-            # CD 0082 Readings setzen (kein manueller statusRequest mehr nötig)
-            readingsBeginUpdate( $hash );
-            if(defined($hash->{helper}{ftuiSupport}{favorites})) {
-                my $t=$hash->{FAVSTR};
-                $t=~s/,/:/g;
-                readingsBulkUpdate( $hash, "ftuiFavoritesItems", $t );
-                $t=~s/_/ /g;
-                readingsBulkUpdate( $hash, "ftuiFavoritesAlias", $t );
+        return "$name: device is disabled, changing ftuiSupport is not possible" if(IsDisabled($name));   # CD 0091
+
+        if( $cmd eq "set" ) {
+            # CD 0086 Readings einzeln aktivierbar
+            my @options=split(',',$args[1]);
+            delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
+            $hash->{helper}{ftuiSupport}{enable}=($args[1] eq '0')?0:1;
+                
+            for my $opt (@options) {
+                $hash->{helper}{ftuiSupport}{favorites}=1 if($opt=~ m/favorites/)||($opt eq '1')||($opt eq 'all');
+                $hash->{helper}{ftuiSupport}{playlists}=1 if($opt=~ m/playlists/)||($opt eq '1')||($opt eq 'all');
+                $hash->{helper}{ftuiSupport}{medialist}=1 if($opt=~ m/medialist/)||($opt eq '1')||($opt eq 'all');
+                $hash->{helper}{ftuiSupport}{genres}=1 if($opt=~ m/genres/)||($opt eq 'all');     # CD 0103
+                $hash->{helper}{ftuiSupport}{albums}=1 if($opt=~ m/albums/)||($opt eq 'all');     # CD 0103
+                $hash->{helper}{ftuiSupport}{artists}=1 if($opt=~ m/artists/)||($opt eq 'all');   # CD 0103
+                $hash->{helper}{ftuiSupport}{albums_artists}=1 if($opt=~ m/albumsWithArtists/)||($opt eq 'all');     # CD 0107
             }
-            if(defined($hash->{helper}{ftuiSupport}{playlists})) {
-                my $t=$hash->{SERVERPLAYLISTS};
-                $t=~s/,/:/g;
-                readingsBulkUpdate( $hash, "ftuiPlaylistsItems", $t );
-                $t=~s/_/ /g;
-                readingsBulkUpdate( $hash, "ftuiPlaylistsAlias", $t );
-            }
-            # CD 0103
-            if(defined($hash->{helper}{ftuiSupport}{artists})) {
-                if(defined($hash->{helper}{artistdata})) {
-                    readingsBulkUpdate( $hash, "ftuiArtistsAlias", $hash->{helper}{artistdata} );
-                    readingsBulkUpdate( $hash, "ftuiArtistsList", $hash->{helper}{artistids} );
-                    readingsBulkUpdate( $hash, "ftuiArtistsMedialist", $hash->{helper}{artistmedialist} );
+
+            if(defined($hash->{helper}{ftuiSupport})) {
+                # CD 0082 Readings setzen (kein manueller statusRequest mehr nötig)
+                readingsBeginUpdate( $hash );
+                if(defined($hash->{helper}{ftuiSupport}{favorites})) {
+                    my $t=$hash->{FAVSTR};
+                    $t=~s/,/:/g;
+                    readingsBulkUpdate( $hash, "ftuiFavoritesItems", $t );
+                    $t=~s/_/ /g;
+                    readingsBulkUpdate( $hash, "ftuiFavoritesAlias", $t );
                 }
-            }
-            if(defined($hash->{helper}{ftuiSupport}{genres})) {
-                if(defined($hash->{helper}{genredata})) {
-                    readingsBulkUpdate( $hash, "ftuiGenresAlias", $hash->{helper}{genredata} );
-                    readingsBulkUpdate( $hash, "ftuiGenresList", $hash->{helper}{genreids} );
-                    readingsBulkUpdate( $hash, "ftuiGenresMedialist", $hash->{helper}{genremedialist} );
+                if(defined($hash->{helper}{ftuiSupport}{playlists})) {
+                    my $t=$hash->{SERVERPLAYLISTS};
+                    $t=~s/,/:/g;
+                    readingsBulkUpdate( $hash, "ftuiPlaylistsItems", $t );
+                    $t=~s/_/ /g;
+                    readingsBulkUpdate( $hash, "ftuiPlaylistsAlias", $t );
                 }
-            }
-            if(defined($hash->{helper}{ftuiSupport}{albums})) {
-                if(defined($hash->{helper}{albumdata})) {
-                    readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
-                    readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
-                    $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},undef);
-                    readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
-                }
-            }
-            # CD 0103
-            
-            # CD 0107
-            if(defined($hash->{helper}{ftuiSupport}{albums_artists})) {
-                if(defined($hash->{helper}{albumdata})) {
-                    readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
-                    readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
-                    $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},$hash->{helper}{albumartists});
-                    readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
-                }
-            }
-            
-            if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
-                readingsEndUpdate( $hash, 0 );
-            } else {
-                readingsEndUpdate( $hash, 1 );
-            }
-            # CD 0082 end
-        
-            delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
-            $hash->{helper}{songinfoquery}='';              # CD 0084
-            $hash->{helper}{songinfocounter}=0;             # CD 0084
-            $hash->{helper}{songinfopending}=0;             # CD 0084
-            if(defined($hash->{helper}{ftuiSupport}{medialist})) {
-                if(defined($hash->{helper}{playlistIds})) {
-                    $hash->{helper}{playlistInfoRetries}=5; # CD 0076
-                    my @ids=split(',',$hash->{helper}{playlistIds});
-                    foreach(@ids) {
-                        # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
-                        SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                # CD 0103
+                if(defined($hash->{helper}{ftuiSupport}{artists})) {
+                    if(defined($hash->{helper}{artistdata})) {
+                        readingsBulkUpdate( $hash, "ftuiArtistsAlias", $hash->{helper}{artistdata} );
+                        readingsBulkUpdate( $hash, "ftuiArtistsList", $hash->{helper}{artistids} );
+                        readingsBulkUpdate( $hash, "ftuiArtistsMedialist", $hash->{helper}{artistmedialist} );
                     }
-                    SB_PLAYER_SonginfoAddQueue($hash,0,0);
+                }
+                if(defined($hash->{helper}{ftuiSupport}{genres})) {
+                    if(defined($hash->{helper}{genredata})) {
+                        readingsBulkUpdate( $hash, "ftuiGenresAlias", $hash->{helper}{genredata} );
+                        readingsBulkUpdate( $hash, "ftuiGenresList", $hash->{helper}{genreids} );
+                        readingsBulkUpdate( $hash, "ftuiGenresMedialist", $hash->{helper}{genremedialist} );
+                    }
+                }
+                if(defined($hash->{helper}{ftuiSupport}{albums})) {
+                    if(defined($hash->{helper}{albumdata})) {
+                        readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
+                        readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
+                        $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},undef);
+                        readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
+                    }
+                }
+                # CD 0103
+                
+                # CD 0107
+                if(defined($hash->{helper}{ftuiSupport}{albums_artists})) {
+                    if(defined($hash->{helper}{albumdata})) {
+                        readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $hash->{helper}{albumdata} );
+                        readingsBulkUpdate( $hash, "ftuiAlbumsList", $hash->{helper}{albumids} );
+                        $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$hash->{helper}{albumdata},$hash->{helper}{albumids},$hash->{helper}{albumartists});
+                        readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
+                    }
+                }
+                
+                if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
+                    readingsEndUpdate( $hash, 0 );
+                } else {
+                    readingsEndUpdate( $hash, 1 );
+                }
+                # CD 0082 end
+
+                delete($hash->{SONGINFOQUEUE}) if(defined($hash->{SONGINFOQUEUE})); # CD 0072
+                $hash->{helper}{songinfoquery}='';              # CD 0084
+                $hash->{helper}{songinfocounter}=0;             # CD 0084
+                $hash->{helper}{songinfopending}=0;             # CD 0084
+                if(defined($hash->{helper}{ftuiSupport}{medialist})) {
+                    if(defined($hash->{helper}{playlistIds})) {
+                        $hash->{helper}{playlistInfoRetries}=5; # CD 0076
+                        my @ids=split(',',$hash->{helper}{playlistIds});
+                        foreach(@ids) {
+                            # CD 0084 verzögert abfragen, ansonsten Probleme bei schwacher Hardware
+                            SB_PLAYER_SonginfoAddQueue($hash,$_,0) unless((defined($hash->{helper}{playlistInfo}{$_}) && !defined($hash->{helper}{playlistInfo}{$_}{remote})) || ($_==0));
+                        }
+                        SB_PLAYER_SonginfoAddQueue($hash,0,0);
+                    }
                 }
             }
+        } else {
+            delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
+            $hash->{helper}{ftuiSupport}{enable}=0;
+            $dodelete=1;
         }
-      } else {
-        delete($hash->{helper}{ftuiSupport}) if(defined($hash->{helper}{ftuiSupport}));
-        $hash->{helper}{ftuiSupport}{enable}=0;
-        $dodelete=1;
-      }
-      # CD 0068 start
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{medialist})) {
-        delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
-      }
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{playlists})) {
-        delete($hash->{READINGS}{ftuiPlaylistsItems}) if defined($hash->{READINGS}{ftuiPlaylistsItems});
-        delete($hash->{READINGS}{ftuiPlaylistsAlias}) if defined($hash->{READINGS}{ftuiPlaylistsAlias});
-      }
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{favorites})) {
-        delete($hash->{READINGS}{ftuiFavoritesItems}) if defined($hash->{READINGS}{ftuiFavoritesItems});
-        delete($hash->{READINGS}{ftuiFavoritesAlias}) if defined($hash->{READINGS}{ftuiFavoritesAlias});
-      }
-      # CD 0068 end
-      # CD 0103 start
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{genres})) {
-        delete($hash->{READINGS}{ftuiGenresList}) if defined($hash->{READINGS}{ftuiGenresList});
-        delete($hash->{READINGS}{ftuiGenresAlias}) if defined($hash->{READINGS}{ftuiGenresAlias});
-        delete($hash->{READINGS}{ftuiGenresMedialist}) if defined($hash->{READINGS}{ftuiGenresMedialist});
-      }
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{albums})) {
-        delete($hash->{READINGS}{ftuiAlbumsList}) if defined($hash->{READINGS}{ftuiAlbumsList});
-        delete($hash->{READINGS}{ftuiAlbumsAlias}) if defined($hash->{READINGS}{ftuiAlbumsAlias});
-        delete($hash->{READINGS}{ftuiAlbumsMedialist}) if defined($hash->{READINGS}{ftuiAlbumsMedialist});
-      }
-      if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{artists})) {
-        delete($hash->{READINGS}{ftuiArtistsList}) if defined($hash->{READINGS}{ftuiArtistsList});
-        delete($hash->{READINGS}{ftuiArtistsAlias}) if defined($hash->{READINGS}{ftuiArtistsAlias});
-        delete($hash->{READINGS}{ftuiArtistsMedialist}) if defined($hash->{READINGS}{ftuiArtistsMedialist});
-      }
-      # CD 0103 end
+        # CD 0068 start
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{medialist})) {
+            delete($hash->{READINGS}{ftuiMedialist}) if defined($hash->{READINGS}{ftuiMedialist});
+        }
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{playlists})) {
+            delete($hash->{READINGS}{ftuiPlaylistsItems}) if defined($hash->{READINGS}{ftuiPlaylistsItems});
+            delete($hash->{READINGS}{ftuiPlaylistsAlias}) if defined($hash->{READINGS}{ftuiPlaylistsAlias});
+        }
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{favorites})) {
+            delete($hash->{READINGS}{ftuiFavoritesItems}) if defined($hash->{READINGS}{ftuiFavoritesItems});
+            delete($hash->{READINGS}{ftuiFavoritesAlias}) if defined($hash->{READINGS}{ftuiFavoritesAlias});
+        }
+        # CD 0068 end
+        # CD 0103 start
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{genres})) {
+            delete($hash->{READINGS}{ftuiGenresList}) if defined($hash->{READINGS}{ftuiGenresList});
+            delete($hash->{READINGS}{ftuiGenresAlias}) if defined($hash->{READINGS}{ftuiGenresAlias});
+            delete($hash->{READINGS}{ftuiGenresMedialist}) if defined($hash->{READINGS}{ftuiGenresMedialist});
+        }
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{albums})) {
+            delete($hash->{READINGS}{ftuiAlbumsList}) if defined($hash->{READINGS}{ftuiAlbumsList});
+            delete($hash->{READINGS}{ftuiAlbumsAlias}) if defined($hash->{READINGS}{ftuiAlbumsAlias});
+            delete($hash->{READINGS}{ftuiAlbumsMedialist}) if defined($hash->{READINGS}{ftuiAlbumsMedialist});
+        }
+        if(($dodelete==1)||!defined($hash->{helper}{ftuiSupport}{artists})) {
+            delete($hash->{READINGS}{ftuiArtistsList}) if defined($hash->{READINGS}{ftuiArtistsList});
+            delete($hash->{READINGS}{ftuiArtistsAlias}) if defined($hash->{READINGS}{ftuiArtistsAlias});
+            delete($hash->{READINGS}{ftuiArtistsMedialist}) if defined($hash->{READINGS}{ftuiArtistsMedialist});
+        }
+        # CD 0103 end
     }
     # CD 0065 end
 
@@ -511,33 +512,33 @@ sub SB_PLAYER_Attr( @ ) {
 #  Definition of a module instance
 #  called when defining an element via fhem.cfg
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Define( $$ ) {
+sub SB_PLAYER_Define {
     my ( $hash, $def ) = @_;
 
     my $name = $hash->{NAME};
 
-    my @a = split("[ \t][ \t]*", $def);
+    my @arguments = split("[ \t][ \t]*", $def);
 
     # do we have the right number of arguments?
-    if( ( @a < 3 ) || ( @a > 5 ) ) {
+    if( ( @arguments < 3 ) || ( @arguments > 5 ) ) {
         Log3( $hash, 1, "SB_PLAYER_Define: falsche Anzahl an Argumenten" );
         return( "wrong syntax: define <name> SB_PLAYER <playerid> " .
                 "<ampl:FHEM_NAME> <coverart:FHEMNAME>" );
     }
 
     # remove the name and our type
-    # my $name = shift( @a );
-    shift( @a ); # name
-    shift( @a ); # type
+    # my $name = shift( @arguments );
+    shift( @arguments ); # name
+    shift( @arguments ); # type
 
     # needed for manual creation of the Player; autocreate checks in ParseFn
-    if( SB_PLAYER_IsValidMAC( $a[ 0] ) == 1 ) {
+    if( SB_PLAYER_IsValidMAC( $arguments[ 0] ) == 1 ) {
         # the MAC adress is valid
-        $hash->{PLAYERMAC} = lc($a[ 0 ]);       # CD 0026 lc added
+        $hash->{PLAYERMAC} = lc($arguments[ 0 ]);       # CD 0026 lc added
     } else {
         # CD 0089 auf IP-Adresse prüfen
-        if( SB_PLAYER_IsValidIPV4( $a[ 0] ) == 1 ) {
-            $hash->{PLAYERMAC} = $a[ 0 ];
+        if( SB_PLAYER_IsValidIPV4( $arguments[ 0] ) == 1 ) {
+            $hash->{PLAYERMAC} = $arguments[ 0 ];
         } else {
             my $msg = "SB_PLAYER_Define: playerid ist keine MAC Adresse " .
                 "im Format xx:xx:xx:xx:xx:xx oder xx-xx-xx-xx-xx-xx";
@@ -547,11 +548,11 @@ sub SB_PLAYER_Define( $$ ) {
     }
 
     # shift the MAC away
-    shift( @a );
+    shift( @arguments );
 
     $hash->{AMPLIFIER} = "none";
     $hash->{COVERARTLINK} = "none";
-    foreach( @a ) {
+    foreach( @arguments ) {
         if( $_ =~ /^(ampl:)(.*)/ ) {
             $hash->{AMPLIFIER} = $2;
             next;
@@ -569,6 +570,21 @@ sub SB_PLAYER_Define( $$ ) {
     # remove the : from the ID
     my @idbuf = split( ":", $hash->{PLAYERMAC} );
     my $uniqueid = join( "", @idbuf );
+
+    # CD 0108 check if FHEMUID exists
+    foreach my $key (keys %{$modules{SB_PLAYER}{defptr}}) {
+        if(defined($modules{SB_PLAYER}{defptr}{$key}{FHEMUID}) && ($modules{SB_PLAYER}{defptr}{$key}{FHEMUID} eq $uniqueid)) {
+            my $msg = "SB_PLAYER_Define: player with FHEMUID $uniqueid already exists, name: " . $modules{SB_PLAYER}{defptr}{$key}{NAME} . ", key: $key";
+            Log3( $hash, 1, $msg );
+            return( $msg );
+        }
+
+        if(defined($modules{SB_PLAYER}{defptr}{$key}{PLAYERMAC}) && ($modules{SB_PLAYER}{defptr}{$key}{PLAYERMAC} eq $hash->{PLAYERMAC})) {
+            my $msg = "SB_PLAYER_Define: player with PLAYERMAC " . $hash->{PLAYERMAC} . " already exists, name: " . $modules{SB_PLAYER}{defptr}{$key}{NAME} . ", key: $key";
+            Log3( $hash, 1, $msg );
+            return( $msg );
+        }
+    }
 
     # our unique id
     $hash->{FHEMUID} = $uniqueid;
@@ -843,11 +859,11 @@ sub SB_PLAYER_Define( $$ ) {
 
     notifyRegexpChanged($hash, "global"); # CD 0080
 
-    return( undef );
+    return;
 }
 
 # CD 0091 start
-sub SB_PLAYER_tcb_ServerStatusRequest($) {
+sub SB_PLAYER_tcb_ServerStatusRequest {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -859,11 +875,12 @@ sub SB_PLAYER_tcb_ServerStatusRequest($) {
             fhem('set '.($hash->{IODev}->{NAME}).' statusRequest');
         }
     }
+    return;
 }
 # CD 0091 end
 
 # CD 0002 start
-sub SB_PLAYER_tcb_QueryCoverArt($) {    # CD 0014 Name geändert
+sub SB_PLAYER_tcb_QueryCoverArt {    # CD 0014 Name geändert
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -882,20 +899,22 @@ sub SB_PLAYER_tcb_QueryCoverArt($) {    # CD 0014 Name geändert
             }
         }
     }
+    return;
 }
 # CD 0002 end
 
 # CD 0014 start
-sub SB_PLAYER_tcb_DeleteRecallPause($) {
+sub SB_PLAYER_tcb_DeleteRecallPause {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));
     delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
+    return;
 }
 
-sub SB_PLAYER_QueryElapsedTime($) {
+sub SB_PLAYER_QueryElapsedTime {
     my ($hash) = @_;
 
     return if(IsDisabled($hash->{NAME}));   # CD 0091
@@ -907,11 +926,12 @@ sub SB_PLAYER_QueryElapsedTime($) {
         $hash->{helper}{lastTimeQuery}=gettimeofday();
         IOWrite( $hash, "$hash->{PLAYERMAC} time ?\n" );
     }
+    return;
 }
 # CD 0014 end
 
 # CD 0047 start
-sub SB_PLAYER_tcb_QueryElapsedTime( $ ) {
+sub SB_PLAYER_tcb_QueryElapsedTime {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -923,16 +943,17 @@ sub SB_PLAYER_tcb_QueryElapsedTime( $ ) {
     SB_PLAYER_QueryElapsedTime($hash);
     RemoveInternalTimer( "QueryElapsedTime:$name");
     if ((ReadingsVal($name,"playStatus","x") eq "playing")&&($qi>0)) {
-      InternalTimer( gettimeofday() + $qi,
-         "SB_PLAYER_tcb_QueryElapsedTime",
-         "QueryElapsedTime:$name",
-         0 );
+        InternalTimer( gettimeofday() + $qi,
+            "SB_PLAYER_tcb_QueryElapsedTime",
+            "QueryElapsedTime:$name",
+            0 );
     }
+    return;
 }
 # CD 0047 end
 
 # CD 0028 start
-sub SB_PLAYER_tcb_TTSRestore( $ ) {
+sub SB_PLAYER_tcb_TTSRestore {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -953,6 +974,7 @@ sub SB_PLAYER_tcb_TTSRestore( $ ) {
             delete $hash->{helper}{sgTalkActive} if defined($hash->{helper}{sgTalkActive}); # CD 0063
         }
     }
+    return;
 }
 # CD 0028 end
 
@@ -960,7 +982,7 @@ sub SB_PLAYER_tcb_TTSRestore( $ ) {
 # ----------------------------------------------------------------------------
 #  Player ist nicht (mehr) vorhanden, aufräumen
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_SetPlayerAbsent( $ ) {
+sub SB_PLAYER_SetPlayerAbsent {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -990,13 +1012,14 @@ sub SB_PLAYER_SetPlayerAbsent( $ ) {
            0 );
     }
     # CD 0031 end
+    return;
 }
 # CD 0091 start
 
 # ----------------------------------------------------------------------------
 #  called from the global dispatch if new data is available
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Parse( $$ ) {
+sub SB_PLAYER_Parse {
     my ( $iohash, $msg ) = @_;
 
     # we expect the data to be in the following format
@@ -1100,8 +1123,6 @@ sub SB_PLAYER_Parse( $$ ) {
         } else {
             $hash->{ISREMOTESTREAM} = "0";
         }
-
-
     } elsif( $cmd eq "play" ) {
         if(!defined($hash->{helper}{recallPause}) && !defined($hash->{helper}{pauseAfterPlay})) {    # CD 0014 CD 0095
             readingsBulkUpdate( $hash, "playStatus", "playing" );
@@ -1275,7 +1296,10 @@ sub SB_PLAYER_Parse( $$ ) {
                         IOWrite( $hash, "$_ album ?\n" );
                         IOWrite( $hash, "$_ title ?\n" );
                         # CD 0010
-                        IOWrite( $hash, "$_ playlist name ?\n" );
+                        # CD 0109 Name der Playlist nicht abfragen wenn keine Tracks in der Playlist sind (dalgN Fehlermeldung im Server-Log)
+                        if(ReadingsVal($name,'playlistTracks','0') ne '0') {
+                            IOWrite( $hash, "$_ playlist name ?\n" );
+                        }
                         # CD 0014
                         IOWrite( $hash, "$_ duration ?\n" );
                         IOWrite( $hash, "$_ playlist index ?\n" );
@@ -1633,7 +1657,7 @@ sub SB_PLAYER_Parse( $$ ) {
             # fired when an alarm has been added.
             # this setup goes wrong, when an alarm is defined manually
             # the last entry in the array shall contain th id
-            my $idstr = $args[ $#args ];
+            my $idstr = $args[ -1 ];
             if( $idstr =~ /^(id:)([0-9a-zA-Z\.]+)/g ) {
                 #readingsBulkUpdate( $hash, "alarmid$hash->{LASTALARM}", $2 );  # CD 0015 deaktiviert
             } else {
@@ -1844,34 +1868,34 @@ sub SB_PLAYER_Parse( $$ ) {
         # CD 0007 end
         # CD 0016 start, von MM übernommen, Namen Readings geändert
         elsif( $args[ 0 ] eq "alarmsEnabled" ) {
-          if (defined($args[1])) {
-            if( $args[1] eq "1" ) {
-                readingsBulkUpdate( $hash, "alarmsEnabled", "on" );    # CD 0016 Internal durch Reading ersetzt # CD 0017 'yes' durch 'on' ersetzt
-            } else {
-                readingsBulkUpdate( $hash, "alarmsEnabled", "off" );   # CD 0016 Internal durch Reading ersetzt # CD 0017 'no' durch 'off' ersetzt
+            if (defined($args[1])) {
+                if( $args[1] eq "1" ) {
+                    readingsBulkUpdate( $hash, "alarmsEnabled", "on" );    # CD 0016 Internal durch Reading ersetzt # CD 0017 'yes' durch 'on' ersetzt
+                } else {
+                    readingsBulkUpdate( $hash, "alarmsEnabled", "off" );   # CD 0016 Internal durch Reading ersetzt # CD 0017 'no' durch 'off' ersetzt
+                }
             }
-          }
         }
 
         elsif( $args[ 0 ] eq "alarmDefaultVolume" ) {
-          if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
-            #$hash->{ALARMSVOLUME} = $args[1];                  # CD 0016 nicht benötigt
-            readingsBulkUpdate( $hash, "alarmsDefaultVolume", $args[ 1 ] );
-          }
+            if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
+                #$hash->{ALARMSVOLUME} = $args[1];                  # CD 0016 nicht benötigt
+                readingsBulkUpdate( $hash, "alarmsDefaultVolume", $args[ 1 ] );
+            }
         }
 
         elsif( $args[ 0 ] eq "alarmTimeoutSeconds" ) {
-          if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
-            #$hash->{ALARMSTIMEOUT} = $args[1]/60 . " min";     # CD 0016 nicht benötigt
-            readingsBulkUpdate( $hash, "alarmsTimeout", $args[ 1 ]/60 );
-          }
+            if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
+                #$hash->{ALARMSTIMEOUT} = $args[1]/60 . " min";     # CD 0016 nicht benötigt
+                readingsBulkUpdate( $hash, "alarmsTimeout", $args[ 1 ]/60 );
+            }
         }
 
         elsif( $args[ 0 ] eq "alarmSnoozeSeconds" ) {
-          if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
-            #$hash->{ALARMSSNOOZE} = $args[1]/60 . " min";      # CD 0016 nicht benötigt
-            readingsBulkUpdate( $hash, "alarmsSnooze", $args[ 1 ]/60 );
-          }
+            if (defined($args[1]) && ($args[1] ne "?")) {         # CD 0016 Rückmeldung auf Anfrage ignorieren
+                #$hash->{ALARMSSNOOZE} = $args[1]/60 . " min";      # CD 0016 nicht benötigt
+                readingsBulkUpdate( $hash, "alarmsSnooze", $args[ 1 ]/60 );
+            }
         }
         # CD 0016 end
     # CD 0014 start
@@ -2021,15 +2045,15 @@ sub SB_PLAYER_Parse( $$ ) {
         
         foreach( @args ) {
             $flush=0;
-            # + a	artist	Artist name.
-            # + c	coverid	coverid to use when constructing an artwork URL, such as /music/$coverid/cover.jpg
-            # + d	duration	Song duration in seconds.
-            # + K	artwork_url	A full URL to remote artwork. Only available for certain plugins such as Pandora and Rhapsody.
-            # + l	album	Album name. Only if known.
-            #   N	remote_title	Title of the internet radio station.
-            # + t	tracknum	Track number. Only if known.
-            # + u	url	Song file url.
-            # + x	remote	If 1, this is a remote track.
+            # + a   artist  Artist name.
+            # + c   coverid coverid to use when constructing an artwork URL, such as /music/$coverid/cover.jpg
+            # + d   duration    Song duration in seconds.
+            # + K   artwork_url A full URL to remote artwork. Only available for certain plugins such as Pandora and Rhapsody.
+            # + l   album   Album name. Only if known.
+            #   N   remote_title    Title of the internet radio station.
+            # + t   tracknum    Track number. Only if known.
+            # + u   url Song file url.
+            # + x   remote  If 1, this is a remote track.
             if( $_ =~ /^(id:)(-?[0-9]*)/ ) {
                 $trackid=$2;
                 # bereits bekannt -> abbrechen
@@ -2179,7 +2203,7 @@ sub SB_PLAYER_Parse( $$ ) {
 # ----------------------------------------------------------------------------
 #  delay building ftuiMedialist reading
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_ftuiMedialist( $ ) {
+sub SB_PLAYER_tcb_ftuiMedialist {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2207,13 +2231,14 @@ sub SB_PLAYER_tcb_ftuiMedialist( $ ) {
             Log3($hash,3,"SB_PLAYER_tcb_ftuiMedialist($name), time:".int((time-$t31)*1000)."ms cmd: execute FHEM event handling");
         }
     }
+    return;
 }
 
 # CD 0082
 # ----------------------------------------------------------------------------
 #  build ftuiMedialist reading
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_ftuiMedialist($) {
+sub SB_PLAYER_ftuiMedialist {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -2288,6 +2313,7 @@ sub SB_PLAYER_ftuiMedialist($) {
     }
     $ftuimedialist=~s/,$/]/;
     readingsBulkUpdate( $hash, "ftuiMedialist", $ftuimedialist );
+    return;
 }
 # CD 0082 end
 
@@ -2295,7 +2321,7 @@ sub SB_PLAYER_ftuiMedialist($) {
 # ----------------------------------------------------------------------------
 #  check if value is in 'event-on-change-reading' list
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_check_eocr($$) {
+sub SB_PLAYER_check_eocr {
     my ($hash,$reading) = @_;
     my $name = $hash->{NAME};
 
@@ -2313,7 +2339,7 @@ sub SB_PLAYER_check_eocr($$) {
 # ----------------------------------------------------------------------------
 #  delay TTS
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_TTSDelay( $ ) {
+sub SB_PLAYER_tcb_TTSDelay {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2329,6 +2355,7 @@ sub SB_PLAYER_tcb_TTSDelay( $ ) {
        "TimeoutTTSWaitForPlay:$name",
        0 );
     # CD 0038 end
+    return;
 }
 # CD 0030
 
@@ -2336,7 +2363,7 @@ sub SB_PLAYER_tcb_TTSDelay( $ ) {
 # ----------------------------------------------------------------------------
 #  TTS 'wait for play' timeout
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_TimeoutTTSWaitForPlay( $ ) {
+sub SB_PLAYER_tcb_TimeoutTTSWaitForPlay {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2344,21 +2371,22 @@ sub SB_PLAYER_tcb_TimeoutTTSWaitForPlay( $ ) {
     return if(IsDisabled($name));   # CD 0091
 
     if($hash->{helper}{ttsstate}==TTS_WAITFORPLAY) {
-      Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - timeout waiting for play" );  # CD 0097
-      readingsBeginUpdate( $hash );
-      SB_PLAYER_TTSStopped($hash);
-      if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
-          readingsEndUpdate( $hash, 0 );
-      } else {
-          readingsEndUpdate( $hash, 1 );
-      }
+        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - timeout waiting for play" );  # CD 0097
+        readingsBeginUpdate( $hash );
+        SB_PLAYER_TTSStopped($hash);
+        if( AttrVal( $name, "donotnotify", "false" ) eq "true" ) {
+            readingsEndUpdate( $hash, 0 );
+        } else {
+            readingsEndUpdate( $hash, 1 );
+        }
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  TTS 'wait for power on' timeout
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn( $ ) {
+sub SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2369,6 +2397,7 @@ sub SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn( $ ) {
         Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - timeout waiting for power on" );  # CD 0097
         SB_PLAYER_SetTTSState($hash,TTS_IDLE,0,0);
     }
+    return;
 }
 # CD 0038
 
@@ -2376,7 +2405,7 @@ sub SB_PLAYER_tcb_TimeoutTTSWaitForPowerOn( $ ) {
 # ----------------------------------------------------------------------------
 #  delay ttsstopped
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_TTSStopped( $ ) {
+sub SB_PLAYER_tcb_TTSStopped {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2392,6 +2421,7 @@ sub SB_PLAYER_tcb_TTSStopped( $ ) {
     } else {
         readingsEndUpdate( $hash, 1 );
     }
+    return;
 }
 # CD 0034 end
 
@@ -2399,7 +2429,7 @@ sub SB_PLAYER_tcb_TTSStopped( $ ) {
 # ----------------------------------------------------------------------------
 #  start tts after power on, wait if startup is not complete
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_TTSStartAfterPowerOn( $ ) {
+sub SB_PLAYER_tcb_TTSStartAfterPowerOn {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2416,13 +2446,14 @@ sub SB_PLAYER_tcb_TTSStartAfterPowerOn( $ ) {
            0 );
         $hash->{helper}{playerStatusOKCounter}++;
     }
+    return;
 }
 # CD 0042 end
 
 # ----------------------------------------------------------------------------
 #  called when talk is stopped, check if there are queued elements
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_TTSStopped($) {
+sub SB_PLAYER_TTSStopped {
     # readingsBulkUpdate muss aktiv sein
     my ($hash) = @_;
     my $name = $hash->{NAME};
@@ -2440,13 +2471,14 @@ sub SB_PLAYER_TTSStopped($) {
            "TTSRestore:$name",
            0 );
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Undefinition of an SB_PLAYER
 #  called when undefining (delete) and element
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Undef( $$$ ) {
+sub SB_PLAYER_Undef {
     my ($hash, $arg) = @_;
 
     Log3( $hash, 5, "SB_PLAYER_Undef: called" );
@@ -2458,20 +2490,20 @@ sub SB_PLAYER_Undef( $$$ ) {
     # what is $hash->{DEF}?
     delete $modules{SB_PLAYER}{defptr}{$hash->{FHEMUID}};   # CD 0071 uc($hash->{DEF}) durch $hash->{FHEMUID} ersetzt
 
-    return( undef );
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Shutdown function - called before fhem shuts down
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Shutdown( $$ ) {
+sub SB_PLAYER_Shutdown {
     my ($hash, $dev) = @_;
 
     SB_PLAYER_RemoveInternalTimers( $hash );
 
     Log3( $hash, 5, "SB_PLAYER_Shutdown: called" );
 
-    return( undef );
+    return;
 }
 
 
@@ -2479,7 +2511,7 @@ sub SB_PLAYER_Shutdown( $$ ) {
 #  Get of a module
 #  called upon get <name> cmd, arg1, arg2, ....
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Get( $@ ) {
+sub SB_PLAYER_Get {
     my ($hash, @a) = @_;
 
     my $name = $hash->{NAME};
@@ -2511,13 +2543,13 @@ sub SB_PLAYER_Get( $@ ) {
 
     # CD 0036 start
     } elsif( $cmd eq 'savedStates' ) {
-      my $out="";
-      if (defined($hash->{helper}{savedPlayerState})) {
-        foreach my $pl ( keys %{$hash->{helper}{savedPlayerState}} ) {
-          $out.=$pl."\n" unless ($pl=~/xxTTSxx/);
+        my $out="";
+        if (defined($hash->{helper}{savedPlayerState})) {
+            foreach my $pl ( keys %{$hash->{helper}{savedPlayerState}} ) {
+              $out.=$pl."\n" unless ($pl=~/xxTTSxx/);
+            }
         }
-      }
-      return( $out );
+        return( $out );
     # CD 0036 end
     # CD 0045 start
     } elsif( $cmd eq 'alarmPlaylists' ) {
@@ -2535,14 +2567,14 @@ sub SB_PLAYER_Get( $@ ) {
         return( $msg );
     }
 
-    return( undef );
+    return;
 }
 
 # CD 0030 start
 # ----------------------------------------------------------------------------
 #  Calculate delay for TTS
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_GetTTSDelay( $ ) {
+sub SB_PLAYER_GetTTSDelay {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
@@ -2564,7 +2596,7 @@ sub SB_PLAYER_GetTTSDelay( $ ) {
 # ----------------------------------------------------------------------------
 #  called after Text2Speech has finished, start talk
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_tcb_StartT2STalk( $ ) {
+sub SB_PLAYER_tcb_StartT2STalk {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2576,20 +2608,21 @@ sub SB_PLAYER_tcb_StartT2STalk( $ ) {
         SB_PLAYER_PrepareTalk($hash);
     }
     SB_PLAYER_LoadTalk($hash);
+    return;
 }
 # CD 0033 end
 
 # ----------------------------------------------------------------------------
 #  the Notify function
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Notify( $$ ) {
+sub SB_PLAYER_Notify {
     my ( $hash, $dev_hash ) = @_;
     my $name = $hash->{NAME}; # own name / hash
     my $devName = $dev_hash->{NAME}; # Device that created the events
   
     return "" if(IsDisabled($name)); # CD 0091 Return without any further action if the module is disabled 
     
-    if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
+    if ($dev_hash->{NAME} eq "global" && grep ({m/^INITIALIZED$|^REREADCFG$/} @{$dev_hash->{CHANGED}})){
         # CD 0077 unbenutzte Attribute entfernen
         $modules{$hash->{TYPE}}{AttrList} =~ s/serverautoon.//;
         $modules{$hash->{TYPE}}{AttrList} =~ s/idismac.//;
@@ -2601,7 +2634,7 @@ sub SB_PLAYER_Notify( $$ ) {
     }
 
     # CD 0036 start
-    if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
+    if( grep({m/^SAVE$|^SHUTDOWN$/} @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
         # CD 0077 unbenutzte Attribute entfernen
         delete($attr{$name}{serverautoon}) if(defined( $attr{$name}{serverautoon}));
         delete($attr{$name}{idismac}) if(defined( $attr{$name}{idismac}));
@@ -2647,13 +2680,14 @@ sub SB_PLAYER_Notify( $$ ) {
         }
     }
     # CD 0033 end
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Set of a module
 #  called upon set <name> cmd, arg1, arg2, ....
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Set( $@ ) {
+sub SB_PLAYER_Set {
     my ( $hash, $name, $cmd, @arg ) = @_;
 
     Log3( $hash, 5, "SB_PLAYER_Set: called with $cmd");
@@ -3024,7 +3058,7 @@ sub SB_PLAYER_Set( $@ ) {
                     if($filename=~/^opt:(.*)/) {
                     
                     } else {
-                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
+                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^\/|[a-z]:/i);
                         $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
                     }
                     push(@textlines, '|'.$filename.'|');
@@ -3042,7 +3076,7 @@ sub SB_PLAYER_Set( $@ ) {
                     if($filename=~/^opt:(.*)/) {
                     
                     } else {
-                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^(\/|[a-z]:)/i);
+                        $filename = $targetSpeakMP3FileDir.'/'.$filename if ($filename !~ m/^\/|[a-z]:/i);
                         $filename = $filename.'.mp3' if ($filename !~ m/\.mp3$/i);
                     }
                     push(@textlines, '|'.$filename.'|');
@@ -3404,8 +3438,6 @@ sub SB_PLAYER_Set( $@ ) {
         # CD 0018 end
         # CD 0018 Synchronisation mehrerer Player
         if(( @arg == 1 ) || ( @arg == 2)) {
-            my $msg;
-            my $dev;
             my @dvs=();
             my $doGetStatus=0;
             @dvs=split(",",$arg[0]);
@@ -3549,15 +3581,14 @@ sub SB_PLAYER_Set( $@ ) {
         return( $msg );
     }
 
-    return( undef );
-
+    return;
 }
 
 # CD 0033 hinzugefügt
 # ----------------------------------------------------------------------------
 #  add talk segments to playlist
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_LoadTalk($) {
+sub SB_PLAYER_LoadTalk {
     # gespeicherte Elemente in Playlist einfügen
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
@@ -3615,13 +3646,14 @@ sub SB_PLAYER_LoadTalk($) {
             # warten bis stop
         }
     }
+    return;
 }
 
 # CD 0033 hinzugefügt
 # ----------------------------------------------------------------------------
 #  prepare player for talk
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_PrepareTalk($) {
+sub SB_PLAYER_PrepareTalk {
     # kein readingsBulkUpdate
     # aktuellen Stand abspeichern, playlist löschen, Lautstärke setzen
 
@@ -3642,10 +3674,11 @@ sub SB_PLAYER_PrepareTalk($) {
         SB_PLAYER_SetTTSVolume($hash,$hash->{helper}{ttsVolume},1);
     }
     SB_PLAYER_SetTTSState($hash,TTS_LOADPLAYLIST,0,0);
+    return;
 }
 
 # CD 0089 start
-sub SB_PLAYER_SetTTSVolume($$$) {
+sub SB_PLAYER_SetTTSVolume {
     my ( $hash, $ttsvolume, $changestate ) = @_;
     my $name = $hash->{NAME};
 
@@ -3657,6 +3690,7 @@ sub SB_PLAYER_SetTTSVolume($$$) {
     $vol=AttrVal( $name, "volumeLimit", 100 ) if(( $ttsvolume > AttrVal( $name, "volumeLimit", 100 ) )&&!defined($hash->{helper}{ttsActiveOptions}{ignorevolumelimit})); # CD 0031
     IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ".SB_PLAYER_FHEM2LMSVolume($hash, $vol)."\n" );   # CD 0065 SB_PLAYER_FHEM2LMSVolume
     SB_PLAYER_SetSyncedVolume($hash,$ttsvolume,1);
+    return;
 }
 # CD 0089 end
 
@@ -3666,7 +3700,7 @@ sub SB_PLAYER_SetTTSVolume($$$) {
 #
 #  CD 0036 added $statename
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Recall($$) {
+sub SB_PLAYER_Recall {
     my ( $hash, $arg ) = @_;   # CD 0036
     my $name = $hash->{NAME};
 
@@ -3817,20 +3851,22 @@ sub SB_PLAYER_Recall($$) {
         }
     # CD 0056 end
     }
+    return;
 }
 
 # CD 0062 start
-sub SB_PLAYER_tcb_TriggerTTSDone($) {
+sub SB_PLAYER_tcb_TriggerTTSDone {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     DoTrigger($name,"ttsdone");
+    return;
 }
 # CD 0062 end
 
 # CD 0063 start
-sub SB_PLAYER_tcb_TriggerPlaylistStop($) {
+sub SB_PLAYER_tcb_TriggerPlaylistStop {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -3842,10 +3878,11 @@ sub SB_PLAYER_tcb_TriggerPlaylistStop($) {
     if ((ReadingsVal($name,"playStatus","x") eq "stopped")&&(time()>$hash->{helper}{noStopEventUntil})&&($hash->{helper}{ttsstate}==TTS_IDLE)) {
         DoTrigger($name,"playlistStop");
     }
+    return;
 }
 # CD 0063 end
 
-sub SB_PLAYER_SetTTSState($$$$) {
+sub SB_PLAYER_SetTTSState {
     my ( $hash, $state, $bulk, $broadcast ) = @_;
     my $name = $hash->{NAME};
 
@@ -3898,13 +3935,14 @@ sub SB_PLAYER_SetTTSState($$$$) {
     RemoveInternalTimer( "TTSDelay:$name") if($state==TTS_IDLE);
     RemoveInternalTimer( "TTSRestore:$name") if($state==TTS_IDLE);
     RemoveInternalTimer( "TTSStartAfterPowerOn:$name") if($state==TTS_IDLE);
+    return;
 }
 
 # CD 0097 start
 # ----------------------------------------------------------------------------
 #  log player state for tts
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_TTSLogPlayerState($$) {
+sub SB_PLAYER_TTSLogPlayerState {
     my ( $hash, $msg ) = @_;
     my $name = $hash->{NAME};
 
@@ -3928,6 +3966,7 @@ sub SB_PLAYER_TTSLogPlayerState($$) {
                 Log3($hash, 0,"$name: ttsdebug - volume: " . ReadingsVal($name,'volume','x')); 
         }
     }
+    return;
 }
 # CD 0097 end
 
@@ -3936,7 +3975,7 @@ sub SB_PLAYER_TTSLogPlayerState($$) {
 #
 # CD 0036 added $statename
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_Save($$) {
+sub SB_PLAYER_Save {
     my ( $hash, $statename ) = @_;
     my $name = $hash->{NAME};
 
@@ -4012,6 +4051,7 @@ sub SB_PLAYER_Save($$) {
         Log3( $hash, 0, "SB_PLAYER_Save: $name: favorite ".$hash->{helper}{savedPlayerState}{$statename}{favorite} );
     }
     # CD 0029 end
+    return;
 }
 # CD 0014 end
 
@@ -4019,7 +4059,7 @@ sub SB_PLAYER_Save($$) {
 #  set Alarms of the Player
 # ----------------------------------------------------------------------------
 # CD 0015 angepasst für größere Anzahl an Alarmen
-sub SB_PLAYER_Alarm( $$@ ) {
+sub SB_PLAYER_Alarm {
     my ( $hash, $n, @arg ) = @_;
 
     my $name = $hash->{NAME};
@@ -4237,14 +4277,14 @@ sub SB_PLAYER_Alarm( $$@ ) {
         return( $msg );
     }
 
-    return( undef );
+    return;
 }
 
 # CD 0016, neu, von MM übernommen
 # ----------------------------------------------------------------------------
 #  Check weekdays string
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_CheckWeekdays( $ ) {
+sub SB_PLAYER_CheckWeekdays {
     my ($wdayargs) = @_;
     my $weekdays = '';
     if(index($wdayargs,"Mo") != -1 || index($wdayargs,"1") != -1)
@@ -4290,7 +4330,7 @@ sub SB_PLAYER_CheckWeekdays( $ ) {
 # ----------------------------------------------------------------------------
 #  Status update - just internal use and invoked by the timer
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_GetStatus( $ ) {
+sub SB_PLAYER_GetStatus {
     my ($hash) = @_;
     my $name = $hash->{NAME};
     my $strbuf = "";
@@ -4306,6 +4346,11 @@ sub SB_PLAYER_GetStatus( $ ) {
         $hash->{helper}{lastGetStatus}=gettimeofday();
 
         # we fire the respective questions and parse the answers in parse
+        # CD 0109 Name der Playlist nicht abfragen wenn keine Tracks in der Playlist sind (dalgN Fehlermeldung im Server-Log)
+        if(ReadingsVal($name,'playlistTracks','0') ne '0') {
+            IOWrite( $hash, "$hash->{PLAYERMAC} playlist name ?\n");         # CD 0009
+        }
+            
         IOWrite( $hash, "$hash->{PLAYERMAC} artist ?\n".
                 "$hash->{PLAYERMAC} album ?\n".
                 "$hash->{PLAYERMAC} title ?\n".
@@ -4322,7 +4367,6 @@ sub SB_PLAYER_GetStatus( $ ) {
                 "$hash->{PLAYERMAC} playerpref alarmfadeseconds ?\n". # CD 0082
                 # MM 0016 end
                 "$hash->{PLAYERMAC} playerpref syncVolume ?\n". # CD 0007
-                "$hash->{PLAYERMAC} playlist name ?\n".         # CD 0009
                 "$hash->{PLAYERMAC} playlist path 0 ?\n".       # CD 0048
                 "$hash->{PLAYERMAC} voltage ?\n".               # CD 0105
                 "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
@@ -4372,21 +4416,23 @@ sub SB_PLAYER_GetStatus( $ ) {
 
     Log3( $hash, 5, "SB_PLAYER_GetStatus: leaving" );
 
-    return( );
+    return;
 }
 
 
 # ----------------------------------------------------------------------------
 #  called from the IODev for Broadcastmessages
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_RecBroadcast( $$@ ) {
+sub SB_PLAYER_RecBroadcast {
     my ( $hash, $cmd, $msg, $bin ) = @_;
 
     my $name = $hash->{NAME};
+    
+    my $globalverbose=AttrVal('global','verbose',0);
 
     return if(IsDisabled($name));   # CD 0091
 
-    Log3( $hash, 5, "SB_PLAYER_Broadcast($name): called with $msg" );
+    Log3( $hash, 5, "SB_PLAYER_RecBroadcast($name): called with $cmd $msg" );
 
     # let's see what we got. Split the data at the space
     my @args = split( " ", $msg );
@@ -4445,13 +4491,14 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             # CD 0064
 
             # CD 0068 start
-            if(defined($hash->{helper}{ftuiSupport}{favorites})) {
-                my $t=$hash->{FAVSTR};
-                $t=~s/,/:/g;
-                readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
-                $t=~s/_/ /g;
-                readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
-            }
+            # CD 0108 auf done warten
+            #if(defined($hash->{helper}{ftuiSupport}{favorites})) {
+            #    my $t=$hash->{FAVSTR};
+            #    $t=~s/,/:/g;
+            #    readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
+            #    $t=~s/_/ /g;
+            #    readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
+            #}
             # CD 0068 end
 
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
@@ -4489,14 +4536,23 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                     } else {
                         $hash->{FAVSTR} = $favs;
                     }
-                    if(defined($hash->{helper}{ftuiSupport}{favorites})) {
-                        my $t=$hash->{FAVSTR};
-                        $t=~s/,/:/g;
-                        readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
-                        $t=~s/_/ /g;
-                        readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
-                    }
+                    # CD 0108 auf done warten
+                    #if(defined($hash->{helper}{ftuiSupport}{favorites})) {
+                    #    my $t=$hash->{FAVSTR};
+                    #    $t=~s/,/:/g;
+                    #    readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
+                    #    $t=~s/_/ /g;
+                    #    readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
+                    #}
                 }
+            }
+        } elsif( $args[ 0 ] eq "DONE" ) {
+            if(defined($hash->{helper}{ftuiSupport}{favorites})) {
+                my $t=$hash->{FAVSTR};
+                $t=~s/,/:/g;
+                readingsSingleUpdate( $hash, "ftuiFavoritesItems", $t, 1 );
+                $t=~s/_/ /g;
+                readingsSingleUpdate( $hash, "ftuiFavoritesAlias", $t, 1 );
             }
         } else {
         }
@@ -4587,13 +4643,14 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             # CD 0064
 
             # CD 0068 start
-            if(defined($hash->{helper}{ftuiSupport}{playlists})) {
-                my $t=$hash->{SERVERPLAYLISTS};
-                $t=~s/,/:/g;
-                readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
-                $t=~s/_/ /g;
-                readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
-            }
+            # CD 0108 auf DONE warten
+            #if(defined($hash->{helper}{ftuiSupport}{playlists})) {
+            #    my $t=$hash->{SERVERPLAYLISTS};
+            #    $t=~s/,/:/g;
+            #    readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
+            #    $t=~s/_/ /g;
+            #    readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
+            #}
             # CD 0068 end
 
             # CD 0016 start, provisorisch um alarmPlaylists zu aktualisieren, TODO: muss von 97_SB_SERVER kommen
@@ -4633,14 +4690,23 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
                         $hash->{SERVERPLAYLISTS}=$pls;
                     }
 
-                    if(defined($hash->{helper}{ftuiSupport}{playlists})) {
-                        my $t=$hash->{SERVERPLAYLISTS};
-                        $t=~s/,/:/g;
-                        readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
-                        $t=~s/_/ /g;
-                        readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
-                    }
+                    # CD 0108 auf DONE warten
+                    #if(defined($hash->{helper}{ftuiSupport}{playlists})) {
+                    #    my $t=$hash->{SERVERPLAYLISTS};
+                    #    $t=~s/,/:/g;
+                    #    readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
+                    #    $t=~s/_/ /g;
+                    #    readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
+                    #}
                 }
+            }
+        } elsif( $args[ 0 ] eq "DONE" ) {
+            if(defined($hash->{helper}{ftuiSupport}{playlists})) {
+                my $t=$hash->{SERVERPLAYLISTS};
+                $t=~s/,/:/g;
+                readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
+                $t=~s/_/ /g;
+                readingsSingleUpdate( $hash, "ftuiPlaylistsAlias", $t, 1 );
             }
         } else {
         }
@@ -4663,9 +4729,11 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             $hash->{helper}{genreids}=$ids;
             $hash->{helper}{genremedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
             if($hash->{helper}{ftuiSupport}{genres}) {
-                readingsSingleUpdate( $hash, "ftuiGenresAlias", $data, 1 );
-                readingsSingleUpdate( $hash, "ftuiGenresList", $ids, 1 );
-                readingsSingleUpdate( $hash, "ftuiGenresMedialist", $hash->{helper}{genremedialist}, 1 );
+                readingsBeginUpdate( $hash );   # CD 0108
+                readingsBulkUpdate( $hash, "ftuiGenresAlias", $data);
+                readingsBulkUpdate( $hash, "ftuiGenresList", $ids);
+                readingsBulkUpdate( $hash, "ftuiGenresMedialist", $hash->{helper}{genremedialist});
+                readingsEndUpdate( $hash, 1 );  # CD 0108
             }
         }
     } elsif( $cmd eq 'ALBUMS' ) {
@@ -4677,17 +4745,21 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             $hash->{helper}{albumartists}=$artists; # CD 0107
             $hash->{helper}{albumids}=$ids;
             if($hash->{helper}{ftuiSupport}{albums}) {
-                readingsSingleUpdate( $hash, "ftuiAlbumsAlias", $data, 1 );
-                readingsSingleUpdate( $hash, "ftuiAlbumsList", $ids, 1 );
+                readingsBeginUpdate( $hash );   # CD 0108
+                readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $data );
+                readingsBulkUpdate( $hash, "ftuiAlbumsList", $ids );
                 $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
-                readingsSingleUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist}, 1 );
+                readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
+                readingsEndUpdate( $hash, 1 );  # CD 0108
             }
             # CD 0107
             if($hash->{helper}{ftuiSupport}{albums_artists}) {
-                readingsSingleUpdate( $hash, "ftuiAlbumsAlias", $data, 1 );
-                readingsSingleUpdate( $hash, "ftuiAlbumsList", $ids, 1 );
+                readingsBeginUpdate( $hash );   # CD 0108
+                readingsBulkUpdate( $hash, "ftuiAlbumsAlias", $data );
+                readingsBulkUpdate( $hash, "ftuiAlbumsList", $ids );
                 $hash->{helper}{albummedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,$artists);
-                readingsSingleUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist}, 1 );
+                readingsBulkUpdate( $hash, "ftuiAlbumsMedialist", $hash->{helper}{albummedialist} );
+                readingsEndUpdate( $hash, 1 );  # CD 0108
             }
         }
     } elsif( $cmd eq 'ARTISTS' ) {
@@ -4698,22 +4770,32 @@ sub SB_PLAYER_RecBroadcast( $$@ ) {
             $hash->{helper}{artistids}=$ids;
             $hash->{helper}{artistmedialist}=SB_PLAYER_BAA2ftuiML($hash,$data,$ids,undef);
             if($hash->{helper}{ftuiSupport}{artists}) {
-                readingsSingleUpdate( $hash, "ftuiArtistsAlias", $data, 1 );
-                readingsSingleUpdate( $hash, "ftuiArtistsList", $ids, 1 );
-                readingsSingleUpdate( $hash, "ftuiArtistsMedialist", $hash->{helper}{artistmedialist}, 1 );
+                #Log 0,'------------------------------------------------------------';
+                #Log 0,"SB_PLAYER_RecBroadcast($name) updating ftuiArtists readings";
+                #fhem('attr global verbose 5');
+                #my $t=time();
+                readingsBeginUpdate( $hash );   # CD 0108
+                readingsBulkUpdate( $hash, "ftuiArtistsAlias", $data );
+                readingsBulkUpdate( $hash, "ftuiArtistsList", $ids );
+                readingsBulkUpdate( $hash, "ftuiArtistsMedialist", $hash->{helper}{artistmedialist} );
+                readingsEndUpdate( $hash, 1 );  # CD 0108
+                #fhem("attr global verbose $globalverbose");
+                #Log 0,"SB_PLAYER_RecBroadcast($name) done, time: ". (time()-$t) . " s";
+                #Log 0,'------------------------------------------------------------';
             }
         }
     # CD 0103 end
     } else {
 
     }
+    return;
 }
 
 # CD 0103 start
 # ----------------------------------------------------------------------------
 #  build list for FTUI medialist widget from genre, album or artist
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_BAA2ftuiML( $$$$ ) {
+sub SB_PLAYER_BAA2ftuiML {
     my ( $hash, $data, $ids, $data2 ) = @_;
 
     my $name = $hash->{NAME};
@@ -4759,7 +4841,7 @@ sub SB_PLAYER_BAA2ftuiML( $$$$ ) {
 #  parse the return on the alarms status
 # ----------------------------------------------------------------------------
 # wird von SB_PLAYER_Parse aufgerufen, readingsBeginUpdate ist aktiv
-sub SB_PLAYER_ParseAlarms( $@ ) {
+sub SB_PLAYER_ParseAlarms {
     my ( $hash, @data ) = @_;
 
     my $name = $hash->{NAME};
@@ -4895,13 +4977,14 @@ sub SB_PLAYER_ParseAlarms( $@ ) {
             fhem( "deletereading $name alarm".$i."_.*" );
         }
     }
+    return;
 }
 
 # CD 0046 start
 # ----------------------------------------------------------------------------
 #  search for LMS alarm id, return FHEM alarm number
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_FindAlarmId( $$ ) {
+sub SB_PLAYER_FindAlarmId {
     my ( $hash, $id ) = @_;
     my $name = $hash->{NAME};
 
@@ -4919,7 +5002,7 @@ sub SB_PLAYER_FindAlarmId( $$ ) {
 # ----------------------------------------------------------------------------
 #  used for checking, if the string contains a valid MAC adress
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_IsValidMAC( $ ) {
+sub SB_PLAYER_IsValidMAC {
     my $instr = shift( @_ );
 
     my $d = "[0-9A-Fa-f]";
@@ -4940,7 +5023,7 @@ sub SB_PLAYER_IsValidMAC( $ ) {
 # ----------------------------------------------------------------------------
 #  used for checking, if the string contains a valid IP v4 (decimal) address
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_IsValidIPV4( $ ) {
+sub SB_PLAYER_IsValidIPV4 {
     my $instr = shift( @_ );
 
     if( $instr =~ m/^(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)$/ )
@@ -4963,8 +5046,9 @@ sub SB_PLAYER_IsValidIPV4( $ ) {
 
 # ----------------------------------------------------------------------------
 #  used to turn on our server
+#  nicht mehr verwendet
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_ServerTurnOn( $ ) {
+sub SB_PLAYER_ServerTurnOn {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
@@ -4974,14 +5058,15 @@ sub SB_PLAYER_ServerTurnOn( $ ) {
 
     return;
 
-    fhem( "set $servername on" );
+    #fhem( "set $servername on" );
+    #return;
 }
 
 # ----------------------------------------------------------------------------
 #  used to turn on a connected amplifier
 # ----------------------------------------------------------------------------
 # CD 0012 start
-sub SB_PLAYER_tcb_DelayAmplifier( $ ) {     # CD 0014 Name geändert
+sub SB_PLAYER_tcb_DelayAmplifier {     # CD 0014 Name geändert
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -4990,10 +5075,11 @@ sub SB_PLAYER_tcb_DelayAmplifier( $ ) {     # CD 0014 Name geändert
     $hash->{helper}{AMPLIFIERDELAYOFF}=1;
 
     SB_PLAYER_Amplifier($hash);
+    return;
 }
 # CD 0012 end
 
-sub SB_PLAYER_Amplifier( $ ) {
+sub SB_PLAYER_Amplifier {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
@@ -5116,7 +5202,7 @@ sub SB_PLAYER_Amplifier( $ ) {
 # ----------------------------------------------------------------------------
 #  update the coverart image
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_CoverArt( $ ) {
+sub SB_PLAYER_CoverArt {
     my ( $hash ) = @_;
     my $name = $hash->{NAME};
 
@@ -5147,9 +5233,9 @@ sub SB_PLAYER_CoverArt( $ ) {
             # CD 0034 Abfrage für Spotify und LMS < 7.8, ungetest, #674, KernSani
             # CD 0035 Code von KernSani übernommen, #676
             if ($hash->{ARTWORKURL} =~ /spotifyimage%2Fspotify/) {
-				my $cover = "cover.jpg";
-				my $coverArtWithSize = "cover_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 )."_o.jpg";
-				$hash->{ARTWORKURL} =~ s/$cover/$coverArtWithSize/g;
+                my $cover = "cover.jpg";
+                my $coverArtWithSize = "cover_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 )."_o.jpg";
+                $hash->{ARTWORKURL} =~ s/$cover/$coverArtWithSize/g;
                 $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . uri_unescape($hash->{ARTWORKURL});
             } else {
                 $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" .
@@ -5183,12 +5269,13 @@ sub SB_PLAYER_CoverArt( $ ) {
                   $hash->{COVERARTURL} );
         }                                                               # CD 0013
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Handle the return for a playerstatus query
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_ParsePlayerStatus( $$ ) {
+sub SB_PLAYER_ParsePlayerStatus {
     my( $hash, $dataptr ) = @_;
 
     my $name = $hash->{NAME};
@@ -5196,7 +5283,6 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     return if(IsDisabled($name));   # CD 0091
 
     my $leftover = "";
-    my $cur = "";
     my $playlistIds = "";           # CD 0014
     my $refreshIds=0;               # CD 0014
 
@@ -5462,6 +5548,7 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
             $hash->{WILLSLEEPIN} = int($2)." secs";
+            DoTrigger($name,"WILLSLEEPIN ".(strftime "%T", gmtime int($2)));    # CD 0109
             $willsleepinfound=1;
             next;
 
@@ -5602,14 +5689,14 @@ sub SB_PLAYER_ParsePlayerStatus( $$ ) {
     # CD 0006 - deaktiviert, SB_PLAYER_ParsePlayerStatus kann nur von SB_PLAYER_Parse aufgerufen werden, dort ist readingsBeginUpdate aber bereits aktiv
     #readingsEndUpdate( $hash, 1 );
 
-
+    return;
 }
 
 # CD 0018 start
 # ----------------------------------------------------------------------------
 #  convert MAC to (LMS) playername
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_MACToLMSPlayername( $$ ) {
+sub SB_PLAYER_MACToLMSPlayername {
     my( $hash, $mac ) = @_;
     my $name = $hash->{NAME};
 
@@ -5630,7 +5717,7 @@ sub SB_PLAYER_MACToLMSPlayername( $$ ) {
 # ----------------------------------------------------------------------------
 #  search FHEM device for given MAC
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_MACToFHEMPlayername( $$ ) {
+sub SB_PLAYER_MACToFHEMPlayername {
     my( $hash, $mac ) = @_;
     my $name = $hash->{NAME};
 
@@ -5645,7 +5732,7 @@ sub SB_PLAYER_MACToFHEMPlayername( $$ ) {
         }
     }
     
-    return undef;
+    return;
 }
 # CD 0097 end
 
@@ -5653,7 +5740,7 @@ sub SB_PLAYER_MACToFHEMPlayername( $$ ) {
 # ----------------------------------------------------------------------------
 #  estimate elapsed time
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_EstimateElapsedTime( $ ) {
+sub SB_PLAYER_EstimateElapsedTime {
     my( $hash ) = @_;
     my $name = $hash->{NAME};
 
@@ -5680,6 +5767,7 @@ sub SB_PLAYER_EstimateElapsedTime( $ ) {
     } else {
         delete($hash->{helper}{elapsedTime}) if(defined($hash->{helper}{elapsedTime}));
     }
+    return;
 }
 # CD 0014 end
 
@@ -5687,7 +5775,7 @@ sub SB_PLAYER_EstimateElapsedTime( $ ) {
 # ----------------------------------------------------------------------------
 #  convert volume from FHEM to LMS
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_FHEM2LMSVolume( $$ ) {
+sub SB_PLAYER_FHEM2LMSVolume {
     my( $hash, $fhemvol ) = @_;
 
     my $name = $hash->{NAME};
@@ -5710,7 +5798,7 @@ sub SB_PLAYER_FHEM2LMSVolume( $$ ) {
 # ----------------------------------------------------------------------------
 #  update the volume readings
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_UpdateVolumeReadings( $$$ ) {
+sub SB_PLAYER_UpdateVolumeReadings {
     my( $hash, $vol, $bulk ) = @_;
 
     my $name = $hash->{NAME};
@@ -5748,7 +5836,7 @@ sub SB_PLAYER_UpdateVolumeReadings( $$$ ) {
 # ----------------------------------------------------------------------------
 #  set volume of synced players
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_SetSyncedVolume( $$$ ) {
+sub SB_PLAYER_SetSyncedVolume {
     my( $hash, $vol, $isFHEMvol ) = @_;
 
     my $name = $hash->{NAME};
@@ -5815,75 +5903,74 @@ sub SB_PLAYER_SetSyncedVolume( $$$ ) {
 #
 #  CD 0036
 # ----------------------------------------------------------------------------
-sub SB_PLAYER_PlayerStatefileName($)
+sub SB_PLAYER_PlayerStatefileName
 {
-  my( $name ) = @_;
+    my( $name ) = @_;
 
-  my $statefile = $attr{global}{statefile};
-  $statefile = substr $statefile,0,rindex($statefile,'/')+1;
-  return $statefile ."sbps_$name.dd.save";
+    my $statefile = $attr{global}{statefile};
+    $statefile = substr $statefile,0,rindex($statefile,'/')+1;
+    return $statefile ."sbps_$name.dd.save";
 }
 
-sub SB_PLAYER_SavePlayerStates($)
+sub SB_PLAYER_SavePlayerStates
 {
-  my( $hash ) = @_;
-  my $name = $hash->{NAME};
+    my( $hash ) = @_;
+    my $name = $hash->{NAME};
 
-  return "No saved playlists found" unless(defined($hash->{helper}{savedPlayerState}));
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_PLAYER_PlayerStatefileName($name);
+    return "No saved playlists found" unless(defined($hash->{helper}{savedPlayerState}));
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_PLAYER_PlayerStatefileName($name);
 
-  if(open(FH, ">$statefile")) {
-    my $t = localtime;
-    print FH "#$t\n";
+    if(open(my $FH, '>', "$statefile")) {
+        my $t = localtime;
+        print $FH "#$t\n";
 
-    my $dumper = Data::Dumper->new([]);
-    $dumper->Terse(1);
+        my $dumper = Data::Dumper->new([]);
+        $dumper->Terse(1);
 
-    $dumper->Values([$hash->{helper}{savedPlayerState}]);
-    print FH $dumper->Dump;
+        $dumper->Values([$hash->{helper}{savedPlayerState}]);
+        print $FH $dumper->Dump;
 
-    close(FH);
-  } else {
-
-    my $msg = "SB_PLAYER_SavePlayerStates: Cannot open $statefile: $!";
-    Log3 $hash, 1, $msg;
-  }
-
-  return undef;
-}
-
-sub SB_PLAYER_LoadPlayerStates($)
-{
-  my ($hash) = @_;
-  my $name = $hash->{NAME};
-
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_PLAYER_PlayerStatefileName($name);
-
-  if(open(FH, "<$statefile")) {
-    my $encoded;
-    while (my $line = <FH>) {
-      chomp $line;
-      next if($line =~ m/^#.*$/);
-      $encoded .= $line;
+        close($FH);
+    } else {
+        my $msg = "SB_PLAYER_SavePlayerStates: Cannot open $statefile: $!";
+        Log3 $hash, 1, $msg;
     }
-    close(FH);
 
-    return if( !defined($encoded) );
+    return;
+}
 
-    my $decoded = eval $encoded;
-    $hash->{helper}{savedPlayerState} = $decoded;
-  } else {
-    my $msg = "SB_PLAYER_LoadPlayerStates: no playlists file found";
-    Log3 undef, 4, $msg;
-  }
-  return undef;
+sub SB_PLAYER_LoadPlayerStates
+{
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_PLAYER_PlayerStatefileName($name);
+
+    if(open(my $FH, '<', "$statefile")) {
+        my $encoded;
+        while (my $line = <$FH>) {
+          chomp $line;
+          next if($line =~ m/^#.*$/);
+          $encoded .= $line;
+        }
+        close($FH);
+
+        return if( !defined($encoded) );
+
+        my $decoded = eval $encoded;
+        $hash->{helper}{savedPlayerState} = $decoded;
+    } else {
+        my $msg = "SB_PLAYER_LoadPlayerStates: no playlists file found";
+        Log3 undef, 4, $msg;
+    }
+    return;
 }
 
 # CD 0072 start
 sub
-SB_PLAYER_SonginfoAddQueue($$$) ##################################################
+SB_PLAYER_SonginfoAddQueue ##################################################
 {
     my ($hash, $id, $wait) = @_;
     my $name = $hash->{NAME};
@@ -5902,10 +5989,11 @@ SB_PLAYER_SonginfoAddQueue($$$) ################################################
         push(@{$hash->{SONGINFOQUEUE}}, "wait") if ($wait==1);
         push(@{$hash->{SONGINFOQUEUE}}, $id);
     }
+    return;
 }
 
 sub
-SB_PLAYER_SonginfoHandleQueue($) ##################################################
+SB_PLAYER_SonginfoHandleQueue ##################################################
 {
     my $hash = shift;
     my $name = $hash->{NAME};
@@ -5952,19 +6040,21 @@ SB_PLAYER_SonginfoHandleQueue($) ###############################################
                0 );
         }
     }
+    return;
 }
 
-sub SB_PLAYER_tcb_SonginfoHandleQueue($) {
+sub SB_PLAYER_tcb_SonginfoHandleQueue {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     SB_PLAYER_SonginfoHandleQueue($hash);
+    return;
 }
 # CD 0072 end
 
 # CD 0078 start
-sub SB_PLAYER_RemoveInternalTimers($) {
+sub SB_PLAYER_RemoveInternalTimers {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -5983,6 +6073,7 @@ sub SB_PLAYER_RemoveInternalTimers($) {
     RemoveInternalTimer( "ServerStatusRequest:$name");
     RemoveInternalTimer( "ftuiMedialist:$name");    # CD 0085
     RemoveInternalTimer( $hash );
+    return;
 }
 # CD 0078 end
 
