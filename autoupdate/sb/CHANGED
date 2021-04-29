@@ -1,13 +1,15 @@
 ﻿97_SB_SERVER:
+  210429 0056 - statusRequest ausgelagert
+              - neue Alben intern abspeichern
+              - Code und Formatierung etwas aufgeräumt
+         0055 - zufälligen Namen für Favoriten die nur ungültige Zeichen enthalten generieren 
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
   190229 0052 - Attribut maxplaylists hinzugefügt
               - voltage auslesen, benötigt Plugin für LMS
-  180902 0051 - Genres, Alben und Artisten vom Server lesen und an Player weitergeben
-  180617 0050 - Anpassungen für PRESENCE ab Version 15969
-              - Reconnect korrigiert nach DISCONNECT-Event
-              - Link zu Doku_SB-Server-Player hinzugefügt
 98_SB_PLAYER:
+  210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
+              - Trigger für WILLSLEEPIN hinzugefügt
   200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
   190324 0107 - ftuiSupport um albumsWithArtist erweitert
               - Warnung behoben beim Aufbau der ftui-Listen
@@ -21,6 +23,10 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  210429 0056 - statusRequest ausgelagert
+              - neue Alben intern abspeichern
+              - Code und Formatierung etwas aufgeräumt
+         0055 - zufälligen Namen für Favoriten die nur ungültige Zeichen enthalten generieren 
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
   190229 0052 - Attribut maxplaylists hinzugefügt
@@ -131,6 +137,8 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
+              - Trigger für WILLSLEEPIN hinzugefügt
   200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
   190324 0107 - ftuiSupport um albumsWithArtist erweitert
               - Warnung behoben beim Aufbau der ftui-Listen
