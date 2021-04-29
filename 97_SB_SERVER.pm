@@ -1,5 +1,5 @@
-﻿# ############################################################################
-# $Id: 97_SB_SERVER.pm 0054 2019-04-15 21:42:00Z CD $
+# ############################################################################
+# $Id: 97_SB_SERVER.pm 0056 2021-04-29 19:17:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -71,19 +71,19 @@ use Time::HiRes qw(gettimeofday time);
 
 use constant { true => 1, false => 0 };
 use constant { TRUE => 1, FALSE => 0 };
-use constant SB_SERVER_VERSION => '0054';
+use constant SB_SERVER_VERSION => '0056';
 
 my $SB_SERVER_hasDataDumper = 1;        # CD 0024
 
-sub SB_SERVER_RemoveInternalTimers($);
+#sub SB_SERVER_RemoveInternalTimers($);
 
 # ----------------------------------------------------------------------------
 #  Initialisation routine called upon start-up of FHEM
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Initialize( $ ) {
+sub SB_SERVER_Initialize {
     my ($hash) = @_;
 
-    require "$attr{global}{modpath}/FHEM/DevIo.pm";
+    require "DevIo.pm"; # CD 0056 Pfad entfernt
 
 # Provider
     $hash->{ReadFn}  = "SB_SERVER_Read";
@@ -91,8 +91,8 @@ sub SB_SERVER_Initialize( $ ) {
     $hash->{ReadyFn} = "SB_SERVER_Ready";
     $hash->{Clients} = ":SB_PLAYER:";
     my %matchList= (
-	"1:SB_PLAYER"   => "^SB_PLAYER:",
-	);
+        "1:SB_PLAYER"   => "^SB_PLAYER:",
+    );
     $hash->{MatchList} = \%matchList;
 
 # Normal devices
@@ -118,10 +118,11 @@ sub SB_SERVER_Initialize( $ ) {
     # CD 0024
     eval "use Data::Dumper";
     $SB_SERVER_hasDataDumper = 0 if($@);
+    return;
 }
 
 # CD 0032 start
-sub SB_SERVER_SetAttrList( $ ) {
+sub SB_SERVER_SetAttrList {
     my ($hash) = @_;
 
     my $attrList;
@@ -145,6 +146,7 @@ sub SB_SERVER_SetAttrList( $ ) {
     $attrList .= $readingFnAttributes;
 
     $modules{$defs{$hash->{NAME}}{TYPE}}{AttrList}=$attrList;
+    return;
 }
 # CD 0032 end
 
@@ -152,7 +154,7 @@ sub SB_SERVER_SetAttrList( $ ) {
 # ----------------------------------------------------------------------------
 # connect to server
 # ----------------------------------------------------------------------------
-sub SB_SERVER_TryConnect( $$ ) {
+sub SB_SERVER_TryConnect {
     my ($hash,$reopen) = @_;    # CD 0047 reopen hinzugefügt
 
     return if ($hash->{CLICONNECTION} eq 'on');
@@ -167,7 +169,7 @@ sub SB_SERVER_TryConnect( $$ ) {
     }
 }
 
-sub SB_SERVER_DevIoCallback($$)
+sub SB_SERVER_DevIoCallback
 {
     my ($hash, $err) = @_;
     my $name = $hash->{NAME};
@@ -179,11 +181,12 @@ sub SB_SERVER_DevIoCallback($$)
         DevIo_Disconnected( $hash );    # CD 0048 wird nicht von DevIo gemacht ?
         SB_SERVER_setStates($hash, "disconnected"); # CD 0048 wird nicht von DevIo gemacht ?
     }
+    return;
 }
 # ----------------------------------------------------------------------------
 #  called when defining a module
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Define( $$ ) {
+sub SB_SERVER_Define {
     my ($hash, $def ) = @_;
 
     #my $name = $hash->{NAME};
@@ -197,10 +200,10 @@ sub SB_SERVER_Define( $$ ) {
 
     # do we have the right number of arguments?
     if( ( @a < 3 ) || ( @a > 7 ) ) {
-	Log3( $hash, 3, "SB_SERVER_Define: falsche Anzahl an Argumenten" );
-	return( "wrong syntax: define <name> SB_SERVER <serverip[:cliport]>" .
-		"[USER:username] [PASSWORD:password] " .                    # CD 0007 changed PASSWord to PASSWORD
-		"[RCC:RCC_Name] [WOL:WOLName] [PRESENCE:PRESENCEName]" );   # CD 0007 added PRESENCE
+        Log3( $hash, 3, "SB_SERVER_Define: falsche Anzahl an Argumenten" );
+        return( "wrong syntax: define <name> SB_SERVER <serverip[:cliport]>" .
+            "[USER:username] [PASSWORD:password] " .                    # CD 0007 changed PASSWord to PASSWORD
+            "[RCC:RCC_Name] [WOL:WOLName] [PRESENCE:PRESENCEName]" );   # CD 0007 added PRESENCE
     }
 
     # remove the name and our type
@@ -249,49 +252,49 @@ sub SB_SERVER_Define( $$ ) {
     
     # parse the user spec
     foreach( @a ) {
-	if( $_ =~ /^(RCC:)(.*)/ ) {
-	    $hash->{RCCNAME} = $2;
-        push @newDef,$_;
-        push @notifyregexp,$2;              # CD 0041
-	    next;
-	} elsif( $_ =~ /^(WOL:)(.*)/ ) {
-        push @newDef,$_;
-        my @pp=split ':',$2;                # CD 0047
-        $hash->{WOLNAME} = $pp[0];
-        $hash->{helper}{wolSetCmd}=$pp[1] if defined($pp[1]);        # CD 0047
-        $hash->{helper}{wolSetValue}=$pp[2] if defined($pp[2]);      # CD 0047
-	    next;
-	} elsif( $_ =~ /^(PRESENCE:)(.*)/ ) {   # CD 0007
-        push @newDef,$_;
-        my @pp=split ':',$2;                # CD 0047
-        $hash->{PRESENCENAME} = $pp[0];     # CD 0007 CD 0047
-        $hash->{helper}{presenceReading}=$pp[1] if defined($pp[1]);      # CD 0047
-        $hash->{helper}{presenceValuePresent}=$pp[2] if defined($pp[2]); # CD 0047
-        $hash->{helper}{presenceValueAbsent}=$pp[3] if defined($pp[3]);  # CD 0047
-        push @notifyregexp,$pp[0];              # CD 0041
-	    next;                               # CD 0007
-	} elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{3,5})/ ) {
-	    $hash->{IP} = $1;
-	    $hash->{CLIPORT}  = $2;
-        push @newDef,$_;
-	    next;
-	} elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/ ) {
-	    $hash->{IP} = $1;
-	    $hash->{CLIPORT}  = 9090;
-        push @newDef,$_;
-	    next;
-	} elsif( $_ =~ /^(USER:)(.*)/ ) {
-        $user=$2 if($2 ne 'yes');
-        $hash->{USERNAME} = 'yes';
-        push @newDef,'USER:yes';
-	} elsif( $_ =~ /^(PASSWORD:)(.*)/ ) {
-        $password=$2 if($2 ne 'yes');
-        $hash->{PASSWORD} = 'yes';
-        push @newDef,'PASSWORD:yes';
-	} else {
-        push @newDef,$_;
-	    next;
-	}
+        if( $_ =~ /^(RCC:)(.*)/ ) {
+            $hash->{RCCNAME} = $2;
+            push @newDef,$_;
+            push @notifyregexp,$2;              # CD 0041
+            next;
+        } elsif( $_ =~ /^(WOL:)(.*)/ ) {
+            push @newDef,$_;
+            my @pp=split ':',$2;                # CD 0047
+            $hash->{WOLNAME} = $pp[0];
+            $hash->{helper}{wolSetCmd}=$pp[1] if defined($pp[1]);        # CD 0047
+            $hash->{helper}{wolSetValue}=$pp[2] if defined($pp[2]);      # CD 0047
+            next;
+        } elsif( $_ =~ /^(PRESENCE:)(.*)/ ) {   # CD 0007
+            push @newDef,$_;
+            my @pp=split ':',$2;                # CD 0047
+            $hash->{PRESENCENAME} = $pp[0];     # CD 0007 CD 0047
+            $hash->{helper}{presenceReading}=$pp[1] if defined($pp[1]);      # CD 0047
+            $hash->{helper}{presenceValuePresent}=$pp[2] if defined($pp[2]); # CD 0047
+            $hash->{helper}{presenceValueAbsent}=$pp[3] if defined($pp[3]);  # CD 0047
+            push @notifyregexp,$pp[0];              # CD 0041
+            next;                               # CD 0007
+        } elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{3,5})/ ) {
+            $hash->{IP} = $1;
+            $hash->{CLIPORT}  = $2;
+            push @newDef,$_;
+            next;
+        } elsif( $_ =~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/ ) {
+            $hash->{IP} = $1;
+            $hash->{CLIPORT}  = 9090;
+            push @newDef,$_;
+            next;
+        } elsif( $_ =~ /^(USER:)(.*)/ ) {
+            $user=$2 if($2 ne 'yes');
+            $hash->{USERNAME} = 'yes';
+            push @newDef,'USER:yes';
+        } elsif( $_ =~ /^(PASSWORD:)(.*)/ ) {
+            $password=$2 if($2 ne 'yes');
+            $hash->{PASSWORD} = 'yes';
+            push @newDef,'PASSWORD:yes';
+        } else {
+            push @newDef,$_;
+            next;
+        }
     }
 
     # CD 0031
@@ -310,19 +313,19 @@ sub SB_SERVER_Define( $$ ) {
 
     # preset our attributes
     if( !defined( $attr{$name}{alivetimer} ) ) {
-	$attr{$name}{alivetimer} = 120;
+        $attr{$name}{alivetimer} = 120;
     }
 
     if( !defined( $attr{$name}{doalivecheck} ) ) {
-	$attr{$name}{doalivecheck} = "true";
+        $attr{$name}{doalivecheck} = "true";
     }
 
     if( !defined( $attr{$name}{maxfavorites} ) ) {
-	$attr{$name}{maxfavorites} = 30;
+        $attr{$name}{maxfavorites} = 30;
     }
 
     if( !defined( $attr{$name}{maxcmdstack} ) ) {
-	$attr{$name}{maxcmdstack} = 200;
+        $attr{$name}{maxcmdstack} = 200;
     }
 
     # the port of the HTTP interface as needed for the coverart url
@@ -432,9 +435,9 @@ sub SB_SERVER_Define( $$ ) {
     # do and update of the status
     # CD disabled
     #InternalTimer( gettimeofday() + 10,
-    # 		   "SB_SERVER_Alive",
-    # 		   $hash,
-    # 		   0 );
+    #          "SB_SERVER_Alive",
+    #          $hash,
+    #          0 );
 
     Log3( $hash, 4, "SB_SERVER_Define: leaving" );
 
@@ -446,7 +449,7 @@ sub SB_SERVER_Define( $$ ) {
 # ----------------------------------------------------------------------------
 #  called when deleting a module
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Undef( $$ ) {
+sub SB_SERVER_Undef {
     my ($hash, $arg) = @_;
     my $name = $hash->{NAME};
 
@@ -455,11 +458,11 @@ sub SB_SERVER_Undef( $$ ) {
     # no idea what this is for. Copied from 10_TCM.pm
     # presumably to notify the clients, that the server is gone
     foreach my $d (sort keys %defs) {
-	if( ( defined( $defs{$d} ) ) &&
-	    ( defined( $defs{$d}{IODev} ) ) &&
-	    ( $defs{$d}{IODev} == $hash ) ) {
-	    delete $defs{$d}{IODev};
-	}
+        if( ( defined( $defs{$d} ) ) &&
+            ( defined( $defs{$d}{IODev} ) ) &&
+            ( $defs{$d}{IODev} == $hash ) ) {
+            delete $defs{$d}{IODev};
+        }
     }
 
     # terminate the CLI session
@@ -471,14 +474,16 @@ sub SB_SERVER_Undef( $$ ) {
 
     # remove all timers we created
     SB_SERVER_RemoveInternalTimers( $hash );
+    
+    delete $data{SB_SERVER}{$name}; # CD 0056
 
-    return( undef );
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Shutdown function - called before fhem shuts down
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Shutdown( $$ ) {
+sub SB_SERVER_Shutdown {
     my ($hash, $dev) = @_;
 
     Log3( $hash, 4, "SB_SERVER_Shutdown: called" );
@@ -493,14 +498,14 @@ sub SB_SERVER_Shutdown( $$ ) {
     # remove all timers we created
     SB_SERVER_RemoveInternalTimers( $hash );
 
-    return( undef );
+    return;
 }
 
 
 # ----------------------------------------------------------------------------
 #  ReadyFn - called when?
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Ready( $ ) {
+sub SB_SERVER_Ready {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -563,35 +568,36 @@ sub SB_SERVER_Ready( $ ) {
             if (($reconnect==1)&&(!defined($hash->{helper}{disableReconnect}))) {
                 return( SB_SERVER_TryConnect( $hash , 1 ));
             } else {
-                return undef;
+                return;
             }
         } else {
-            return undef;
+            return;
         }
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  Get functions
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Get( $@ ) {
+sub SB_SERVER_Get {
     my ($hash, @a) = @_;
     my $name = $hash->{NAME};
 
     Log3( $hash, 4, "SB_SERVER_Get: called" );
 
     if( @a != 2 ) {
-	return( "\"get $name\" needs one parameter" );
+        return( "\"get $name\" needs one parameter" );
     }
 
-    return( "?" );
+    return( '?' );
 }
 
 
 # ----------------------------------------------------------------------------
 #  Attr functions
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Attr( @ ) {
+sub SB_SERVER_Attr {
     my $cmd = shift( @_ );
     my $name = shift( @_ );
     my $hash = $defs{$name};
@@ -687,8 +693,8 @@ sub SB_SERVER_Attr( @ ) {
     # CD 0046 end
     # CD 0054 start
     } elsif( $args[ 0 ] eq 'artistFilter') {
-      $hash->{helper}{artists}{reread}=1; # CD 0051
-      DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
+        $hash->{helper}{artists}{reread}=1; # CD 0051
+        DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
     }
     # CD 0054 end
     return; # 0033 betateilchen/mahowi
@@ -698,14 +704,14 @@ sub SB_SERVER_Attr( @ ) {
 # ----------------------------------------------------------------------------
 #  Set function
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Set( $@ ) {
+sub SB_SERVER_Set {
     my ($hash, @a) = @_;
     my $name = $hash->{NAME};
 
     Log( 4, "SB_SERVER_Set($name): called" );
 
     if( @a < 2 ) {
-	return( "at least one parameter is needed" ) ;
+        return( "at least one parameter is needed" ) ;
     }
 
     $name = shift( @a );
@@ -733,17 +739,17 @@ sub SB_SERVER_Set( $@ ) {
     } elsif( IsDisabled($name) ) {  # CD 0046
         return;
     } elsif( $cmd eq "on" ) {
-	if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
-        # the server is off, try to reactivate it
-        if( $hash->{WOLNAME} ne "none" ) {
-            fhem( "set $hash->{WOLNAME} $hash->{helper}{wolSetCmd} $hash->{helper}{wolSetValue}" ); # CD 0047 Befehl und Wert konfigurierbar
-            $hash->{helper}{WOLFastReconnectUntil}=time()+120;   # CD 0007
-            $hash->{helper}{WOLFastReconnectNext}=time()+30;    # CD 0007
+        if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
+            # the server is off, try to reactivate it
+            if( $hash->{WOLNAME} ne "none" ) {
+                fhem( "set $hash->{WOLNAME} $hash->{helper}{wolSetCmd} $hash->{helper}{wolSetValue}" ); # CD 0047 Befehl und Wert konfigurierbar
+                $hash->{helper}{WOLFastReconnectUntil}=time()+120;   # CD 0007
+                $hash->{helper}{WOLFastReconnectNext}=time()+30;    # CD 0007
+            }
+            if( $hash->{RCCNAME} ne "none" ) {
+                fhem( "set $hash->{RCCNAME} on" );
+            }
         }
-        if( $hash->{RCCNAME} ne "none" ) {
-            fhem( "set $hash->{RCCNAME} on" );
-        }
-	}
 
     } elsif( $cmd eq "renew" ) {
         Log3( $hash, 5, "SB_SERVER_Set: renew" );
@@ -786,25 +792,7 @@ sub SB_SERVER_Set( $@ ) {
         $hash->{helper}{genres}{reread}=1; # CD 0051
         $hash->{helper}{artists}{reread}=1; # CD 0051
         $hash->{helper}{albums}{reread}=1; # CD 0051
-        DevIo_SimpleWrite( $hash, "version ?\n", 0 );
-        DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
-        DevIo_SimpleWrite( $hash, "favorites items 0 " .
-                   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",      # CD 0009 url mit abfragen
-                   0 );
-        DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
-        DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );               # CD 0011
-        DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );               # CD 0049
-        # CD 0032 start
-        DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );
-        if(defined($hash->{helper}{apps})) {
-            my @enabledApps=split(',',AttrVal($name,'enablePlugins',''));
-            foreach my $app (@enabledApps) {
-                if(defined($hash->{helper}{apps}{$app})) {
-                    DevIo_SimpleWrite( $hash, ($hash->{helper}{apps}{$app}{cmd})." items 0 200\n", 0 );
-                }
-            }
-        }
-        # CD 0032 end
+        SB_SERVER_StatusRequest($hash);
     } elsif( $cmd eq "cliraw" ) {
         # write raw messages to the CLI interface per player
         my $v = join( " ", @a );
@@ -1009,13 +997,13 @@ sub SB_SERVER_Set( $@ ) {
             }
             $hash->{helper}{sgTalkActivePlayer}='waiting for power on';
             $hash->{helper}{sgTalkData}=join(' ', @a);
-            $hash->{helper}{sgTalkTimeoutPowerOn}=time()+3;
+            $hash->{helper}{sgTalkTimeoutPowerOn}=time()+30;
             $hash->{helper}{sgTalkGroup}=$statename;    # CD 0031
             RemoveInternalTimer( "StartTalk:$name");
             InternalTimer( gettimeofday() + 0.01,
-               "SB_SERVER_tcb_StartTalk",
-               "StartTalk:$name",
-               0 );
+                "SB_SERVER_tcb_StartTalk",
+                "StartTalk:$name",
+                0 );
         } elsif($subcmd eq 'resettts') {
             SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
             delete $hash->{helper}{sgTalkActivePlayer};
@@ -1083,22 +1071,22 @@ sub SB_SERVER_Set( $@ ) {
         $hash->{helper}{getData}{$a[2]}{reading}=$a[1];
 
         if($a[2] eq 'artists') {
-          if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
-            DevIo_SimpleWrite( $hash, "artists 0 5000 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
-          } else {
-            DevIo_SimpleWrite( $hash, "artists 0 5000\n", 0 );
-          }
+            if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
+                DevIo_SimpleWrite( $hash, "artists 0 5000 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
+            } else {
+                DevIo_SimpleWrite( $hash, "artists 0 5000\n", 0 );
+            }
         }
     # CD 0030 end
     } else {
-	;
+        ;
     }
 
-    return( undef );
+    return;
 }
 
 # CD 0027 start
-sub SB_SERVER_tcb_StartTalk($) {
+sub SB_SERVER_tcb_StartTalk {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -1132,15 +1120,16 @@ sub SB_SERVER_tcb_StartTalk($) {
         if($hash->{helper}{sgTalkActivePlayer} eq 'waiting for power on') {
             RemoveInternalTimer( "StartTalk:$name");
             InternalTimer( gettimeofday() + 0.2,
-               "SB_SERVER_tcb_StartTalk",
-               "StartTalk:$name",
-               0 );
+                "SB_SERVER_tcb_StartTalk",
+                "StartTalk:$name",
+                0 );
         }
     }
+    return;
 }
 
 # CD 0031 start
-sub SB_SERVER_isSyncGroupActive($$) {
+sub SB_SERVER_isSyncGroupActive {
     my ($hash,$statename) = @_;
     my $name = $hash->{NAME};
 
@@ -1162,7 +1151,7 @@ sub SB_SERVER_isSyncGroupActive($$) {
 }
 # CD 0031 end
 
-sub SB_SERVER_LoadSyncGroup($$$) {
+sub SB_SERVER_LoadSyncGroup {
     my ($hash,$statename,$poweron) = @_;
     my $name = $hash->{NAME};
 
@@ -1192,9 +1181,10 @@ sub SB_SERVER_LoadSyncGroup($$$) {
             }
         }
     }
+    return;
 }
 
-sub SB_SERVER_FixSyncGroupNames($) {
+sub SB_SERVER_FixSyncGroupNames {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -1210,9 +1200,10 @@ sub SB_SERVER_FixSyncGroupNames($) {
             }
         }
     }
+    return;
 }
 
-sub SB_SERVER_UpdateSgReadings($) {
+sub SB_SERVER_UpdateSgReadings {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -1255,6 +1246,7 @@ sub SB_SERVER_UpdateSgReadings($) {
         readingsBulkUpdate( $hash, "syncGroups", $sg );
     }
     readingsEndUpdate( $hash, 1 );
+    return;
 }
 # CD 0027 end
 
@@ -1262,7 +1254,7 @@ sub SB_SERVER_UpdateSgReadings($) {
 # Read
 # called from the global loop, when the select for hash->{FD} reports data
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Read( $ ) {
+sub SB_SERVER_Read {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -1324,7 +1316,7 @@ sub SB_SERVER_Read( $ ) {
     my $lastchr = substr( $buf, -1, 1 );
     if( $lastchr ne "\n" ) {
         #ups, the return doesn't seem to be complete
-        $hash->{PARTIAL} = $cmds[ $#cmds ];
+        $hash->{PARTIAL} = $cmds[ -1 ];
         # and remove the last element
         pop( @cmds );
         Log3( $hash, 5, "SB_SERVER_Read: uncomplete command received" );
@@ -1380,11 +1372,11 @@ sub SB_SERVER_Read( $ ) {
     #}
     # CD 0019 end
 
-    return( undef );
+    return;
 }
 
 # CD 0027 start
-sub SB_SERVER_tcb_RecallAfterTalk($) {
+sub SB_SERVER_tcb_RecallAfterTalk {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -1394,13 +1386,14 @@ sub SB_SERVER_tcb_RecallAfterTalk($) {
     SB_SERVER_Recall($hash,'xxxSgTalkxxx del');
 
     delete $hash->{helper}{sgTalkActivePlayer};
+    return;
 }
 # CD 0027 end
 
 # ----------------------------------------------------------------------------
 # called by the clients to send data
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Write( $$$ ) {
+sub SB_SERVER_Write {
     my ( $hash, $fn, $msg ) = @_;
     my $name = $hash->{NAME};
 
@@ -1409,11 +1402,11 @@ sub SB_SERVER_Write( $$$ ) {
     return if (IsDisabled($name));  # CD 0046
 
     if( !defined( $fn ) ) {
-	return( undef );
+        return;
     }
 
     if( defined( $msg ) ) {
-	Log3( $hash, 4, "SB_SERVER_Write: MSG:$msg" );
+        Log3( $hash, 4, "SB_SERVER_Write: MSG:$msg" );
     }
 
     # CD 0012 fhemrelay Meldungen nicht an den LMS schicken sondern direkt an Dispatch übergeben
@@ -1437,37 +1430,38 @@ sub SB_SERVER_Write( $$$ ) {
         # CD 0027 end
             SB_SERVER_DispatchCommandLine( $hash, $fn );
         }
-        return( undef );
+        return;
     }
 
     if( ReadingsVal( $name, "serversecure", "0" ) eq "1" ) {
-	if( ( $hash->{USERNAME} ne "?" ) && ( $hash->{PASSWORD} ne "?" ) ) {
-	    # we need to send username and password first
-	} else {
-	    my $retmsg = "SB_SERVER_Write: Server needs username and " .
-		"password but you did not specify those. No sending";
-	    Log3( $hash, 1, $retmsg );
-	    return( $retmsg );
-	}
+        if( ( $hash->{USERNAME} ne "?" ) && ( $hash->{PASSWORD} ne "?" ) ) {
+            # we need to send username and password first
+        } else {
+            my $retmsg = "SB_SERVER_Write: Server needs username and " .
+            "password but you did not specify those. No sending";
+            Log3( $hash, 1, $retmsg );
+            return( $retmsg );
+        }
     }
 
     if( ReadingsVal( $name, "power", "on" ) eq "on" ) {
-	DevIo_SimpleWrite( $hash, "$fn", 0 );
+        DevIo_SimpleWrite( $hash, "$fn", 0 );
     } else {
-	# we are off, so save the command for later
-	# if maxcmdstack is 0, the function is turned off
-	if( AttrVal( $name, "maxcmdstack", 100 ) > 0 ) {
-	    SB_SERVER_CMDStackPush( $hash, $fn );
-	}
+        # we are off, so save the command for later
+        # if maxcmdstack is 0, the function is turned off
+        if( AttrVal( $name, "maxcmdstack", 100 ) > 0 ) {
+            SB_SERVER_CMDStackPush( $hash, $fn );
+        }
     }
 
+    return;
 }
 
 
 # ----------------------------------------------------------------------------
 #  Initialisation of the CLI connection
 # ----------------------------------------------------------------------------
-sub SB_SERVER_DoInit( $ ) {
+sub SB_SERVER_DoInit {
     my ($hash) = @_;
     my $name = $hash->{NAME};
 
@@ -1512,9 +1506,9 @@ sub SB_SERVER_DoInit( $ ) {
 
             # CD 0007 cleanup
             if(defined($hash->{helper}{WOLFastReconnectUntil})) {
-                    delete($hash->{TIMEOUT});
-                    delete($hash->{helper}{WOLFastReconnectUntil});
-                    delete($hash->{helper}{WOLFastReconnectNext});
+                delete($hash->{TIMEOUT});
+                delete($hash->{helper}{WOLFastReconnectUntil});
+                delete($hash->{helper}{WOLFastReconnectNext});
             }
             $hash->{helper}{pingCounter}=0;                                 # CD 0007
 
@@ -1525,36 +1519,35 @@ sub SB_SERVER_DoInit( $ ) {
 
             SB_SERVER_LMS_Status( $hash );
             if( AttrVal( $name, "doalivecheck", "false" ) eq "false" ) {
-            readingsSingleUpdate( $hash, "power", "on", 1 );
-            #SB_SERVER_Broadcast( $hash, "SERVER",  "ON" );                 # CD 0007
-            return( 0 );
+                readingsSingleUpdate( $hash, "power", "on", 1 );
+                #SB_SERVER_Broadcast( $hash, "SERVER",  "ON" );                 # CD 0007
+                return( 0 );
 
             } elsif( AttrVal( $name, "doalivecheck", "false" ) eq "true" ) {
-            # start the alive checking mechanism
-            # CD 0020 SB_SERVER_tcb_Alive verwenden
-            RemoveInternalTimer( "SB_SERVER_Alive:$name");
-            InternalTimer( gettimeofday() +
-                       AttrVal( $name, "alivetimer", 10 ),
-                       "SB_SERVER_tcb_Alive",
-                       "SB_SERVER_Alive:$name",
-                       0 );
-            return( 0 );
-
+                # start the alive checking mechanism
+                # CD 0020 SB_SERVER_tcb_Alive verwenden
+                RemoveInternalTimer( "SB_SERVER_Alive:$name");
+                InternalTimer( gettimeofday() +
+                           AttrVal( $name, "alivetimer", 10 ),
+                           "SB_SERVER_tcb_Alive",
+                           "SB_SERVER_Alive:$name",
+                           0 );
+                return( 0 );
             } else {
-            Log3( $hash, 2, "SB_SERVER_DoInit: doalivecheck has " .
-                  "wrong value" );
-            return( 1 );
+                Log3( $hash, 2, "SB_SERVER_DoInit: doalivecheck has " .
+                      "wrong value" );
+                return( 1 );
             }
 
         }
 
     } else {
-	# what the f...
-	Log3( $hash, 2, "SB_SERVER_DoInit: unclear status reported" );
-	return( 1 );
+        # what the f...
+        Log3( $hash, 2, "SB_SERVER_DoInit: unclear status reported" );
+        return( 1 );
     }
 
-	#Log3( $hash, 3, "SB_SERVER_DoInit: something went wrong!" );        # CD 0008 nur für Testzwecke 0009 deaktiviert
+    #Log3( $hash, 3, "SB_SERVER_DoInit: something went wrong!" );        # CD 0008 nur für Testzwecke 0009 deaktiviert
     #return(0);                                                          # CD 0008 nur für Testzwecke 0009 deaktiviert
     return( 1 );
 }
@@ -1563,7 +1556,7 @@ sub SB_SERVER_DoInit( $ ) {
 # ----------------------------------------------------------------------------
 #  Parse return of app items query
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseAppResponse( $$ ) {
+sub SB_SERVER_ParseAppResponse {
     my ( $hash, $buf ) = @_;
     my $name = $hash->{NAME};
     my $appresponse=0;
@@ -1780,7 +1773,7 @@ sub SB_SERVER_ParseAppResponse( $$ ) {
 # ----------------------------------------------------------------------------
 #  used for checking, if the string contains a valid IP v4 (decimal) address
 # ----------------------------------------------------------------------------
-sub SB_SERVER_IsValidIPV4( $ ) {
+sub SB_SERVER_IsValidIPV4 {
     my $instr = shift( @_ );
 
     if( $instr =~ m/^(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)\.(\d\d?\d?)$/ )
@@ -1793,9 +1786,7 @@ sub SB_SERVER_IsValidIPV4( $ ) {
         {
             return( 0 );
         }
-    }
-    else
-    {
+    } else {
         return( 0 );
     }
 }
@@ -1805,18 +1796,18 @@ sub SB_SERVER_IsValidIPV4( $ ) {
 # ----------------------------------------------------------------------------
 #  used for checking if the string contains a valid MAC adress
 # ----------------------------------------------------------------------------
-sub SB_SERVER_IsValidMAC( $ ) {
+sub SB_SERVER_IsValidMAC {
     my $instr = shift( @_ );
 
     my $d = "[0-9A-Fa-f]";
     my $dd = "$d$d";
 
     if( $instr =~ /($dd([:-])$dd(\2$dd){4})/og ) {
-      if( $instr =~ /^(00[:-]){5}(00)$/) {
-        return( 0 );
-      } else {
-        return( 1 );
-      }
+        if( $instr =~ /^(00[:-]){5}(00)$/) {
+            return( 0 );
+        } else {
+            return( 1 );
+        }
     } else {
         return( 0 );
     }
@@ -1826,7 +1817,7 @@ sub SB_SERVER_IsValidMAC( $ ) {
 # ----------------------------------------------------------------------------
 #  Dispatch every single line of commands
 # ----------------------------------------------------------------------------
-sub SB_SERVER_DispatchCommandLine( $$ ) {
+sub SB_SERVER_DispatchCommandLine {
     my ( $hash, $buf ) = @_;
     my $name = $hash->{NAME};
 
@@ -1862,14 +1853,14 @@ sub SB_SERVER_DispatchCommandLine( $$ ) {
         SB_SERVER_ParseCmds( $hash, $buf );
     }
 
-    return( undef );
+    return;
 }
 
 
 # ----------------------------------------------------------------------------
 #  parse the server answers that are not intended for players
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseCmds( $$ ) {
+sub SB_SERVER_ParseCmds {
     my ( $hash, $instr ) = @_;
     my $name = $hash->{NAME};
 
@@ -1883,59 +1874,59 @@ sub SB_SERVER_ParseCmds( $$ ) {
 
     # CD 0007 start
     if (defined($hash->{helper}{doBroadcast})) {
-	    SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
-	    SB_SERVER_Broadcast( $hash, "SERVER",
-				 "IP " . $hash->{IP} . ":" .
+        SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
+        SB_SERVER_Broadcast( $hash, "SERVER",
+                 "IP " . $hash->{IP} . ":" .
                  $hash->{helper}{httpport} );
         delete ($hash->{helper}{doBroadcast});
     }
     # CD 0007 end
 
     if( $cmd eq "version" ) {
-	readingsSingleUpdate( $hash, "serverversion", $args[ 1 ], 0 );
+        readingsSingleUpdate( $hash, "serverversion", $args[ 1 ], 0 );
 
-	if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
-	    # that also means the server returned from being away
-	    readingsSingleUpdate( $hash, "power", "on", 1 );
-	    # signal our players
-	    SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
-	    SB_SERVER_Broadcast( $hash, "SERVER",
-				 "IP " . $hash->{IP} . ":" .
-                 $hash->{helper}{httpport} );
-	}
+        if( ReadingsVal( $name, "power", "off" ) eq "off" ) {
+            # that also means the server returned from being away
+            readingsSingleUpdate( $hash, "power", "on", 1 );
+            # signal our players
+            SB_SERVER_Broadcast( $hash, "SERVER", "ON" );
+            SB_SERVER_Broadcast( $hash, "SERVER",
+                     "IP " . $hash->{IP} . ":" .
+                     $hash->{helper}{httpport} );
+        }
 
     } elsif( $cmd eq "pref" ) {
-	if( $args[ 0 ] eq "authorize" ) {
-	    readingsSingleUpdate( $hash, "serversecure", $args[ 1 ], 0 );
-	    if( $args[ 1 ] eq "1" ) {
-		# username and password is required
-        # CD 0007 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
-		if( ( $hash->{USERNAME} ne "?" ) &&
-		    ( $hash->{PASSWORD} ne "?" ) ) {
-            my ($user,$password)=SB_SERVER_readPassword($hash); # CD 0031
-            if(defined($user)) {
-                DevIo_SimpleWrite( $hash, "login " .
-                           $user . " " .
-                           $password . "\n",
-                           0 );
+        if( $args[ 0 ] eq "authorize" ) {
+            readingsSingleUpdate( $hash, "serversecure", $args[ 1 ], 0 );
+            if( $args[ 1 ] eq "1" ) {
+                # username and password is required
+                # CD 0007 zu spät, login muss als erstes gesendet werden, andernfalls bricht der Server die Verbindung sofort ab
+                if( ( $hash->{USERNAME} ne "?" ) &&
+                    ( $hash->{PASSWORD} ne "?" ) ) {
+                    my ($user,$password)=SB_SERVER_readPassword($hash); # CD 0031
+                    if(defined($user)) {
+                        DevIo_SimpleWrite( $hash, "login " .
+                                   $user . " " .
+                                   $password . "\n",
+                                   0 );
+                    } else {
+                        Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " .
+                          "required but no username and password specified" );
+                    }
+                } else {
+                    Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " .
+                      "required but no username and password specified" );
+                }
+                # next step is to wait for the answer of the LMS server
+            } elsif( $args[ 1 ] eq "0" ) {
+                # no username password required, go ahead directly
+                #SB_SERVER_LMS_Status( $hash );
             } else {
-                Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " .
-                  "required but no username and password specified" );
+                Log3( $hash, 3, "SB_SERVER_ParseCmds($name): unkown " .
+                      "result for authorize received. Should be 0 or 1" );
             }
-		} else {
-		    Log3( $hash, 3, "SB_SERVER_ParseCmds($name): login " .
-			  "required but no username and password specified" );
-		}
-		# next step is to wait for the answer of the LMS server
-	    } elsif( $args[ 1 ] eq "0" ) {
-		# no username password required, go ahead directly
-		#SB_SERVER_LMS_Status( $hash );
-	    } else {
-		Log3( $hash, 3, "SB_SERVER_ParseCmds($name): unkown " .
-		      "result for authorize received. Should be 0 or 1" );
-	    }
-	}
-    # CD 0049
+        }
+        # CD 0049
         if( $args[ 0 ] eq "httpport" ) {
             if (defined($args[1]) && ($args[1] =~ /^([0-9])*/ )) {
                 if(!defined(AttrVal( $name, "httpport", undef ))) {
@@ -1947,36 +1938,32 @@ sub SB_SERVER_ParseCmds( $$ ) {
             }
         }    
     } elsif( $cmd eq "login" ) {
-	if( ( $args[ 1 ] eq $hash->{USERNAME} ) &&
-	    ( $args[ 2 ] eq "******" ) ) {
-	    # login has been succesful, go ahead
-	    SB_SERVER_LMS_Status( $hash );
-	}
-
-
+        if( ( $args[ 1 ] eq $hash->{USERNAME} ) &&
+            ( $args[ 2 ] eq "******" ) ) {
+            # login has been succesful, go ahead
+            SB_SERVER_LMS_Status( $hash );
+        }
     } elsif( $cmd eq "fhemalivecheck" ) {
-	$hash->{ALIVECHECK} = "received";
-	Log3( $hash, 4, "SB_SERVER_ParseCmds($name): alivecheck received" );
-
+        $hash->{ALIVECHECK} = "received";
+        Log3( $hash, 4, "SB_SERVER_ParseCmds($name): alivecheck received" );
     } elsif( $cmd eq "favorites" ) {
-	if( $args[ 0 ] eq "changed" ) {
-	    Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites changed" );
-	    # we need to trigger the favorites update here
-	    DevIo_SimpleWrite( $hash, "favorites items 0 " .
-			       AttrVal( $name, "maxfavorites", 100 ) .
-			       " want_url:1\n", 0 );           # CD 0009 url mit abfragen
-        DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
-	} elsif( $args[ 0 ] eq "items" ) {
-	    Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites items" );
-	    # the response to our query of the favorites
-	    SB_SERVER_FavoritesParse( $hash, join( " ", @args ) );
-	} else {
-	}
-
+        if( $args[ 0 ] eq "changed" ) {
+            Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites changed" );
+            # we need to trigger the favorites update here
+            DevIo_SimpleWrite( $hash, "favorites items 0 " .
+                       AttrVal( $name, "maxfavorites", 100 ) .
+                       " want_url:1\n", 0 );           # CD 0009 url mit abfragen
+            DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
+        } elsif( $args[ 0 ] eq "items" ) {
+            Log3( $hash, 4, "SB_SERVER_ParseCmds($name): favorites items" );
+            # the response to our query of the favorites
+            SB_SERVER_FavoritesParse( $hash, join( " ", @args ) );
+        } else {
+        
+        }
     } elsif( $cmd eq "serverstatus" ) {
-	Log3( $hash, 4, "SB_SERVER_ParseCmds($name): server status" );
-	SB_SERVER_ParseServerStatus( $hash, \@args );
-
+        Log3( $hash, 4, "SB_SERVER_ParseCmds($name): server status" );
+        SB_SERVER_ParseServerStatus( $hash, \@args );
     } elsif( $cmd eq "playlists" ) {
         Log3( $hash, 4, "SB_SERVER_ParseCmds($name): playlists" );
         # CD 0004 Playlisten neu anfragen bei Änderung
@@ -1997,17 +1984,9 @@ sub SB_SERVER_ParseCmds( $$ ) {
     # CD 0016 start
     } elsif( $cmd eq "rescan" ) {
         if( $args[0] eq "done" ) {
-        	DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
             $hash->{helper}{genres}{reread}=1; # CD 0051
             $hash->{helper}{artists}{reread}=1; # CD 0051
             $hash->{helper}{albums}{reread}=1; # CD 0051
-            # CD 0036 start - refresh favorites and playlists after rescan
-            DevIo_SimpleWrite( $hash, "favorites items 0 " .
-                   AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n",
-                   0 );
-            DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
-            DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );
-            # CD 0036 end
             # CD 0039 start
             readingsBeginUpdate( $hash );
             readingsBulkUpdate( $hash, "scanning", "no");
@@ -2021,6 +2000,7 @@ sub SB_SERVER_ParseCmds( $$ ) {
             }
             # CD 0040 end
             readingsEndUpdate( $hash, 1 );
+            SB_SERVER_StatusRequest($hash);
         } else {
             readingsSingleUpdate( $hash, "scanning", "yes", 1 );
             $hash->{helper}{scanstart}=time();                      # CD 0040
@@ -2159,12 +2139,13 @@ sub SB_SERVER_ParseCmds( $$ ) {
         SB_SERVER_ParseGenreAlbumArtist($hash,$cmd,@args);
     # CD 0051 end
     } else {
-	# unkown
+        # unkown
     }
+    return;
 }
 
 # CD 0020 start
-sub SB_SERVER_tcb_Alive($) {
+sub SB_SERVER_tcb_Alive {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -2173,13 +2154,14 @@ sub SB_SERVER_tcb_Alive($) {
     delete($hash->{helper}{disableReconnect}) if defined($hash->{helper}{disableReconnect});
 
     SB_SERVER_Alive($hash);
+    return;
 }
 # CD 0020 end
 
 # ----------------------------------------------------------------------------
 #  Alivecheck of the server
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Alive( $ ) {
+sub SB_SERVER_Alive {
     my ($hash) = @_;
     my $name = $hash->{NAME};
     my $state=ReadingsVal($name, "state", "unknown");   # CD 0038
@@ -2289,7 +2271,6 @@ sub SB_SERVER_Alive( $ ) {
     # CD 0004 added sensitivity to ping
 #    if( ( $rccstatus eq "on" ) || ( $pingstatus eq "on" ) ) {
     if( ( $rccstatus eq "on" ) || ( $hash->{helper}{pingCounter}<3 ) ) {
-
         # the server is reachable
         if( ReadingsVal( $name, "power", "on" ) eq "off" ) {
             # the first time we see the server being on
@@ -2403,13 +2384,14 @@ sub SB_SERVER_Alive( $ ) {
                "SB_SERVER_Alive:$name",
                0 );
     }
+    return;
 }
 
 
 # ----------------------------------------------------------------------------
 #  Broadcast a message to all clients
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Broadcast( $$@ ) {
+sub SB_SERVER_Broadcast {
     my( $hash, $cmd, $msg, $bin ) = @_;
     my $name = $hash->{NAME};
     my $iodevhash;
@@ -2419,7 +2401,7 @@ sub SB_SERVER_Broadcast( $$@ ) {
     return if (IsDisabled($name));  # CD 0046
 
     if( !defined( $bin ) ) {
-	$bin = 0;
+        $bin = 0;
     }
 
     foreach my $mydev ( keys %defs ) {
@@ -2451,7 +2433,7 @@ sub SB_SERVER_Broadcast( $$@ ) {
 # ----------------------------------------------------------------------------
 #  Handle the return for a serverstatus query
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseServerStatus( $$ ) {
+sub SB_SERVER_ParseServerStatus {
     my( $hash, $dataptr ) = @_;
     my $name = $hash->{NAME};
 
@@ -2459,20 +2441,20 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 
     # typically the start index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
-	shift( @{$dataptr} );
+        shift( @{$dataptr} );
     } else {
-	Log3( $hash, 5, "SB_SERVER_ParseServerStatus($name): entry is " .
-	      "not the start number" );
-	return;
+        Log3( $hash, 5, "SB_SERVER_ParseServerStatus($name): entry is " .
+              "not the start number" );
+        return;
     }
 
     # typically the max index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
-	shift( @{$dataptr} );
+        shift( @{$dataptr} );
     } else {
-	Log3( $hash, 5, "SB_SERVER_ParseServerStatus($name): entry is " .
-	      "not the end number" );
-	return;
+        Log3( $hash, 5, "SB_SERVER_ParseServerStatus($name): entry is " .
+              "not the end number" );
+        return;
     }
 
     my $datastr = join( " ", @{$dataptr} );
@@ -2486,7 +2468,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     $datastr =~ s/player count/playercount/g;
 
     Log3( $hash, 5, "SB_SERVER_ParseServerStatus($name): data to parse: " .
-	  $datastr );
+        $datastr );
 
     my @data1 = split( " ", $datastr );
 
@@ -2509,204 +2491,204 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     my $rescanactive=0;
 
     foreach( @data1 ) {
-	if( $_ =~ /^(lastscan:)([0-9]*)/ ) {
-	    # we found the lastscan entry
-	    my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) =
-		localtime( $2 );
-	    $year = $year + 1900;
-	    readingsBulkUpdate( $hash, "scan_last", "$mday-".($mon+1)."-$year " .   # CD 0016 Monat korrigiert
-				"$hour:$min:$sec" );
-	    #readingsBulkUpdate( $hash, "scanlast", strftime("%Y-%m-%d %H:%M:%S", localtime($2)));  # CD 0040
-	    next;
-	} elsif( $_ =~ /^(scanning:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "scanning", $2 );
-	    next;
-	} elsif( $_ =~ /^(rescan:)([0-9]*)/ ) {
-	    if( $2 eq "1" ) {
-            readingsBulkUpdate( $hash, "scanning", "yes" );
-            $rescanactive=1;
-            $hash->{helper}{scanstart}=time() unless defined($hash->{helper}{scanstart});   # CD 0040
-	    } else {
-            readingsBulkUpdate( $hash, "scanning", "no" );
-            # CD 0040 start
-            if(defined $hash->{helper}{scanstart}) {
-                readingsBulkUpdate( $hash, "scanduration", int(time()-$hash->{helper}{scanstart}));
-                delete $hash->{helper}{scanstart};
+        if( $_ =~ /^(lastscan:)([0-9]*)/ ) {
+            # we found the lastscan entry
+            my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) =
+            localtime( $2 );
+            $year = $year + 1900;
+            readingsBulkUpdate( $hash, "scan_last", "$mday-".($mon+1)."-$year " .   # CD 0016 Monat korrigiert
+                    "$hour:$min:$sec" );
+            #readingsBulkUpdate( $hash, "scanlast", strftime("%Y-%m-%d %H:%M:%S", localtime($2)));  # CD 0040
+            next;
+        } elsif( $_ =~ /^(scanning:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "scanning", $2 );
+            next;
+        } elsif( $_ =~ /^(rescan:)([0-9]*)/ ) {
+            if( $2 eq "1" ) {
+                readingsBulkUpdate( $hash, "scanning", "yes" );
+                $rescanactive=1;
+                $hash->{helper}{scanstart}=time() unless defined($hash->{helper}{scanstart});   # CD 0040
+            } else {
+                readingsBulkUpdate( $hash, "scanning", "no" );
+                # CD 0040 start
+                if(defined $hash->{helper}{scanstart}) {
+                    readingsBulkUpdate( $hash, "scanduration", int(time()-$hash->{helper}{scanstart}));
+                    delete $hash->{helper}{scanstart};
+                }
+                # CD 0040 end
             }
-            # CD 0040 end
-	    }
-	    next;
-	} elsif( $_ =~ /^(version:)([0-9\.]*)/ ) {
-	    readingsBulkUpdate( $hash, "serverversion", $2 );
-	    next;
-	} elsif( $_ =~ /^(playercount:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "players", $2 );
-	    next;
-	} elsif( $_ =~ /^(snplayercount:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "players_mysb", $2 );
-	    $currentplayerid = "none";
-	    $addplayers = false;
-	    next;
-	} elsif( $_ =~ /^(otherplayercount:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "players_other", $2 );
-	    $currentplayerid = "none";
-	    $addplayers = false;
-	    next;
-	} elsif( $_ =~ /^(infototalalbums:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "db_albums", $2 );
-        # CD 0051
-        if (defined($hash->{helper}{albums}{reread})) {
-            DevIo_SimpleWrite( $hash, "albums 0 $2 tags:la\n", 0 ); # CD 0053 Artisten mit abfragen
-            delete $hash->{helper}{albums}{reread};
-        }
-	    next;
-	} elsif( $_ =~ /^(infototalartists:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "db_artists", $2 );
-        # CD 0051
-        if (defined($hash->{helper}{artists}{reread})) {
-          if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
-            DevIo_SimpleWrite( $hash, "artists 0 $2 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
-          } else {
-            DevIo_SimpleWrite( $hash, "artists 0 $2\n", 0 );
-          }
-          delete $hash->{helper}{artists}{reread};
-        }
-	    next;
-	} elsif( $_ =~ /^(infototalsongs:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "db_songs", $2 );
-	    next;
-	} elsif( $_ =~ /^(infototalgenres:)([0-9]*)/ ) {
-	    readingsBulkUpdate( $hash, "db_genres", $2 );
-        # CD 0051
-        if (defined($hash->{helper}{genres}{reread})) {
-            DevIo_SimpleWrite( $hash, "genres 0 $2\n", 0 );
-            delete $hash->{helper}{genres}{reread};
-        }
-	    next;
-	} elsif( $_ =~ /^(playerid:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
-	    my $id = join( "", split( ":", $2 ) );
-	    if( $addplayers == true ) { # CD 0017 fixed ==
-		$players{$id}{ID} = $id;
-		$players{$id}{MAC} = $2;
-		$currentplayerid = $id;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-    # CD 0044 auf IP-Adresse prüfen
-	} elsif( $_ =~ /^(playerid:)(.*)/ ) {
-        if (SB_PLAYER_IsValidIPV4( $2 ) == 1) {
-            if( $addplayers == true ) {
-                $players{$2}{ID} = $2;
-                $players{$2}{MAC} = $2;
-                $players{$2}{isplayer} = "1";   # für virtuellen Player der angelegt wird wenn stream.mp3 abgerufen wird
-                $currentplayerid = $2;
+            next;
+        } elsif( $_ =~ /^(version:)([0-9\.]*)/ ) {
+            readingsBulkUpdate( $hash, "serverversion", $2 );
+            next;
+        } elsif( $_ =~ /^(playercount:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "players", $2 );
+            next;
+        } elsif( $_ =~ /^(snplayercount:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "players_mysb", $2 );
+            $currentplayerid = "none";
+            $addplayers = false;
+            next;
+        } elsif( $_ =~ /^(otherplayercount:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "players_other", $2 );
+            $currentplayerid = "none";
+            $addplayers = false;
+            next;
+        } elsif( $_ =~ /^(infototalalbums:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "db_albums", $2 );
+            # CD 0051
+            if (defined($hash->{helper}{albums}{reread})) {
+                DevIo_SimpleWrite( $hash, "albums 0 $2 tags:la\n", 0 ); # CD 0053 Artisten mit abfragen
+                delete $hash->{helper}{albums}{reread};
             }
-        }
-        $nameactive=0;
-	    next;
-    # CD 0044 end
-	} elsif( $_ =~ /^(name:)(.*)/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{name} = $2;
-        $nameactive=1;  # CD 0030
-	    }
-	    next;
-	} elsif( $_ =~ /^(displaytype:)(.*)/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{displaytype} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(model:)(.*)/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{model} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(power:)([0|1])/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{power} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(canpoweroff:)([0|1])/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{canpoweroff} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(connected:)([0|1])/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{connected} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(isplayer:)([0|1])/ ) {
-	    if( $currentplayerid ne "none" ) {
-            $players{$currentplayerid}{isplayer} = $2 unless defined($players{$currentplayerid}{isplayer});     # CD 0044 Hack für Zugriff über stream.mp3
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(ip:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{3,5})/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{IP} = $2;
-	    }
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(seq_no:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-    # CD 0017 start
-	} elsif( $_ =~ /^(isplaying:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(snplayercount:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(otherplayercount:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(server:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-	} elsif( $_ =~ /^(serverurl:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;  # CD 0030
-	    next;
-    # CD 0017 end
-	} elsif( $_ =~ /^(voltage:)(.*)/ ) {
-	    if( $currentplayerid ne "none" ) {
-        $players{$currentplayerid}{voltage} = $2;
-	    }
-      $nameactive=0;
-	    next;
-    # CD 0030 firmware und modelname
-	} elsif( $_ =~ /^(modelname:)(.*)/ ) {
-	    if( $currentplayerid ne "none" ) {
-		$players{$currentplayerid}{model} = $2;
-	    }
-        $nameactive=0;
-	    next;
-	} elsif( $_ =~ /^(firmware:)(.*)/ ) {
-	    # just to take care of the keyword
-        $nameactive=0;
-	    next;
-    } elsif( $_ =~ /:/ ) {
-        $nameactive=0;
-    # CD 0030 Ende
-	} else {
-	    # no keyword found, so let us assume it is part of the player name
-        # CD 0030 aber nur wenn 'name' noch aktiv ist
-	    if(( $currentplayerid ne "none" )&&($nameactive==1)) {
-		$players{$currentplayerid}{name} .= $_;
-	    }
+            next;
+        } elsif( $_ =~ /^(infototalartists:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "db_artists", $2 );
+            # CD 0051
+            if (defined($hash->{helper}{artists}{reread})) {
+                if (AttrVal( $name, 'artistFilter', 'none' ) ne 'none') { # CD 0054
+                    DevIo_SimpleWrite( $hash, "artists 0 $2 role_id:" . AttrVal( $name, 'artistFilter', 'ARTIST' ) . "\n", 0 );
+                } else {
+                    DevIo_SimpleWrite( $hash, "artists 0 $2\n", 0 );
+                }
+                delete $hash->{helper}{artists}{reread};
+            }
+            next;
+        } elsif( $_ =~ /^(infototalsongs:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "db_songs", $2 );
+            next;
+        } elsif( $_ =~ /^(infototalgenres:)([0-9]*)/ ) {
+            readingsBulkUpdate( $hash, "db_genres", $2 );
+            # CD 0051
+            if (defined($hash->{helper}{genres}{reread})) {
+                DevIo_SimpleWrite( $hash, "genres 0 $2\n", 0 );
+                delete $hash->{helper}{genres}{reread};
+            }
+            next;
+        } elsif( $_ =~ /^(playerid:)($dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd[:|-]$dd)/ ) {
+            my $id = join( "", split( ":", $2 ) );
+            if( $addplayers == true ) { # CD 0017 fixed ==
+                $players{$id}{ID} = $id;
+                $players{$id}{MAC} = $2;
+                $currentplayerid = $id;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        # CD 0044 auf IP-Adresse prüfen
+        } elsif( $_ =~ /^(playerid:)(.*)/ ) {
+            if (SB_PLAYER_IsValidIPV4( $2 ) == 1) {
+                if( $addplayers == true ) {
+                    $players{$2}{ID} = $2;
+                    $players{$2}{MAC} = $2;
+                    $players{$2}{isplayer} = "1";   # für virtuellen Player der angelegt wird wenn stream.mp3 abgerufen wird
+                    $currentplayerid = $2;
+                }
+            }
+            $nameactive=0;
+            next;
+        # CD 0044 end
+        } elsif( $_ =~ /^(name:)(.*)/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{name} = $2;
+                $nameactive=1;  # CD 0030
+            }
+            next;
+        } elsif( $_ =~ /^(displaytype:)(.*)/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{displaytype} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(model:)(.*)/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{model} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(power:)([0|1])/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{power} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(canpoweroff:)([0|1])/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{canpoweroff} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(connected:)([0|1])/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{connected} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(isplayer:)([0|1])/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{isplayer} = $2 unless defined($players{$currentplayerid}{isplayer});     # CD 0044 Hack für Zugriff über stream.mp3
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(ip:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{3,5})/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{IP} = $2;
+            }
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(seq_no:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        # CD 0017 start
+        } elsif( $_ =~ /^(isplaying:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(snplayercount:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(otherplayercount:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(server:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        } elsif( $_ =~ /^(serverurl:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;  # CD 0030
+            next;
+        # CD 0017 end
+        } elsif( $_ =~ /^(voltage:)(.*)/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{voltage} = $2;
+            }
+          $nameactive=0;
+            next;
+        # CD 0030 firmware und modelname
+        } elsif( $_ =~ /^(modelname:)(.*)/ ) {
+            if( $currentplayerid ne "none" ) {
+                $players{$currentplayerid}{model} = $2;
+            }
+            $nameactive=0;
+            next;
+        } elsif( $_ =~ /^(firmware:)(.*)/ ) {
+            # just to take care of the keyword
+            $nameactive=0;
+            next;
+        } elsif( $_ =~ /:/ ) {
+            $nameactive=0;
+        # CD 0030 Ende
+        } else {
+            # no keyword found, so let us assume it is part of the player name
+            # CD 0030 aber nur wenn 'name' noch aktiv ist
+            if(( $currentplayerid ne "none" )&&($nameactive==1)) {
+                $players{$currentplayerid}{name} .= $_;
+            }
 
-	}
+        }
     }
 
     if ($rescanactive==0) {
@@ -2811,7 +2793,7 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
     # the list for the sync masters
     # make all client create e new sync master list
     SB_SERVER_Broadcast( $hash, "SYNCMASTER",
-			 "FLUSH all", undef );
+             "FLUSH all", undef );
 
     # now send the list for the sync masters
     @SB_SERVER_SM=();
@@ -2841,22 +2823,22 @@ sub SB_SERVER_ParseServerStatus( $$ ) {
 
 # CD 0029 start
 # für schwache Hardware Übertragung aufteilen
-sub SB_SERVER_tcb_SendSyncMasters( $ ) {
+sub SB_SERVER_tcb_SendSyncMasters {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     RemoveInternalTimer( "SB_SERVER_tcb_SendSyncMasters:$name");
 
-    my $a;
+    my $sm;
     my $t=time();
 
     do {
-        $a=shift @SB_SERVER_SM; # CD 0045 Reihenfolge beibehalten
-        if (defined($a)) {
-            SB_SERVER_Broadcast( $hash, "SYNCMASTER", $a, undef );
+        $sm=shift @SB_SERVER_SM; # CD 0045 Reihenfolge beibehalten
+        if (defined($sm)) {
+            SB_SERVER_Broadcast( $hash, "SYNCMASTER", $sm, undef );
         }
-    } while ((time()<$t+0.05) && defined($a));
+    } while ((time()<$t+0.05) && defined($sm));
 
     if(scalar(@SB_SERVER_SM)>0) {
     #Log 0,"SB_SERVER_tcb_SendSyncMasters: ".scalar(@SB_SERVER_SM)." entries remaining";
@@ -2865,6 +2847,7 @@ sub SB_SERVER_tcb_SendSyncMasters( $ ) {
                    "SB_SERVER_tcb_SendSyncMasters:$name",
                    0 );
     }
+    return;
 }
 # CD 0029 end
 
@@ -2872,7 +2855,7 @@ sub SB_SERVER_tcb_SendSyncMasters( $ ) {
 # ----------------------------------------------------------------------------
 #  Parse the return values of the genre/album/artist items
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
+sub SB_SERVER_ParseGenreAlbumArtist {
     my ( $hash, $cmd, @args ) = @_;
 
     my $name = $hash->{NAME};
@@ -2897,15 +2880,15 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
                 $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
                 $buf=~ s/"//g;
                 if($cmd eq 'albums') {
-                  $albumartist=' ' if(!defined($albumartist));
-                  $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
-                  $albumartist=~ s/"//g;
-                  if($data2 eq "") {
+                    $albumartist=' ' if(!defined($albumartist));
+                    $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+                    $albumartist=~ s/"//g;
+                    if($data2 eq "") {
                       $data2=$albumartist;
-                  } else {
+                    } else {
                       $data2.=":$albumartist";
-                  }
-                  $albumartist=undef;
+                    }
+                    $albumartist=undef;
                 }
                 if($data eq "") {
                     $data=$buf;
@@ -2927,9 +2910,9 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
         } elsif( $_ =~ /^(artist:)(.*)/ ) {
             # CD 0053
             if($cmd eq 'albums') {
-              $albumartist=$2;
+                $albumartist=$2;
             } else {
-              $buf=$2;
+                $buf=$2;
             }
             $indata=1;
             next;
@@ -2939,10 +2922,13 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
             next;
         } elsif ($indata==1) {
             if(defined($albumartist)) {
-              $albumartist.=" $_";
+                $albumartist.=" $_";
             } else {
-              $buf.=" $_";
+                $buf.=" $_";
             }
+        } elsif( $_ =~ /^sort:new/ ) {  # CD0056
+            $cmd='newAlbums';
+            next;
         }
     }
     
@@ -2950,14 +2936,14 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
         $buf=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
         $buf=~ s/"//g;
         if($cmd eq 'albums') {
-          $albumartist=' ' if(!defined($albumartist));
-          $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
-          $albumartist=~ s/"//g;
-          if($data2 eq "") {
-              $data2=$albumartist;
-          } else {
-              $data2.=":$albumartist";
-          }
+            $albumartist=' ' if(!defined($albumartist));
+            $albumartist=~ s/://g;  # Doppelpunkte entfernen, wird von FTUI als Trennzeichen verwendet
+            $albumartist=~ s/"//g;
+            if($data2 eq "") {
+                $data2=$albumartist;
+            } else {
+                $data2.=":$albumartist";
+            }
         }
         if($data eq "") {
             $data=$buf;
@@ -2988,16 +2974,22 @@ sub SB_SERVER_ParseGenreAlbumArtist( $$@ ) {
         $doBroadcast=1;
     }
 
+    # CD 0056
+    if($cmd eq 'newAlbums') {
+        $data{SB_SERVER}{$name}{newAlbums}=$ids;
+    }
+    
     if ($doBroadcast==1) {
         RemoveInternalTimer( "BroadcastGAA:$name");
         InternalTimer( gettimeofday() + 2.00,
            "SB_SERVER_tcb_BroadcastGAA",
-           "StartTalk:$name",
+           "BroadcastGAA:$name",
            0 );
     }
+    return;
 }    
 
-sub SB_SERVER_tcb_BroadcastGAA( $ ) {
+sub SB_SERVER_tcb_BroadcastGAA {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -3014,13 +3006,14 @@ sub SB_SERVER_tcb_BroadcastGAA( $ ) {
         SB_SERVER_Broadcast( $hash, "ALBUMS", "UPDATE " . uri_escape($hash->{helper}{albums}{data}) . ' ' . $hash->{helper}{albums}{ids} . ' ' . uri_escape($hash->{helper}{albums}{artists}), undef ); # CD 0053 added album artists
         delete $hash->{helper}{albums}{broadcast};
     }
+    return;
 }
 # CD 0051 end
     
 # ----------------------------------------------------------------------------
 #  Parse the return values of the favorites items
 # ----------------------------------------------------------------------------
-sub SB_SERVER_FavoritesParse( $$ ) {
+sub SB_SERVER_FavoritesParse {
     my ( $hash, $str ) = @_;
 
     my $name = $hash->{NAME};
@@ -3029,7 +3022,7 @@ sub SB_SERVER_FavoritesParse( $$ ) {
 
     # flush the existing list
     foreach my $titi ( keys %{$favorites{$name}} ) {
-	delete( $favorites{$name}{$titi} );
+        delete( $favorites{$name}{$titi} );
     }
 
     # split up the string we got
@@ -3039,18 +3032,18 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     # some more comment
     # typically 'items'
     if( $data[ 0 ] =~ /^(items)*/ ) {
-	my $notneeded = shift( @data );
+        my $notneeded = shift( @data );
     }
 
     # typically the start index being a number
     if( $data[ 0 ] =~ /^([0-9])*/ ) {
-	my $notneeded = shift( @data );
+        my $notneeded = shift( @data );
     }
 
     # typically the start index being a number
     my $maxwanted = 100;
     if( $data[ 0 ] =~ /^([0-9])*/ ) {
-	$maxwanted = int( shift( @data ) );
+        $maxwanted = int( shift( @data ) );
     }
 
     # find the maximum number of favorites. That is typically at the
@@ -3058,40 +3051,40 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $totals = 0;
     my $lastdata = $data[ $#data ];
     if( $lastdata =~ /^(count:)([0-9]*)/ ) {
-	$totals = $2;
-	# remove the last element from the array
-	pop( @data );
+        $totals = $2;
+        # remove the last element from the array
+        pop( @data );
     } else {
-	my $i = 0;
-	my $delneeded = false;
-	foreach( @data ) {
-	    if( $_ =~ /^(count:)([0-9]*)/ ) {
-		$totals = $2;
-		$delneeded = true;
-		last;
-	    } else {
-		$i++;
-	    }
+        my $i = 0;
+        my $delneeded = false;
+        foreach( @data ) {
+            if( $_ =~ /^(count:)([0-9]*)/ ) {
+            $totals = $2;
+            $delneeded = true;
+            last;
+            } else {
+            $i++;
+            }
 
-	    # delete the element from the list
-	    if( $delneeded == true ) {
-		splice( @data, $i, 1 );
-	    }
-	}
+            # delete the element from the list
+            if( $delneeded == true ) {
+            splice( @data, $i, 1 );
+            }
+        }
     }
     readingsSingleUpdate( $hash, "favoritestotal", $totals, 0 );
 
 
     my $favname = "";
     if( $data[ 0 ] =~ /^(title:)(.*)/ ) {
-	$favname = $2;
-	shift( @data );
+        $favname = $2;
+        shift( @data );
     }
     readingsSingleUpdate( $hash, "favoritesname", $favname, 0 );
 
     # check if we got all the favoites with our response
     if( $totals > $maxwanted ) {
-	# we asked for too less data, there are more favorites defined
+        # we asked for too less data, there are more favorites defined
     }
 
     # treat the rest of the string
@@ -3108,96 +3101,92 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     my $cnt=0;
 
     foreach ( @data ) {
-    #Log 0,$_;
-	if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
-	    # we found an ID, that is typically the start of a new session
-	    # so save the old session first
-	    if( $firstone == false ) {
-            if(( $hasitemsbuf == false )||($isplaylist == true)) {
-                # derive our hash entry
-                $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
-                my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-                $favorites{$name}{$entryuid} = {
-                ID => $idbuf,
-                Name => $namebuf,
-                URL => $url, };         # CD 0009 hinzugefügt
-                $namebuf = "";
-                $isaudiobuf = "";
-                $url = "?";              # CD 0009 hinzugefügt
-                $hasitemsbuf = false;
-                $isplaylist = false;
-            } else {
-                # that is a folder we found, but we don't handle that
+        #Log 0,$_;
+        if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
+            # we found an ID, that is typically the start of a new session
+            # so save the old session first
+            if( $firstone == false ) {
+                if(( $hasitemsbuf == false )||($isplaylist == true)) {
+                    # derive our hash entry
+                    $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
+                    my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
+                    $favorites{$name}{$entryuid} = {
+                    ID => $idbuf,
+                    Name => $namebuf,
+                    URL => $url, };         # CD 0009 hinzugefügt
+                    $namebuf = "";
+                    $isaudiobuf = "";
+                    $url = "?";              # CD 0009 hinzugefügt
+                    $hasitemsbuf = false;
+                    $isplaylist = false;
+                } else {
+                    # that is a folder we found, but we don't handle that
+                }
             }
-	    }
 
-	    $firstone = false;
-	    $idbuf = $2;
+            $firstone = false;
+            $idbuf = $2;
 
-	    # if there has been a name found before, end it now
-	    if( $namestarted == true ) {
-		$namestarted = false;
-	    }
-
-	} elsif( $_ =~ /^(isaudio:)([0|1]?)/ ) {
-	    $isaudiobuf = $2;
-	    if( $namestarted == true ) {
-		$namestarted = false;
-	    }
-
-	} elsif( $_ =~ /^(hasitems:)([0|1]?)/ ) {
-	    if( int( $2 ) == 0 ) {
-		$hasitemsbuf = false;
-	    } else {
-		$hasitemsbuf = true;
-	    }
-
-	    if( $namestarted == true ) {
-		$namestarted = false;
-	    }
-    # CD 0018 start
-    } elsif( $_ =~ /^(type:)(.*)/ ) {
-        $isplaylist = true if($2 eq "playlist");
-	    if( $namestarted == true ) {
-            $namestarted = false;
-	    }
-    # CD 0018 end
-	#} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {     # CD 0007   # CD 0009 deaktiviert
-	} elsif( $_ =~ /^(name:)(.*)/ ) {     # CD 0009 hinzugefügt
-	    $namebuf = $2;
-	    $namestarted = true;
-
-    # CD 0009 start
-	} elsif( $_ =~ /^(url:)(.*)/ ) {
-	    $url = $2;
-        $url =~ s/file:\/\/\///;
-    # CD 0009 end
-    } else {
-	    # no regexp matched, so it must be part of the name
-	    if( $namestarted == true ) {
-		$namebuf .= " " . $_;
-	    }
-	}
+            # if there has been a name found before, end it now
+            if( $namestarted == true ) {
+                $namestarted = false;
+            }
+        } elsif( $_ =~ /^(isaudio:)([0|1]?)/ ) {
+            $isaudiobuf = $2;
+            if( $namestarted == true ) {
+                $namestarted = false;
+            }
+        } elsif( $_ =~ /^(hasitems:)([0|1]?)/ ) {
+            if( int( $2 ) == 0 ) {
+                $hasitemsbuf = false;
+            } else {
+                $hasitemsbuf = true;
+            }
+            if( $namestarted == true ) {
+                $namestarted = false;
+            }
+        # CD 0018 start
+        } elsif( $_ =~ /^(type:)(.*)/ ) {
+            $isplaylist = true if($2 eq "playlist");
+            if( $namestarted == true ) {
+                $namestarted = false;
+            }
+        # CD 0018 end
+        #} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {     # CD 0007   # CD 0009 deaktiviert
+        } elsif( $_ =~ /^(name:)(.*)/ ) {     # CD 0009 hinzugefügt
+            $namebuf = $2;
+            $namestarted = true;
+        # CD 0009 start
+        } elsif( $_ =~ /^(url:)(.*)/ ) {
+            $url = $2;
+            $url =~ s/file:\/\/\///;
+        # CD 0009 end
+        } else {
+            # no regexp matched, so it must be part of the name
+            if( $namestarted == true ) {
+            $namebuf .= " " . $_;
+            }
+        }
     }
 
     # capture the last element also
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
-    if(( $hasitemsbuf == false )||($isplaylist == true)) {
-	    # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
-        $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
-        my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-	    $favorites{$name}{$entryuid} = {
-		ID => $idbuf,
-		Name => $namebuf,
-        URL => $url, };         # CD 0009 hinzugefügt
-	} else {
-	    # that is a folder we found, but we don't handle that
-	}
+        if(( $hasitemsbuf == false )||($isplaylist == true)) {
+            # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
+            $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
+            my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
+            $favorites{$name}{$entryuid} = {
+            ID => $idbuf,
+            Name => $namebuf,
+            URL => $url, };         # CD 0009 hinzugefügt
+        } else {
+            # that is a folder we found, but we don't handle that
+        }
     }
 
     # make all client create e new favorites list
     SB_SERVER_Broadcast( $hash, "FAVORITES",
-			 "FLUSH all", undef );
+             "FLUSH all", undef );
 
     # find all the names and broadcast to our clients
     $favsetstring = "favorites:";
@@ -3221,26 +3210,27 @@ sub SB_SERVER_FavoritesParse( $$ ) {
     # CD 0029 end
     #chop( $favsetstring );
     #$favsetstring .= " ";
+    return;
 }
 
 # CD 0029 start
 # für schwache Hardware Übertragung aufteilen
-sub SB_SERVER_tcb_SendFavorites( $ ) {
+sub SB_SERVER_tcb_SendFavorites {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     RemoveInternalTimer( "SB_SERVER_tcb_SendFavorites:$name");
 
-    my $a;
+    my $fav;
     my $t=time();
 
     do {
-        $a=shift @SB_SERVER_FAVS;   # CD 0045 Reihenfolge beibehalten
-        if (defined($a)) {
-            SB_SERVER_Broadcast( $hash, "FAVORITES", $a, undef );     # CD 0009 URL an Player schicken
+        $fav=shift @SB_SERVER_FAVS;   # CD 0045 Reihenfolge beibehalten
+        if (defined($fav)) {
+            SB_SERVER_Broadcast( $hash, "FAVORITES", $fav, undef );     # CD 0009 URL an Player schicken
         }
-    } while ((time()<$t+0.05) && defined($a));
+    } while ((time()<$t+0.05) && defined($fav));
 
     if(scalar(@SB_SERVER_FAVS)>0) {
     #Log 0,"SB_SERVER_tcb_SendFavorites: ".scalar(@SB_SERVER_FAVS)." entries remaining";
@@ -3248,14 +3238,17 @@ sub SB_SERVER_tcb_SendFavorites( $ ) {
                    "SB_SERVER_tcb_SendFavorites",
                    "SB_SERVER_tcb_SendFavorites:$name",
                    0 );
+    } else {
+        SB_SERVER_Broadcast( $hash, "FAVORITES", "DONE", undef );
     }
+    return;
 }
 # CD 0029 end
 
 # ----------------------------------------------------------------------------
 #  generate a UID for the hash entry from the name
 # ----------------------------------------------------------------------------
-sub SB_SERVER_FavoritesName2UID( $ ) {
+sub SB_SERVER_FavoritesName2UID {
     my $namestr = shift( @_ );
 
     # eliminate spaces
@@ -3280,17 +3273,21 @@ sub SB_SERVER_FavoritesName2UID( $ ) {
     # this defines the regexp. Please add new stuff with the seperator |
     # CD 0003 changed öÜ to ö|Ü
     my $tobereplaced = '[Ä|ä|Ö|ö|Ü|ü|\[|\]|\{|\}|\(|\)|\\\\|,|:|\?|;|' .       # CD 0011 ,:? hinzugefügt # CD 0035 ; hinzugefügt
-	'\/|\'|\.|\"|\^|°|\$|\||%|@|*|#|&|\+]';     # CD 0009 + hinzugefügt # CD 0070 * und # hinzugefügt
+        '\/|\'|\.|\"|\^|°|\$|\||%|@|*|#|&|\+]';     # CD 0009 + hinzugefügt # CD 0070 * und # hinzugefügt
 
     $namestr =~ s/$tobereplaced//g;
-
+    
+    # CD 0055
+    if($namestr eq '') {
+      $namestr='INVALIDNAME_' . time();
+    }
     return( $namestr );
 }
 
 # ----------------------------------------------------------------------------
 #  push a command to the buffer
 # ----------------------------------------------------------------------------
-sub SB_SERVER_CMDStackPush( $$ ) {
+sub SB_SERVER_CMDStackPush {
     my ( $hash, $cmd ) = @_;
 
     my $name = $hash->{NAME};
@@ -3317,14 +3314,15 @@ sub SB_SERVER_CMDStackPush( $$ ) {
 
     # update overall number of entries
     $SB_SERVER_CmdStack{$name}{cnt} = $SB_SERVER_CmdStack{$name}{last_n} -
-	$SB_SERVER_CmdStack{$name}{first_n} + 1;
+    $SB_SERVER_CmdStack{$name}{first_n} + 1;
     $hash->{CMDSTACK}=$SB_SERVER_CmdStack{$name}{cnt};              # CD 0007
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  pop a command from the buffer
 # ----------------------------------------------------------------------------
-sub SB_SERVER_CMDStackPop( $ ) {
+sub SB_SERVER_CMDStackPop {
     my ( $hash ) = @_;
 
     my $name = $hash->{NAME};
@@ -3349,15 +3347,15 @@ sub SB_SERVER_CMDStackPop( $ ) {
     $n = $n + 1;
 
     if ( $n <= $SB_SERVER_CmdStack{$name}{last_n} ) {                                   # CD 0000 changed first_n to last_n
-	$SB_SERVER_CmdStack{$name}{first_n} = $n;
-	# update overall number of entries
-	$SB_SERVER_CmdStack{$name}{cnt} = $SB_SERVER_CmdStack{$name}{last_n} -
-	    $SB_SERVER_CmdStack{$name}{first_n} + 1;
+        $SB_SERVER_CmdStack{$name}{first_n} = $n;
+        # update overall number of entries
+        $SB_SERVER_CmdStack{$name}{cnt} = $SB_SERVER_CmdStack{$name}{last_n} -
+        $SB_SERVER_CmdStack{$name}{first_n} + 1;
     } else {
-	# end of list reached
-	$SB_SERVER_CmdStack{$name}{last_n} = 0;
-	$SB_SERVER_CmdStack{$name}{first_n} = 0;
-	$SB_SERVER_CmdStack{$name}{cnt} = 0;
+        # end of list reached
+        $SB_SERVER_CmdStack{$name}{last_n} = 0;
+        $SB_SERVER_CmdStack{$name}{first_n} = 0;
+        $SB_SERVER_CmdStack{$name}{cnt} = 0;
     }
     $hash->{CMDSTACK}=$SB_SERVER_CmdStack{$name}{cnt};          # CD 0007
 
@@ -3369,7 +3367,7 @@ sub SB_SERVER_CMDStackPop( $ ) {
 # ----------------------------------------------------------------------------
 #  parse the list of known alarm playlists
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
+sub SB_SERVER_ParseServerAlarmPlaylists {
     my( $hash, $dataptr ) = @_;
 
     my $name = $hash->{NAME};
@@ -3378,7 +3376,7 @@ sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
 
     # force all clients to delete alarm playlists
     SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",
-			 "FLUSH all", undef );
+             "FLUSH all", undef );
 
     @SB_SERVER_AL_PLS=split("category:",join(" ",@{$dataptr}));
     # CD 0029 Übertragung an Player aufteilen
@@ -3389,40 +3387,41 @@ sub SB_SERVER_ParseServerAlarmPlaylists( $$ ) {
                    "SB_SERVER_tcb_SendAlarmPlaylists:$name",
                    0 );
     }
+    return;
 }
 # CD 0011 end
 
 # CD 0029 start
 # für schwache Hardware Übertragung aufteilen
-sub SB_SERVER_tcb_SendAlarmPlaylists( $ ) {
+sub SB_SERVER_tcb_SendAlarmPlaylists {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     RemoveInternalTimer( "SB_SERVER_tcb_SendAlarmPlaylists:$name");
 
-    my $a;
+    my $alp;
     my $t=time();
 
     do {
-        $a=shift @SB_SERVER_AL_PLS; # CD 0045 Reihenfolge beibehalten
-        if (defined($a)) {
-            my $i1=index($a," title:");
-            my $i2=index($a," url:");
-            my $i3=index($a," singleton:");
+        $alp=shift @SB_SERVER_AL_PLS; # CD 0045 Reihenfolge beibehalten
+        if (defined($alp)) {
+            my $i1=index($alp," title:");
+            my $i2=index($alp," url:");
+            my $i3=index($alp," singleton:");
             if (($i1!=-1)&&($i2!=-1)&&($i3!=-1)) {
-                my $url=substr($a,$i2+5,$i3-$i2-5);
-                $url=substr($a,$i1+7,$i2-$i1-7) if ($url eq "");
+                my $url=substr($alp,$i2+5,$i3-$i2-5);
+                $url=substr($alp,$i1+7,$i2-$i1-7) if ($url eq "");
                 my $pn=SB_SERVER_FavoritesName2UID(decode('utf-8',$url));
                 SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",
-                            "ADD $pn category ".substr($a,0,$i1), undef );
+                            "ADD $pn category ".substr($alp,0,$i1), undef );
                 SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",
-                            "ADD $pn title ".substr($a,$i1+7,$i2-$i1-7), undef );
+                            "ADD $pn title ".substr($alp,$i1+7,$i2-$i1-7), undef );
                 SB_SERVER_Broadcast( $hash, "ALARMPLAYLISTS",
                             "ADD $pn url $url", undef );
             }
         }
-    } while ((time()<$t+0.05) && defined($a));
+    } while ((time()<$t+0.05) && defined($alp));
 
     if(scalar(@SB_SERVER_AL_PLS)>0) {
     #Log 0,"SB_SERVER_tcb_SendAlarmPlaylists: ".scalar(@SB_SERVER_AL_PLS)." entries remaining";
@@ -3431,13 +3430,14 @@ sub SB_SERVER_tcb_SendAlarmPlaylists( $ ) {
                    "SB_SERVER_tcb_SendAlarmPlaylists:$name",
                    0 );
     }
+    return;
 }
 # CD 0029 end
 
 # ----------------------------------------------------------------------------
 #  parse the list of known Playlists
 # ----------------------------------------------------------------------------
-sub SB_SERVER_ParseServerPlaylists( $$ ) {
+sub SB_SERVER_ParseServerPlaylists {
     my( $hash, $dataptr ) = @_;
 
     my $name = $hash->{NAME};
@@ -3450,30 +3450,30 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 
     # typically the start index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
-	shift( @{$dataptr} );
+        shift( @{$dataptr} );
     } else {
-	Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): entry is " .
-	      "not the start number" );
-	return;
+        Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): entry is " .
+              "not the start number" );
+        return;
     }
 
     # typically the max index being a number
     if( $dataptr->[ 0 ] =~ /^([0-9])*/ ) {
-	shift( @{$dataptr} );
+        shift( @{$dataptr} );
     } else {
-	Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): entry is " .
-	      "not the end number" );
-	return;
+        Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): entry is " .
+              "not the end number" );
+        return;
     }
 
     my $datastr = join( " ", @{$dataptr} );
 
     Log3( $hash, 5, "SB_SERVER_ParseServerPlaylists($name): data to parse: " .
-	  $datastr );
+      $datastr );
 
     # make all client create a new favorites list
     SB_SERVER_Broadcast( $hash, "PLAYLISTS",
-			 "FLUSH all", undef );
+             "FLUSH all", undef );
 
     my @data1 = split( " ", $datastr );
 
@@ -3506,7 +3506,6 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                 push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
             }
-
         } else {
             $namebuf .= "_" . $_;
             next;
@@ -3525,22 +3524,22 @@ sub SB_SERVER_ParseServerPlaylists( $$ ) {
 
 # CD 0029 start
 # für schwache Hardware Übertragung aufteilen
-sub SB_SERVER_tcb_SendPlaylists( $ ) {
+sub SB_SERVER_tcb_SendPlaylists {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
 
     RemoveInternalTimer( "SB_SERVER_tcb_SendPlaylists:$name");
 
-    my $a;
+    my $pls;
     my $t=time();
 
     do {
-        $a=shift @SB_SERVER_PLS;    # CD 0045 Reihenfolge beibehalten
-        if (defined($a)) {
-            SB_SERVER_Broadcast( $hash, "PLAYLISTS", $a, undef );
+        $pls=shift @SB_SERVER_PLS;    # CD 0045 Reihenfolge beibehalten
+        if (defined($pls)) {
+            SB_SERVER_Broadcast( $hash, "PLAYLISTS", $pls, undef );
         }
-    } while ((time()<$t+0.05) && defined($a));
+    } while ((time()<$t+0.05) && defined($pls));
 
     if(scalar(@SB_SERVER_PLS)>0) {
     #Log 0,"SB_SERVER_tcb_SendPlaylists: ".scalar(@SB_SERVER_PLS)." entries remaining";
@@ -3548,12 +3547,15 @@ sub SB_SERVER_tcb_SendPlaylists( $ ) {
                    "SB_SERVER_tcb_SendPlaylists",
                    "SB_SERVER_tcb_SendPlaylists:$name",
                    0 );
+    } else {
+        SB_SERVER_Broadcast( $hash, "PLAYLISTS", "DONE", undef );
     }
+    return;
 }
 # CD 0029 end
 
 # CD 0008 start
-sub SB_SERVER_CheckConnection($) {
+sub SB_SERVER_CheckConnection {
     my($in ) = shift;
     my(undef,$name) = split(':',$in);
     my $hash = $defs{$name};
@@ -3586,13 +3588,14 @@ sub SB_SERVER_CheckConnection($) {
         }
     }
     RemoveInternalTimer( "CheckConnection:$name");
+    return;
 }
 # CD 0008 end
 
 # ----------------------------------------------------------------------------
 #  the Notify function
 # ----------------------------------------------------------------------------
-sub SB_SERVER_Notify( $$ ) {
+sub SB_SERVER_Notify {
     my ( $hash, $dev_hash ) = @_;
     my $name = $hash->{NAME}; # own name / hash
     my $devName = $dev_hash->{NAME}; # Device that created the events
@@ -3600,7 +3603,7 @@ sub SB_SERVER_Notify( $$ ) {
     return if (IsDisabled($name));  # CD 0046
 
     # CD start
-    if ($dev_hash->{NAME} eq "global" && grep (m/^INITIALIZED$|^REREADCFG$/,@{$dev_hash->{CHANGED}})){
+    if ($dev_hash->{NAME} eq 'global' && grep({m/^INITIALIZED$|^REREADCFG$/} @{$dev_hash->{CHANGED}})) {
         SB_SERVER_TryConnect( $hash , 0) unless defined($hash->{helper}{disableReconnect}); # CD 0038
     }
     # CD end
@@ -3608,7 +3611,7 @@ sub SB_SERVER_Notify( $$ ) {
     #    "Own:" . $name . " Device:" . $devName . " Events:" . (join " ",@{$dev_hash->{CHANGED}}) );
 
     # CD 0024 start
-    if( grep(m/^SAVE$|^SHUTDOWN$/, @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
+    if( grep({m/^SAVE$|^SHUTDOWN$/} @{$dev_hash->{CHANGED}}) ) { # CD 0043 auch bei SHUTDOWN speichern
         SB_SERVER_SaveSyncGroups($hash) if($SB_SERVER_hasDataDumper==1);
         SB_SERVER_SaveServerStates($hash) if($SB_SERVER_hasDataDumper==1);
     }
@@ -3616,10 +3619,10 @@ sub SB_SERVER_Notify( $$ ) {
 
     # CD 0008 start
     if($devName eq $name ) {
-        if (grep (m/^DISCONNECTED$/,@{$dev_hash->{CHANGED}})) {
+        if (grep ({m/^DISCONNECTED$/} @{$dev_hash->{CHANGED}})) {
             Log3( $hash, 3, "SB_SERVER_Notify($name): DISCONNECTED - STATE: " . ReadingsVal($name, "state", "unknown") . " power: ". ReadingsVal( $name, "power", "X" ));   # CD 0009 level 2->3
             # CD 0050 start
-            $hash->{CLICONNECTION} = "off";
+            $hash->{CLICONNECTION} = 'off';
             SB_SERVER_RemoveInternalTimers( $hash );
             InternalTimer( gettimeofday() + 10,
                        "SB_SERVER_tcb_Alive",
@@ -3627,7 +3630,7 @@ sub SB_SERVER_Notify( $$ ) {
                        0 );
             # CD 0050 end
         }
-        if (grep (m/^CONNECTED$/,@{$dev_hash->{CHANGED}})) {
+        if (grep ({m/^CONNECTED$/} @{$dev_hash->{CHANGED}})) {
             Log3( $hash, 3, "SB_SERVER_Notify($name): CONNECTED - STATE: " . ReadingsVal($name, "state", "unknown") . " power: ". ReadingsVal( $name, "power", "X" ));      # CD 0009 level 2->3
             InternalTimer( gettimeofday() + 2,
                 "SB_SERVER_CheckConnection",
@@ -3663,7 +3666,7 @@ sub SB_SERVER_Notify( $$ ) {
                        "SB_SERVER_Alive:$name",
                        0 );
         } else {
-            return( undef );
+            return;
         }
         return( "" );
     # CD 0007 start
@@ -3674,7 +3677,6 @@ sub SB_SERVER_Notify( $$ ) {
         
         foreach my $line (@{$dev_hash->{CHANGED}}) {
             my @args=split(':',$line);
-            my $ps;
             # Spezialfall 'state'
             $ps=trim($args[0]) if ((@args==1) && ($hash->{helper}{presenceReading} eq 'state'));
             
@@ -3701,17 +3703,18 @@ sub SB_SERVER_Notify( $$ ) {
                        0 );
             return( "" );
         }
-        return( undef );
+        return;
     # CD 0007 end
     } else {
-        return( undef );
+        return;
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
 #  start up the LMS server status
 # ----------------------------------------------------------------------------
-sub SB_SERVER_LMS_Status( $ ) {
+sub SB_SERVER_LMS_Status {
     my ( $hash ) = @_;
     my $name = $hash->{NAME}; # own name / hash
 
@@ -3738,12 +3741,23 @@ sub SB_SERVER_LMS_Status( $ ) {
 
     # and get some info on the server
     DevIo_SimpleWrite( $hash, "pref authorize ?\n", 0 );
+    SB_SERVER_StatusRequest($hash);
+
+    return( true );
+}
+
+# CD 0056
+sub SB_SERVER_StatusRequest {
+    my ( $hash ) = @_;
+    my $name = $hash->{NAME}; # own name / hash
+
     DevIo_SimpleWrite( $hash, "version ?\n", 0 );
-    DevIo_SimpleWrite( $hash, "serverstatus 0 200\n", 0 );
+    DevIo_SimpleWrite( $hash, "serverstatus 0 200 playerprefs:voltage\n", 0 );
     DevIo_SimpleWrite( $hash, "favorites items 0 " .
-		       AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
+               AttrVal( $name, "maxfavorites", 100 ) . " want_url:1\n", 0 );   # CD 0009 url mit abfragen
     DevIo_SimpleWrite( $hash, "playlists 0 " . AttrVal( $name, "maxplaylists", 200 ) . "\n", 0 );
     DevIo_SimpleWrite( $hash, "alarm playlists 0 300\n", 0 );       # CD 0011
+    DevIo_SimpleWrite( $hash, "albums 0 100 sort:new tags:QQQ\n", 0 );  # CD 0056
     DevIo_SimpleWrite( $hash, "apps 0 200\n", 0 );  # CD 0029
     DevIo_SimpleWrite( $hash, "pref httpport ?\n", 0 );     # CD 0049
     # CD 0032 start
@@ -3756,12 +3770,11 @@ sub SB_SERVER_LMS_Status( $ ) {
         }
     }
     # CD 0032 end
-
-    return( true );
+    return;
 }
 
 # CD 0038 start
-sub SB_SERVER_RemoveInternalTimers($)
+sub SB_SERVER_RemoveInternalTimers
 {
     my ($hash) = @_;
     my $name = $hash->{NAME};
@@ -3775,6 +3788,7 @@ sub SB_SERVER_RemoveInternalTimers($)
     RemoveInternalTimer( "SB_SERVER_tcb_SendSyncMasters:$name");
     RemoveInternalTimer( "SB_SERVER_tcb_SendAlarmPlaylists:$name");
     RemoveInternalTimer( "CheckConnection:$name");
+    return;
 }
 # CD 0038 end
 
@@ -3783,11 +3797,12 @@ sub SB_SERVER_RemoveInternalTimers($)
 # ----------------------------------------------------------------------------
 #  copied from DevIo.pm 7099
 # ----------------------------------------------------------------------------
-sub SB_SERVER_setStates($$)
+sub SB_SERVER_setStates
 {
-  my ($hash, $val) = @_;
-  $hash->{STATE} = $val;
-  setReadingsVal($hash, "state", $val, TimeNow());
+    my ($hash, $val) = @_;
+    $hash->{STATE} = $val;
+    setReadingsVal($hash, "state", $val, TimeNow());
+    return;
 }
 # CD 0006 end
 
@@ -3796,73 +3811,71 @@ sub SB_SERVER_setStates($$)
 #
 #  CD 0024
 # ----------------------------------------------------------------------------
-sub SB_SERVER_StatefileName($$)
+sub SB_SERVER_StatefileName
 {
-  my( $name,$prefix ) = @_;
+    my( $name,$prefix ) = @_;
 
-  my $statefile = $attr{global}{statefile};
-  $statefile = substr $statefile,0,rindex($statefile,'/')+1;
-  return $statefile . $prefix . "_$name.dd.save";
+    my $statefile = $attr{global}{statefile};
+    $statefile = substr $statefile,0,rindex($statefile,'/')+1;
+    return $statefile . $prefix . "_$name.dd.save";
 }
 
-sub SB_SERVER_SaveSyncGroups($)
+sub SB_SERVER_SaveSyncGroups
 {
-  my( $hash ) = @_;
-  my $name = $hash->{NAME};
+    my( $hash ) = @_;
+    my $name = $hash->{NAME};
 
-  return "No saved syncgroups found" unless(defined($hash->{helper}{syncGroups}));
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name,'sbsg');
+    return "No saved syncgroups found" unless(defined($hash->{helper}{syncGroups}));
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_SERVER_StatefileName($name,'sbsg');
 
-  if(open(FH, ">$statefile")) {
-    my $t = localtime;
-    print FH "#$t\n";
+    if(open(my $FH, ">", "$statefile")) {  # CD 0056 FH durch $FH ersetzt
+        my $t = localtime;
+        print $FH "#$t\n";  # CD 0056 FH durch $FH ersetzt
 
-    my $dumper = Data::Dumper->new([]);
-    $dumper->Terse(1);
+        my $dumper = Data::Dumper->new([]);
+        $dumper->Terse(1);
 
-    $dumper->Values([$hash->{helper}{syncGroups}]);
-    print FH $dumper->Dump;
+        $dumper->Values([$hash->{helper}{syncGroups}]);
+        print $FH $dumper->Dump;  # CD 0056 FH durch $FH ersetzt
 
-    close(FH);
-  } else {
-
-    my $msg = "SB_SERVER_SaveSyncGroups: Cannot open $statefile: $!";
-    Log3 $hash, 1, $msg;
-  }
-
-  return undef;
-}
-
-sub SB_SERVER_LoadSyncGroups($)
-{
-  my ($hash) = @_;
-  my $name = $hash->{NAME};
-
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name,'sbsg');
-
-  if(open(FH, "<$statefile")) {
-    my $encoded;
-    while (my $line = <FH>) {
-      chomp $line;
-      next if($line =~ m/^#.*$/);
-      $encoded .= $line;
+        close($FH);   # CD 0056 FH durch $FH ersetzt
+    } else {
+        my $msg = "SB_SERVER_SaveSyncGroups: Cannot open $statefile: $!";
+        Log3 $hash, 1, $msg;
     }
-    close(FH);
-
-    return if( !defined($encoded) );
-
-    my $decoded = eval $encoded;
-    $hash->{helper}{syncGroups} = $decoded;
-  } else {
-    my $msg = "SB_SERVER_LoadSyncGroups: no syncgroups file found";
-    Log3 undef, 4, $msg;
-  }
-  return undef;
+    return;
 }
 
-sub SB_SERVER_BuildPlayerList($)
+sub SB_SERVER_LoadSyncGroups
+{
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_SERVER_StatefileName($name,'sbsg');
+
+    if(open(my $FH, "<","$statefile")) { # CD 0056 FH durch $FH ersetzt
+        my $encoded;
+        while (my $line = <$FH>) {  # CD 0056 FH durch $FH ersetzt
+          chomp $line;
+          next if($line =~ m/^#.*$/);
+          $encoded .= $line;
+        }
+        close($FH); # CD 0056 FH durch $FH ersetzt
+
+        return if( !defined($encoded) );
+
+        my $decoded = eval $encoded;
+        $hash->{helper}{syncGroups} = $decoded;
+    } else {
+        my $msg = "SB_SERVER_LoadSyncGroups: no syncgroups file found";
+        Log3 undef, 4, $msg;
+    }
+    return;
+}
+
+sub SB_SERVER_BuildPlayerList
 {
     my ($hash) = @_;
     my $name = $hash->{NAME};
@@ -3902,6 +3915,7 @@ sub SB_SERVER_BuildPlayerList($)
             }
         }
     }
+    return;
 }
 
 # ----------------------------------------------------------------------------
@@ -3910,64 +3924,62 @@ sub SB_SERVER_BuildPlayerList($)
 #  CD 0025
 # ----------------------------------------------------------------------------
 
-sub SB_SERVER_SaveServerStates($)
+sub SB_SERVER_SaveServerStates
 {
-  my( $hash ) = @_;
-  my $name = $hash->{NAME};
+    my( $hash ) = @_;
+    my $name = $hash->{NAME};
 
-  return "No server states found" unless(defined($hash->{helper}{savedServerStates}));
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name,'sbst');
+    return "No server states found" unless(defined($hash->{helper}{savedServerStates}));
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_SERVER_StatefileName($name,'sbst');
 
-  if(open(FH, ">$statefile")) {
-    my $t = localtime;
-    print FH "#$t\n";
+    if(open(my $FH, ">", "$statefile")) { # CD 0056 FH durch $FH ersetzt
+        my $t = localtime;
+        print $FH "#$t\n"; # CD 0056 FH durch $FH ersetzt
 
-    my $dumper = Data::Dumper->new([]);
-    $dumper->Terse(1);
+        my $dumper = Data::Dumper->new([]);
+        $dumper->Terse(1);
 
-    $dumper->Values([$hash->{helper}{savedServerStates}]);
-    print FH $dumper->Dump;
+        $dumper->Values([$hash->{helper}{savedServerStates}]);
+        print $FH $dumper->Dump; # CD 0056 FH durch $FH ersetzt
 
-    close(FH);
-  } else {
-
-    my $msg = "SB_SERVER_SaveServerState: Cannot open $statefile: $!";
-    Log3 $hash, 1, $msg;
-  }
-
-  return undef;
-}
-
-sub SB_SERVER_LoadServerStates($)
-{
-  my ($hash) = @_;
-  my $name = $hash->{NAME};
-
-  return "No statefile specified" if(!$attr{global}{statefile});
-  my $statefile = SB_SERVER_StatefileName($name,'sbst');
-
-  if(open(FH, "<$statefile")) {
-    my $encoded;
-    while (my $line = <FH>) {
-      chomp $line;
-      next if($line =~ m/^#.*$/);
-      $encoded .= $line;
+        close($FH); # CD 0056 FH durch $FH ersetzt
+    } else {
+        my $msg = "SB_SERVER_SaveServerState: Cannot open $statefile: $!";
+        Log3 $hash, 1, $msg;
     }
-    close(FH);
-
-    return if( !defined($encoded) );
-
-    my $decoded = eval $encoded;
-    $hash->{helper}{savedServerStates} = $decoded;
-  } else {
-    my $msg = "SB_SERVER_LoadServerState: no server state file found";
-    Log3 undef, 4, $msg;
-  }
-  return undef;
+    return;
 }
 
-sub SB_SERVER_Save($$) {
+sub SB_SERVER_LoadServerStates
+{
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+
+    return "No statefile specified" if(!$attr{global}{statefile});
+    my $statefile = SB_SERVER_StatefileName($name,'sbst');
+
+    if(open(my $FH, "<", "$statefile")) { # CD 0056 FH durch $FH ersetzt
+        my $encoded;
+        while (my $line = <$FH>) { # CD 0056 FH durch $FH ersetzt
+            chomp $line;
+            next if($line =~ m/^#.*$/);
+            $encoded .= $line;
+        }
+        close($FH); # CD 0056 FH durch $FH ersetzt
+
+        return if( !defined($encoded) );
+
+        my $decoded = eval $encoded;
+        $hash->{helper}{savedServerStates} = $decoded;
+    } else {
+        my $msg = "SB_SERVER_LoadServerState: no server state file found";
+        Log3 undef, 4, $msg;
+    }
+    return;
+}
+
+sub SB_SERVER_Save {
     my ( $hash, $statename ) = @_;
     my $name = $hash->{NAME};
 
@@ -4000,9 +4012,10 @@ sub SB_SERVER_Save($$) {
             }
         }
     }
+    return;
 }
 
-sub SB_SERVER_Recall($$) {
+sub SB_SERVER_Recall {
     my ( $hash, $arg ) = @_;   # CD 0036
     my $name = $hash->{NAME};
 
@@ -4090,10 +4103,11 @@ sub SB_SERVER_Recall($$) {
             delete($hash->{helper}{savedServerStates}{$statename});
         }
     }
+    return;
 }
 
 # CD 0031 User und Passwort speichern/lesen, aus 72_FRITZBOX
-sub SB_SERVER_storePassword($$$)
+sub SB_SERVER_storePassword
 {
     my ($hash, $user, $password) = @_;
 
@@ -4124,53 +4138,53 @@ sub SB_SERVER_storePassword($$$)
     return "user and password successfully saved";
 }
 
-sub SB_SERVER_readPassword($)
+sub SB_SERVER_readPassword
 {
-   my ($hash) = @_;
-   my $name = $hash->{NAME};
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
 
-   my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
-   my $key = getUniqueId().$index;
+    my $index = $hash->{TYPE}."_".$hash->{NAME}."_passwd";
+    my $key = getUniqueId().$index;
 
-   my ($user, $password, $err);
+    my ($user, $password, $err);
 
-   ($err, $password) = getKeyValue($index);
+    ($err, $password) = getKeyValue($index);
 
-   if ( defined($err) ) {
-      Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER password: $err";
-      return undef;
-   }
+    if ( defined($err) ) {
+        Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER password: $err";
+        return;
+    }
 
-   my $dec_pwd = '';
+    my $dec_pwd = '';
 
-   if ( defined($password) ) {
-      if ( eval "use Digest::MD5;1" ) {
-         $key = Digest::MD5::md5_hex(unpack "H*", $key);
-         $key .= Digest::MD5::md5_hex($key);
-      }
+    if ( defined($password) ) {
+        if ( eval "use Digest::MD5;1" ) {
+            $key = Digest::MD5::md5_hex(unpack "H*", $key);
+            $key .= Digest::MD5::md5_hex($key);
+        }
 
-      for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/g)) {
-         my $decode=chop($key);
-         $dec_pwd.=chr(ord($char)^ord($decode));
-         $key=$decode.$key;
-      }
-   } else {
-      Log3 $hash, 2, "SB_SERVER_readPassword($name): No password found";
-      return undef;
-   }
+        for my $char (map { pack('C', hex($_)) } ($password =~ /(..)/g)) {
+            my $decode=chop($key);
+            $dec_pwd.=chr(ord($char)^ord($decode));
+            $key=$decode.$key;
+        }
+    } else {
+        Log3 $hash, 2, "SB_SERVER_readPassword($name): No password found";
+        return;
+    }
 
-   ($err, $user) = getKeyValue($hash->{TYPE}."_".$hash->{NAME}."_user");
+    ($err, $user) = getKeyValue($hash->{TYPE}."_".$hash->{NAME}."_user");
 
-   if ( defined($err) ) {
-      Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER user: $err";
-      return undef;
-   }
-   if ( defined($user) ) {
+    if ( defined($err) ) {
+        Log3 $hash, 2, "SB_SERVER_readPassword($name): unable to read SB_SERVER user: $err";
+        return;
+    }
+    if ( defined($user) ) {
         return ($user,$dec_pwd)
-   } else {
-      Log3 $hash, 2, "SB_SERVER_readPassword($name): No user found";
-      return undef;
-   }
+    } else {
+        Log3 $hash, 2, "SB_SERVER_readPassword($name): No user found";
+        return;
+    }
 }
 # CD 0031 end
 
