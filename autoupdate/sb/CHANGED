@@ -8,6 +8,7 @@
   190229 0052 - Attribut maxplaylists hinzugefügt
               - voltage auslesen, benötigt Plugin für LMS
 98_SB_PLAYER:
+  210501 0110 - Reading willSleepIn hinzugefügt
   210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
               - Trigger für WILLSLEEPIN hinzugefügt
   200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
@@ -137,6 +138,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  210501 0110 - Reading willSleepIn hinzugefügt
   210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
               - Trigger für WILLSLEEPIN hinzugefügt
   200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
