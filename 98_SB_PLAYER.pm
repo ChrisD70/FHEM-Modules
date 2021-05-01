@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0109 2021-04-29 19:17:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0110 2021-05-01 11:19:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -996,7 +996,7 @@ sub SB_PLAYER_SetPlayerAbsent {
     readingsBulkUpdate( $hash, 'playStatus', 'stopped' );
     RemoveInternalTimer( $hash );
     RemoveInternalTimer( "QueryElapsedTime:$name");
-    $hash->{WILLSLEEPIN} = '?'; # CD 0089
+    updateWillSleepIn( $hash, 1, -2); # CD 0110
     delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
     delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
     # CD 0074 end
@@ -1618,12 +1618,13 @@ sub SB_PLAYER_Parse {
             }
             # CD 0091 end
             SB_PLAYER_Amplifier( $hash );
+            updateWillSleepIn( $hash, 1, '?'); # CD 0110
         } elsif( $args[ 0 ] eq "0" ) {
             #readingsBulkUpdate( $hash, "presence", "absent" );      # CD 0013 deaktiviert, power sagt nichts über presence
             readingsBulkUpdate( $hash, "state", "off" );
             readingsBulkUpdate( $hash, "power", "off" );
             SB_PLAYER_Amplifier( $hash );
-            $hash->{WILLSLEEPIN} = '?'; # CD 0089
+            updateWillSleepIn( $hash, 1, -2); # CD 0110
             delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
             delete($hash->{helper}{pauseAfterPlay}) if (defined($hash->{helper}{pauseAfterPlay}));  # CD 0095
         } else {
@@ -1740,6 +1741,7 @@ sub SB_PLAYER_Parse {
                     readingsBulkUpdate( $hash, "state", "on" );
                     readingsBulkUpdate( $hash, "power", "on" );
                     SB_PLAYER_Amplifier( $hash );
+                    updateWillSleepIn( $hash, 1, '?'); # CD 0110
                     # CD 0038 start
                     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
                         # CD 0042 readingsBulkUpdate abwarten
@@ -1761,7 +1763,7 @@ sub SB_PLAYER_Parse {
                     #readingsBulkUpdate( $hash, "presence", "absent" );       # CD 0013 deaktiviert, power sagt nichts über presence
                     readingsBulkUpdate( $hash, "state", "off" );
                     readingsBulkUpdate( $hash, "power", "off" );
-                    $hash->{WILLSLEEPIN} = '?'; # CD 0089
+                    updateWillSleepIn( $hash, 1, -2); # CD 0110
                     SB_PLAYER_Amplifier( $hash );
                     delete($hash->{helper}{playAfterPowerOn}) if(defined($hash->{helper}{playAfterPowerOn}));   # CD 0030
                     delete($hash->{helper}{recallPause}) if (defined($hash->{helper}{recallPause}));    # CD 0095
@@ -2164,7 +2166,7 @@ sub SB_PLAYER_Parse {
     # CD 0065 end
     # CD 0089 start
     } elsif( $cmd eq "sleep" ) {
-        $hash->{WILLSLEEPIN} = int($args[0])." secs" if defined($args[ 0 ]);
+        updateWillSleepIn( $hash, 1, $args[ 0 ]); # CD 0110
     # CD 0089 end
     # CD 0105 start
     } elsif( $cmd eq 'voltage' ) {
@@ -2197,6 +2199,47 @@ sub SB_PLAYER_Parse {
     Log3( $hash, 5, "SB_PLAYER_Parse: $name: leaving" );
 
     return( $name );
+}
+
+# CD 0110
+# ----------------------------------------------------------------------------
+#  update willSleepIn
+# ----------------------------------------------------------------------------
+sub updateWillSleepIn {
+    my ($hash,$bulk,$sleep) = @_;
+    my $name = $hash->{NAME};
+    
+    my $sleepV=-1;
+
+    if(defined($sleep)) {
+        if($sleep=~ /^[+-]?\d+$/) {
+            $sleepV = int($sleep);
+        }
+    }
+    
+    # Spezialfall beim Ausschalten und aktivem sleep
+    if($sleepV==-2) {
+        if(ReadingsVal($name,'willSleepIn', '?') ne '?') {
+            $sleepV=0;
+        }
+    }
+
+    if($sleepV==-1) {
+        $hash->{WILLSLEEPIN} = '?';
+        if($bulk) {
+            readingsBulkUpdate($hash, 'willSleepIn', '?');
+        } else {
+            readingsSingleUpdate($hash, 'willSleepIn', '?',1);
+        }
+    } else {
+        $hash->{WILLSLEEPIN} = $sleepV.' secs';
+        if($bulk) {
+            readingsBulkUpdate($hash, 'willSleepIn', (strftime "%T", gmtime int($sleepV)));
+        } else {
+            readingsSingleUpdate($hash, 'willSleepIn', (strftime "%T", gmtime int($sleepV)),1);
+        }
+    }
+    return;
 }
 
 # CD 0085
@@ -5547,8 +5590,7 @@ sub SB_PLAYER_ParsePlayerStatus {
             next;
 
         } elsif( $cur =~ /^(will_sleep_in:)([0-9\.]*)/ ) {
-            $hash->{WILLSLEEPIN} = int($2)." secs";
-            DoTrigger($name,"WILLSLEEPIN ".(strftime "%T", gmtime int($2)));    # CD 0109
+            updateWillSleepIn( $hash, 1, $2); # CD 0110
             $willsleepinfound=1;
             next;
 
@@ -5651,7 +5693,7 @@ sub SB_PLAYER_ParsePlayerStatus {
 
         }
     }
-    $hash->{WILLSLEEPIN} = '?' unless $willsleepinfound==1; # CD 0089
+    updateWillSleepIn( $hash, 1, '?');  # CD 0110 unless $willsleepinfound==1;
     $hash->{helper}{playerStatusOK}=1;  # CD 0042
 
     # CD 0091 mode abfragen wenn presence sich geändert hat aber keine Info über power vorhanden war
