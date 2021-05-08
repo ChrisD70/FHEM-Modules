@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0110 2021-05-01 11:19:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0111 2021-05-08 18:26:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1618,7 +1618,7 @@ sub SB_PLAYER_Parse {
             }
             # CD 0091 end
             SB_PLAYER_Amplifier( $hash );
-            updateWillSleepIn( $hash, 1, '?'); # CD 0110
+            updateWillSleepIn( $hash, 1, -3); # CD 0111
         } elsif( $args[ 0 ] eq "0" ) {
             #readingsBulkUpdate( $hash, "presence", "absent" );      # CD 0013 deaktiviert, power sagt nichts über presence
             readingsBulkUpdate( $hash, "state", "off" );
@@ -1741,7 +1741,7 @@ sub SB_PLAYER_Parse {
                     readingsBulkUpdate( $hash, "state", "on" );
                     readingsBulkUpdate( $hash, "power", "on" );
                     SB_PLAYER_Amplifier( $hash );
-                    updateWillSleepIn( $hash, 1, '?'); # CD 0110
+                    updateWillSleepIn( $hash, 1, -3); # CD 0111
                     # CD 0038 start
                     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
                         # CD 0042 readingsBulkUpdate abwarten
@@ -2212,15 +2212,29 @@ sub updateWillSleepIn {
     my $sleepV=-1;
 
     if(defined($sleep)) {
-        if($sleep=~ /^[+-]?\d+$/) {
+        if($sleep=~ /^-?\d+\.?\d*$/) {  # CD 0111 geändert
             $sleepV = int($sleep);
         }
+    }
+    
+    # Spezialfall sleep wird ausgeschaltet (ungetestet mangels Hardware)
+    if($sleepV==0) {
+        $sleepV=-1;
     }
     
     # Spezialfall beim Ausschalten und aktivem sleep
     if($sleepV==-2) {
         if(ReadingsVal($name,'willSleepIn', '?') ne '?') {
             $sleepV=0;
+        } else {
+            $sleepV=-1; # CD 0111
+        }
+    }
+
+    # CD 0111 Spezialfall beim power on, überprüfen ob sleep=0 war
+    if($sleepV==-3) {
+        if(ReadingsVal($name,'willSleepIn', '?') eq '00:00:00') {
+            $sleepV=-1;
         }
     }
 
