@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0111 2021-05-08 18:26:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0112 2021-05-23 12:42:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -2208,7 +2208,7 @@ sub SB_PLAYER_Parse {
 sub updateWillSleepIn {
     my ($hash,$bulk,$sleep) = @_;
     my $name = $hash->{NAME};
-    
+
     my $sleepV=-1;
 
     if(defined($sleep)) {
@@ -2235,6 +2235,8 @@ sub updateWillSleepIn {
     if($sleepV==-3) {
         if(ReadingsVal($name,'willSleepIn', '?') eq '00:00:00') {
             $sleepV=-1;
+        } else {
+            return   # CD 0112
         }
     }
 
@@ -5707,7 +5709,7 @@ sub SB_PLAYER_ParsePlayerStatus {
 
         }
     }
-    updateWillSleepIn( $hash, 1, '?');  # CD 0110 unless $willsleepinfound==1;
+    updateWillSleepIn( $hash, 1, '?') unless $willsleepinfound==1;  # CD 0110/0112
     $hash->{helper}{playerStatusOK}=1;  # CD 0042
 
     # CD 0091 mode abfragen wenn presence sich geändert hat aber keine Info über power vorhanden war
