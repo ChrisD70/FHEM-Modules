@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0112 2021-05-23 12:42:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0113 2021-06-09 21:58:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -179,6 +179,7 @@ sub SB_PLAYER_Initialize {
     $hash->{AttrList}  .= "amplifierMode:exclusive,shared ";            # CD 0088
     $hash->{AttrList}  .= "disable:0,1 ";                           # CD 0091
     $hash->{AttrList}  .= "ignoreUnknownSonginfoTags:0,1 ";         # CD 0099
+    $hash->{AttrList}  .= "additionalSonginfos ";                   # CD 0113
     $hash->{AttrList}  .= $readingFnAttributes;
 
     # CD 0036 aus 37_sonosBookmarker
@@ -501,6 +502,42 @@ sub SB_PLAYER_Attr {
         }
         # CD 0103 end
     }
+    # CD 0113 start
+    elsif( $args[ 0 ] eq 'additionalSonginfos' ) {
+        my $tags='';
+        if( $cmd eq 'set' ) {
+            if (defined($args[1])) {
+                $tags=$args[1];
+                IOWrite( $hash, "$hash->{PLAYERMAC} status - 1 tags:" . $tags . "\n") if($tags ne '');
+            }
+        }
+        fhem( "deletereading $name siCompilation" )      if((index($tags,'C')==-1)&&(ReadingsVal($name,'siCompilation','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siFilesize" )         if((index($tags,'f')==-1)&&(ReadingsVal($name,'siFilesize','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siGenre" )            if((index($tags,'g')==-1)&&(ReadingsVal($name,'siGenre','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siDisc" )             if((index($tags,'i')==-1)&&(ReadingsVal($name,'siDisc','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siSamplesize" )       if((index($tags,'I')==-1)&&(ReadingsVal($name,'siSamplesize','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siCoverart" )         if((index($tags,'j')==-1)&&(ReadingsVal($name,'siCoverart','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siComment" )          if((index($tags,'k')==-1)&&(ReadingsVal($name,'siComment','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siBpm" )              if((index($tags,'m')==-1)&&(ReadingsVal($name,'siBpm','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siModificationTime" ) if((index($tags,'n')==-1)&&(ReadingsVal($name,'siModificationTime','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siRemoteTitle" )      if((index($tags,'N')==-1)&&(ReadingsVal($name,'siRemoteTitle','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siType" )             if((index($tags,'o')==-1)&&(ReadingsVal($name,'siType','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siAddedTime" )        if((index($tags,'D')==-1)&&(ReadingsVal($name,'siAddedTime','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siLastUpdated" )      if((index($tags,'U')==-1)&&(ReadingsVal($name,'siLastUpdated','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siDisccount" )        if((index($tags,'q')==-1)&&(ReadingsVal($name,'siDisccount','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siBitrate" )          if((index($tags,'r')==-1)&&(ReadingsVal($name,'siBitrate','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siRating" )           if((index($tags,'R')==-1)&&(ReadingsVal($name,'siRating','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siPlaycount" )        if((index($tags,'O')==-1)&&(ReadingsVal($name,'siPlaycount','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siTracknum" )         if((index($tags,'t')==-1)&&(ReadingsVal($name,'siTracknum','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siSamplerate" )       if((index($tags,'T')==-1)&&(ReadingsVal($name,'siSamplerate','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siTagversion" )       if((index($tags,'v')==-1)&&(ReadingsVal($name,'siTagversion','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siLyrics" )           if((index($tags,'w')==-1)&&(ReadingsVal($name,'siLyrics','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siRemote" )           if((index($tags,'x')==-1)&&(ReadingsVal($name,'siRemote','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siAlbumReplayGain" )  if((index($tags,'X')==-1)&&(ReadingsVal($name,'siAlbumReplayGain','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siYear" )             if((index($tags,'y')==-1)&&(ReadingsVal($name,'siYear','__xxx__') ne '__xxx__'));
+        fhem( "deletereading $name siReplayGain" )       if((index($tags,'Y')==-1)&&(ReadingsVal($name,'siReplayGain','__xxx__') ne '__xxx__'));
+    }
+    # CD 0113 end
     # CD 0065 end
 
     return;
@@ -1283,6 +1320,11 @@ sub SB_PLAYER_Parse {
                         "QueryCoverArt:$name",          # CD 0014 Name geändert
                         0 );
             }
+            # CD 0113 start
+            if( AttrVal( $name, 'additionalSonginfos', '' ) ne '' ) {
+                IOWrite( $hash, "$hash->{PLAYERMAC} status - 1 tags:" . (AttrVal( $name, 'additionalSonginfos', '' )) . "\n");
+            }
+            # CD 0113 end
             # CD 0002 zu früh, CoverArt ist noch nicht verfügbar
             # SB_PLAYER_CoverArt( $hash );
 
@@ -1710,8 +1752,11 @@ sub SB_PLAYER_Parse {
         readingsBulkUpdate( $hash, "lastir", $args[ 0 ] );
 
     } elsif( $cmd eq "status" ) {
-        SB_PLAYER_ParsePlayerStatus( $hash, \@args );
-
+        if(($args[0] eq '-')&&($args[2] eq "tags:".AttrVal( $name, 'additionalSonginfos', '---xxxxxxxxxxxxx------' ))) {
+            SB_PLAYER_ParseSonginfos( $hash, \@args);
+        } else {                # CD 0113 end
+            SB_PLAYER_ParsePlayerStatus( $hash, \@args );
+        }  
     } elsif( $cmd eq "client" ) {
         if( $args[ 0 ] eq "new" ) {
             # not to be handled here, should lead to a new FHEM Player
@@ -4430,6 +4475,11 @@ sub SB_PLAYER_GetStatus {
                 "$hash->{PLAYERMAC} voltage ?\n".               # CD 0105
                 "$hash->{PLAYERMAC} duration ?\n" );            # CD 0014
         SB_PLAYER_QueryElapsedTime($hash);
+        # CD 0113 start
+        if( AttrVal( $name, 'additionalSonginfos', '' ) ne '' ) {
+            IOWrite( $hash, "$hash->{PLAYERMAC} status - 1 tags:" . (AttrVal( $name, 'additionalSonginfos', '' )) . "\n");
+        }
+        # CD 0113 end
     }   # CD 0014 end
 
     # the other values below are provided by our server. we don't
@@ -5330,6 +5380,173 @@ sub SB_PLAYER_CoverArt {
     }
     return;
 }
+
+# ----------------------------------------------------------------------------
+#  Parse additional songinfos
+# ----------------------------------------------------------------------------
+# CD 0113 start
+sub SB_PLAYER_ParseSonginfos {
+    my( $hash, $dataptr ) = @_;
+
+    my $name = $hash->{NAME};
+
+    return if(IsDisabled($name));   # CD 0091
+
+    shift( @{$dataptr} );   # -
+    shift( @{$dataptr} );   # 1
+    shift( @{$dataptr} );   # tags:...
+
+    my $datastr = join( ' ', @{$dataptr} );
+    # all keywords with spaces must be converted here
+    $datastr =~ s/mixer volume/mixervolume/g;
+    $datastr =~ s/mixer treble/mixertreble/g;
+    $datastr =~ s/mixer bass/mixerbass/g;
+    $datastr =~ s/mixer pitch/mixerpitch/g;
+    $datastr =~ s/playlist repeat/playlistrepeat/g;
+    $datastr =~ s/playlist shuffle/playlistshuffle/g;
+    $datastr =~ s/playlist index/playlistindex/g;
+    $datastr =~ s/playlist mode/playlistmode/g;
+
+    Log3( $hash, 3, "SB_PLAYER_ParseSonginfos($name): data to parse: " . $datastr );
+
+    my @data1 = split( ' ', $datastr );
+
+    # fix handling of spaces
+    my @data2;
+    my $last_d="";
+
+    # loop through the results
+    foreach( @data1 ) {
+        if( index( $_, ":" ) < 2 ) {
+            $last_d = $last_d . " " . $_;
+            next;
+        }
+
+        if( $last_d ne "" ) {
+            push @data2,$last_d;
+        }
+        $last_d=$_;
+    }
+    if( $last_d ne "" ) {
+        push @data2,$last_d;
+    }
+
+    # extract songinfos
+    my %songinfos;
+
+    foreach( @data2 ) {
+        my $cur=$_;
+
+        if( $cur =~ /^(compilation:)(.*)/ ) {
+            $songinfos{'compilation'} = $2;
+            next;
+        } elsif ( $cur =~ /^(filesize:)(.*)/ ) {
+            $songinfos{'filesize'} = $2;
+            next;
+        } elsif ( $cur =~ /^(genre:)(.*)/ ) {
+            $songinfos{'genre'} = $2;
+            next;
+        } elsif ( $cur =~ /^(disc:)(.*)/ ) {
+            $songinfos{'disc'} = $2;
+            next;
+        } elsif ( $cur =~ /^(samplesize:)(.*)/ ) {
+            $songinfos{'samplesize'} = $2;
+            next;
+        } elsif ( $cur =~ /^(coverart:)(.*)/ ) {
+            $songinfos{'coverart'} = $2;
+            next;
+        } elsif ( $cur =~ /^(comment:)(.*)/ ) {
+            $songinfos{'comment'} = $2;
+            next;
+        } elsif ( $cur =~ /^(bpm:)(.*)/ ) {
+            $songinfos{'bpm'} = $2;
+            next;
+        } elsif ( $cur =~ /^(modificationTime:)(.*)/ ) {
+            $songinfos{'modificationTime'} = strftime("%Y-%m-%d %H:%M:%S", localtime($2));
+            next;
+        } elsif ( $cur =~ /^(remote_title:)(.*)/ ) {
+            $songinfos{'remote_title'} = $2;
+            next;
+        } elsif ( $cur =~ /^(type:)(.*)/ ) {
+            $songinfos{'type'} = $2;
+            next;
+        } elsif ( $cur =~ /^(addedTime:)(.*)/ ) {
+            $songinfos{'addedTime'} = strftime("%Y-%m-%d %H:%M:%S", localtime($2));
+            next;
+        } elsif ( $cur =~ /^(lastUpdated:)(.*)/ ) {
+            $songinfos{'lastUpdated'} = strftime("%Y-%m-%d %H:%M:%S", localtime($2));
+            next;
+        } elsif ( $cur =~ /^(disccount:)(.*)/ ) {
+            $songinfos{'disccount'} = $2;
+            next;
+        } elsif ( $cur =~ /^(bitrate:)(.*)/ ) {
+            $songinfos{'bitrate'} = $2;
+            next;
+        } elsif ( $cur =~ /^(rating:)(.*)/ ) {
+            $songinfos{'rating'} = $2;
+            next;
+        } elsif ( $cur =~ /^(playcount:)(.*)/ ) {
+            $songinfos{'playcount'} = $2;
+            next;
+        } elsif ( $cur =~ /^(tracknum:)(.*)/ ) {
+            $songinfos{'tracknum'} = $2;
+            next;
+        } elsif ( $cur =~ /^(samplerate:)(.*)/ ) {
+            $songinfos{'samplerate'} = $2;
+            next;
+        } elsif ( $cur =~ /^(tagversion:)(.*)/ ) {
+            $songinfos{'tagversion'} = $2;
+            next;
+        } elsif ( $cur =~ /^(lyrics:)(.*)/ ) {
+            $songinfos{'lyrics'} = $2;
+            next;
+        } elsif ( $cur =~ /^(remote:)(.*)/ ) {
+            $songinfos{'remote'} = $2;
+            next;
+        } elsif ( $cur =~ /^(album_replay_gain:)(.*)/ ) {
+            $songinfos{'album_replay_gain'} = $2;
+            next;
+        } elsif ( $cur =~ /^(year:)(.*)/ ) {
+            $songinfos{'year'} = $2;
+            next;
+        } elsif ( $cur =~ /^(replay_gain:)(.*)/ ) {
+            $songinfos{'replay_gain'} = $2;
+            next;
+        }
+    }
+    
+    # update readings
+    my $tags=AttrVal( $name, 'additionalSonginfos', '' );
+
+    readingsBulkUpdate( $hash, 'siCompilation', defined($songinfos{'compilation'}) ? $songinfos{'compilation'} : '-') if(index($tags,'C')>=0);
+    readingsBulkUpdate( $hash, 'siFilesize', defined($songinfos{'filesize'}) ? $songinfos{'filesize'} : '0') if(index($tags,'f')>=0);
+    readingsBulkUpdate( $hash, 'siGenre', defined($songinfos{'genre'}) ? $songinfos{'genre'} : '-') if(index($tags,'g')>=0);
+    readingsBulkUpdate( $hash, 'siDisc', defined($songinfos{'disc'}) ? $songinfos{'disc'} : '-') if(index($tags,'i')>=0);
+    readingsBulkUpdate( $hash, 'siSamplesize', defined($songinfos{'samplesize'}) ? $songinfos{'samplesize'} : '-') if(index($tags,'I')>=0);
+    readingsBulkUpdate( $hash, 'siCoverart', defined($songinfos{'coverart'}) ? $songinfos{'coverart'} : '-') if(index($tags,'j')>=0);
+    readingsBulkUpdate( $hash, 'siComment', defined($songinfos{'comment'}) ? $songinfos{'comment'} : '-') if(index($tags,'k')>=0);
+    readingsBulkUpdate( $hash, 'siBpm', defined($songinfos{'bpm'}) ? $songinfos{'bpm'} : '0') if(index($tags,'m')>=0);
+    readingsBulkUpdate( $hash, 'siModificationTime', defined($songinfos{'modificationTime'}) ? $songinfos{'modificationTime'} : '00:00:00') if(index($tags,'n')>=0);
+    readingsBulkUpdate( $hash, 'siRemoteTitle', defined($songinfos{'remote_title'}) ? $songinfos{'remote_title'} : '-') if(index($tags,'N')>=0);
+    readingsBulkUpdate( $hash, 'siType', defined($songinfos{'type'}) ? $songinfos{'type'} : '-') if(index($tags,'o')>=0);
+    readingsBulkUpdate( $hash, 'siAddedTime', defined($songinfos{'addedTime'}) ? $songinfos{'addedTime'} : '00:00:00') if(index($tags,'D')>=0);
+    readingsBulkUpdate( $hash, 'siLastUpdated', defined($songinfos{'lastUpdated'}) ? $songinfos{'lastUpdated'} : '00:00:00') if(index($tags,'U')>=0);
+    readingsBulkUpdate( $hash, 'siDisccount', defined($songinfos{'disccount'}) ? $songinfos{'disccount'} : '0') if(index($tags,'q')>=0);
+    readingsBulkUpdate( $hash, 'siBitrate', defined($songinfos{'bitrate'}) ? $songinfos{'bitrate'} : '-') if(index($tags,'r')>=0);
+    readingsBulkUpdate( $hash, 'siRating', defined($songinfos{'rating'}) ? $songinfos{'rating'} : '0') if(index($tags,'R')>=0);
+    readingsBulkUpdate( $hash, 'siPlaycount', defined($songinfos{'playcount'}) ? $songinfos{'playcount'} : '0') if(index($tags,'O')>=0);
+    readingsBulkUpdate( $hash, 'siTracknum', defined($songinfos{'tracknum'}) ? $songinfos{'tracknum'} : '0') if(index($tags,'t')>=0);
+    readingsBulkUpdate( $hash, 'siSamplerate', defined($songinfos{'samplerate'}) ? $songinfos{'samplerate'} : '-') if(index($tags,'T')>=0);
+    readingsBulkUpdate( $hash, 'siTagversion', defined($songinfos{'tagversion'}) ? $songinfos{'tagversion'} : '-') if(index($tags,'v')>=0);
+    readingsBulkUpdate( $hash, 'siLyrics', defined($songinfos{'lyrics'}) ? $songinfos{'lyrics'} : '-') if(index($tags,'w')>=0);
+    readingsBulkUpdate( $hash, 'siRemote', defined($songinfos{'remote'}) ? $songinfos{'remote'} : '-') if(index($tags,'x')>=0);
+    readingsBulkUpdate( $hash, 'siAlbumReplayGain', defined($songinfos{'album_replay_gain'}) ? $songinfos{'album_replay_gain'} : '0') if(index($tags,'X')>=0);
+    readingsBulkUpdate( $hash, 'siYear', defined($songinfos{'year'}) ? $songinfos{'year'} : '0') if(index($tags,'y')>=0);
+    readingsBulkUpdate( $hash, 'siReplayGain', defined($songinfos{'replay_gain'}) ? $songinfos{'replay_gain'} : '0') if(index($tags,'Y')>=0);
+
+    return;
+}
+# CD 0113 end
 
 # ----------------------------------------------------------------------------
 #  Handle the return for a playerstatus query
