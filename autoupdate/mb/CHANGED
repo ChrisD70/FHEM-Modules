@@ -9,11 +9,13 @@
   190906 0023 added (empty) fingerprint
   181107 0022 changed detection of wago plc
 37_ModbusCoil:
+  210718 0015 small change for modified IOdev handling in FHEM
   170106 0014 added writeMode SetReset
               fixed access to Wago PFC area
               documentation update
               fix Wago DO address calculation
 37_ModbusRegister:
+  210718 0025 small change for modified IOdev handling in FHEM
   180206 0024 added DATE
                                                                                                  .    
 all changes:
@@ -59,6 +61,7 @@ all changes:
   140318 0001 initial release
                                                                                                  .    
 37_ModbusCoil:
+  210718 0015 small change for modified IOdev handling in FHEM
   170106 0014 added writeMode SetReset
               fixed access to Wago PFC area
               documentation update
@@ -79,6 +82,7 @@ all changes:
   140818 0001 initial release
                                                                                                  .    
 37_ModbusRegister:
+  210718 0025 small change for modified IOdev handling in FHEM
   180206 0024 added DATE
   160410 0023 added TIME and DT
   160305 0022 added precision to conversion, changes for Wago I/O addressing
