@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusRegister.pm 0024 2018-02-06 21:22:00Z CD $
+# $Id: 37_ModbusRegister.pm 0025 2021-07-18 21:00:00Z CD $
 # 140318 0001 initial release
 # 140504 0002 added attributes registerType and disableRegisterMapping
 # 140505 0003 added fc to defptr, added RAW reading
@@ -23,6 +23,7 @@
 # 160305 0022 added precision to conversion, changes for Wago I/O addressing
 # 160330 0023 added TIME and DT
 # 180206 0024 added DATE
+# 210718 0025 small change for modified IOdev handling in FHEM
 # TODO:
 
 package main;
@@ -148,7 +149,12 @@ ModbusRegister_Define($$)
   if(defined($hash->{IODev}->{NAME})) {
     Log3 $name, 3, "$name: I/O device is " . $hash->{IODev}->{NAME};
   } else {
-    Log3 $name, 1, "$name: no I/O device";
+    # CD 0025
+    if(defined($hash->{IODevMissing})) {
+        Log3 $name, 3, "$name: assignment of I/O device delayed by FHEM";
+    } else {
+        Log3 $name, 1, "$name: no I/O device";
+    }
   }
 
   $hash->{helper}{unitId}=$a[2];
