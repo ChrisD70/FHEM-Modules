@@ -1,4 +1,4 @@
-﻿# $Id: 37_ModbusCoil.pm 0014 2017-01-14 16:46:00Z ChrisD $
+# $Id: 37_ModbusCoil.pm 0015 2021-07-18 21:00:00Z ChrisD $
 # 140818 0001 initial release
 # 141108 0002 added 0 (off) and 1 (on) for set
 # 150118 0003 completed documentation
@@ -13,6 +13,7 @@
 # 160416 0012 added alignUpdateInterval
 # 170106 0013 added writeMode redirect
 # 170113 0014 fixed access to Wago PFC area, added writeMode SetReset, documentation update, fix Wago DO address calculation
+# 210718 0015 small change for modified IOdev handling in FHEM
 # TODO:
 
 package main;
@@ -99,7 +100,12 @@ ModbusCoil_Define($$)
   if(defined($hash->{IODev}->{NAME})) {
     Log3 $name, 3, "$name: I/O device is " . $hash->{IODev}->{NAME};
   } else {
-    Log3 $name, 1, "$name: no I/O device";
+    # CD 0015
+    if(defined($hash->{IODevMissing})) {
+        Log3 $name, 3, "$name: assignment of I/O device delayed by FHEM";
+    } else {
+        Log3 $name, 1, "$name: no I/O device";
+    }
   }
 
   $hash->{helper}{unitId}=$a[2];
@@ -125,6 +131,8 @@ ModbusCoil_Define($$)
   $hash->{helper}{readCmd}=pack("CCnn", $hash->{helper}{unitId}, $hash->{helper}{registerType}, $hash->{helper}{address}, $hash->{helper}{nread});
   $hash->{helper}{updateIntervall}=0.1 if (!defined($hash->{helper}{updateIntervall}));
   $hash->{helper}{nextUpdate}=time();
+
+  notifyRegexpChanged($hash, "global"); # CD 0015
   
   return undef;
 }
@@ -369,8 +377,10 @@ ModbusCoil_Parse($$)
   if($rhash) {
     foreach my $n (keys %{$rhash}) {
       my $lh = $rhash->{$n};
+      #Log 0,"Data from " . $name . " (" . $raddr . "), checking " . $lh->{NAME};
       if((defined($lh->{IODev})) && ($lh->{IODev} == $hash)) {
         $n = $lh->{NAME};
+        #Log 0,"Data for " . $lh->{NAME};
         next if($nvals!=ceil($lh->{helper}{nread}/8));
         next if(defined($lh->{helper}{lastUpdate}) && ($lh->{helper}{lastUpdate}==0) && ($fc!=WRITE_SINGLE_COIL));  # CD 0012
         next if(!defined($lh->{helper}{lastUpdate}) && defined($lh->{helper}{alignUpdateInterval}) && ($fc!=WRITE_SINGLE_COIL));    # CD 0012
@@ -416,6 +426,7 @@ ModbusCoil_Parse($$)
    #return "UNDEFINED ModbusCoil_$rname ModbusCoil $raddr";
    return undef;
   }
+  #Log 0,int(@list);
   return @list;
 }
 
