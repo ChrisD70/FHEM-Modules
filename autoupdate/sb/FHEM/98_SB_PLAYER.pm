@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0113 2021-06-09 21:58:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0114 2021-11-13 10:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1140,7 +1140,17 @@ sub SB_PLAYER_Parse {
                 # CD 0040 start
                 if( ( index( $args[ 1 ], "+" ) != -1 ) || ( index( $args[ 1 ], "-" ) != -1 ) ) {
                     # that was a relative value. We do nothing and fire an update
-                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                    # CD 0114 dies führt zu einer Schleife wenn der Player gemuted ist
+                    # nur 1 Mal abfragen
+                    if(!defined($hash->{helper}{volumequery})) {
+                        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                        $hash->{helper}{volumequery}=time();
+                    } else {
+                        if (time()-$hash->{helper}{volumequery}>3) {
+                            IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                            $hash->{helper}{volumequery}=time();
+                        }
+                    }
                 } else {
                 # CD 0040 end
                     SB_PLAYER_UpdateVolumeReadings( $hash, $args[ 1 ], true );
@@ -5830,7 +5840,17 @@ sub SB_PLAYER_ParsePlayerStatus {
         } elsif( $cur =~ /^(mixervolume:)(.*)/ ) {
             if( ( index( $2, "+" ) != -1 ) || ( index( $2, "-" ) != -1 ) ) {
                 # that was a relative value. We do nothing and fire an update
-                IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                # CD 0114 dies führt zu einer Schleife wenn der Player gemuted ist
+                # nur 1 Mal abfragen
+                if(!defined($hash->{helper}{volumequery})) {
+                    IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                    $hash->{helper}{volumequery}=time();
+                } else {
+                    if (time()-$hash->{helper}{volumequery}>3) {
+                        IOWrite( $hash, "$hash->{PLAYERMAC} mixer volume ?\n" );
+                        $hash->{helper}{volumequery}=time();
+                    }
+                }
             } else {
                 SB_PLAYER_UpdateVolumeReadings( $hash, $2, true );
                 # CD 0007 start

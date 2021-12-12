@@ -8,6 +8,7 @@
   190229 0052 - Attribut maxplaylists hinzugefügt
               - voltage auslesen, benötigt Plugin für LMS
 98_SB_PLAYER:
+  211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
   210523 0112 - Reading willSleepIn geändert
   210508 0111 - Reading willSleepIn geändert
@@ -141,6 +142,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
   210523 0112 - Reading willSleepIn geändert
   210508 0111 - Reading willSleepIn geändert
