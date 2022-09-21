@@ -1,7 +1,8 @@
 ##############################################
-# $Id: 36_ModbusSlave.pm 0002 2019-10-05 14:27:00Z CD $
+# $Id: 36_ModbusSlave.pm 0003 2022-09-21 20:37:00Z CD $
 # 180224 0001 initial release
 # 191005 0002 added ReadyFn for Windows compatibility
+# 220921 0003 fixed partial data handling in ModbusSlave_Read (thanks pdp1173)
 
 package main;
 
@@ -166,7 +167,6 @@ sub ModbusSlave_Attr(@) {#######################################################
 
 sub ModbusSlave_Read($) {############################################################
 # called from the global loop, when the select for hash->{FD} reports data
-Log 0,"Read";
   my ($hash) = @_;
   my $buf = DevIo_SimpleRead($hash);
   return "" if(!defined($buf));
@@ -183,8 +183,8 @@ Log 0,"Read";
     Log3 $hash,4,"ModbusSlave_Read($name) : crc ok, parsing request";
     RemoveInternalTimer( "RTimeout:".$name);
     $hash->{helper}{PARTIAL} = undef;
-    ModbusSlave_UpdateStatistics($hash,1,0,bytes::length($buf),0);
-    ModbusSlave_Parse($hash, $buf);
+    ModbusSlave_UpdateStatistics($hash,1,0,bytes::length($pdata),0);
+    ModbusSlave_Parse($hash, $pdata);
   } else {
     Log3 $hash,4,"ModbusSlave_Read($name) : incomplete request, waiting...";
     RemoveInternalTimer( "RTimeout:".$name);
