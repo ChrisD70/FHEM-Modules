@@ -3,6 +3,7 @@
 # 180224 0001 initial release
 # 191005 0002 added ReadyFn for Windows compatibility
 # 220921 0003 fixed partial data handling in ModbusSlave_Read (thanks pdp1173)
+# 220924 0004 added attribute slaveAddress
 
 package main;
 
@@ -59,7 +60,7 @@ sub ModbusSlave_Initialize($) {
 # Normal devices
   $hash->{DefFn}   = "ModbusSlave_Define";
   $hash->{UndefFn} = "ModbusSlave_Undef";
-  $hash->{AttrList}= "do_not_notify:1,0 dummy:1,0 " .
+  $hash->{AttrList}= "do_not_notify:1,0 dummy:1,0 slaveAddress " .
                      $readingFnAttributes;
 }
 
@@ -195,6 +196,8 @@ sub ModbusSlave_Read($) {#######################################################
   if( bytes::length($pdata) > 256 ) {
     $hash->{helper}{PARTIAL} = undef;
   }
+  
+  return;
 }
 
 sub
@@ -207,6 +210,8 @@ ModbusSlave_ReceiveTimeout($) ##################################################
   Log3 $hash,2,"ModbusSlave_ReceiveTimeout($name) : clearing partial data";
 
   $hash->{helper}{PARTIAL} = undef;
+
+  return;
 }
 
 sub ModbusSlave_Parse($$) {##########################################################
@@ -216,6 +221,11 @@ sub ModbusSlave_Parse($$) {#####################################################
     ModbusSlave_LogFrame($hash,"ModbusSlave_Parse($name): received",$rmsg,5);
 
     my ($rx_hd_unit_id, $rx_bd_fc, $f_body) = unpack "CCa*", $rmsg;
+
+    # CD 0004 check if we should reply
+    my $sa=AttrVal($name,"slaveAddress",".*");
+    my $re = qr/$sa/;
+    return if($rx_hd_unit_id !~ $re);
 
     my $msg;
 
@@ -698,6 +708,8 @@ sub ModbusSlave_Parse($$) {#####################################################
     ModbusSlave_UpdateStatistics($hash,0,1,0,bytes::length($msg));
 
     DevIo_SimpleWrite($hash,$msg,0);
+
+    return;
 }
 
 sub ModbusSlave_LogFrame($$$$) {
@@ -708,6 +720,8 @@ sub ModbusSlave_LogFrame($$$$) {
   $hash->{helper}{lastFrame}=$c." ".join(" ",@dump) if($c eq 'SimpleWrite');
 
   Log3 $hash, $verbose,$c." ".join(" ",@dump);
+
+  return;
 }
 
 sub ModbusSlave_UpdateStatistics($$$$$) {############################################################
@@ -723,6 +737,8 @@ sub ModbusSlave_UpdateStatistics($$$$$) {#######################################
   $hash->{helper}{statistics}{bytesIn}+=$bi;
   $hash->{helper}{statistics}{bytesOut}+=$bo;
   $hash->{statistics} =$hash->{helper}{statistics}{pktIn} ." / " . $hash->{helper}{statistics}{pktOut} ." / " . $hash->{helper}{statistics}{bytesIn} ." / " . $hash->{helper}{statistics}{bytesOut};
+
+  return;
 }
 
 # functions taken from:
@@ -800,6 +816,8 @@ sub ModbusSlave_crc_is_ok($) {
   <b>Attributes</b>
   <ul>
     <li><a href="#attrdummy">dummy</a></li><br>
+    <li>slaveAddress &lt;regexp&gt;<br>
+    only send replies for requests matching the specified address</li><br>
   </ul>
   <b>Usage</b><br>
   The Modbus coil/register number is configured through the comment field of the devices.<br><br>
