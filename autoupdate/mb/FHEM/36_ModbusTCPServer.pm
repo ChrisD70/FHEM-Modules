@@ -1,5 +1,5 @@
-﻿##############################################
-# $Id: 36_ModbusTCPServer.pm 0023 2019-09-06 21:05:00Z CD $
+##############################################
+# $Id: 36_ModbusTCPServer.pm 0024 2022-11-20 17:20:00Z CD $
 # 140318 0001 initial release
 # 140505 0002 use address instead of register in Parse
 # 140506 0003 added 'use bytes'
@@ -23,6 +23,7 @@
 # 161231 0021 fixed error handling
 # 181107 0022 changed detection of wago plc
 # 190906 0023 added fingerprint
+# 221120 0024 check if coil exists before dispatching write replies
 # TODO:
 
 package main;
@@ -91,7 +92,7 @@ use constant MB_EXCEPT_ERR                               => 7;
 sub ModbusTCPServer_Initialize($) {
   my ($hash) = @_;
 
-  require "$attr{global}{modpath}/FHEM/DevIo.pm";
+  require "DevIo.pm";
 
 # Provider
   $hash->{ReadFn}  = "ModbusTCPServer_Read";
@@ -483,7 +484,18 @@ sub ModbusTCPServer_Parse($$) {#################################################
               delete $hash->{helper}{wagowritereturnaddress};
             } else {
             # CD 0019 end
-              Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+              # CD 0024 check if coil exists before dispatching write replies
+              my $raddr = "1 $rx_hd_unit_id ".unpack("x8n", $rmsg);
+              my $rhash = $modules{ModbusCoil}{defptr}{$raddr};
+              
+              if($rhash) {
+                Dispatch($hash, "ModbusCoil:$rx_hd_unit_id:".unpack("x8n", $rmsg).":$rx_bd_fc:1:".unpack("x10n", $rmsg), undef); 
+                foreach my $n (keys %{$rhash}) {
+                  Log3 $hash, 5,'ModbusTCPServer_Parse, WRITE_SINGLE_COIL: using coil : '. $rhash->{$n}->{NAME};
+                }
+              } else {
+                Log3 $hash, 2,'ModbusTCPServer_Parse, WRITE_SINGLE_COIL: no coil found for write reply ('.$raddr.'), ignoring ';
+              }
             }
           }
           if($rx_bd_fc==WRITE_MULTIPLE_REGISTERS) {
