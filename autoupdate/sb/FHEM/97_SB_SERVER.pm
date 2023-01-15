@@ -1,5 +1,5 @@
 # ############################################################################
-# $Id: 97_SB_SERVER.pm 0056 2021-04-29 19:17:00Z CD $
+# $Id: 97_SB_SERVER.pm 0058 2023-01-12 22:48:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -3020,9 +3020,21 @@ sub SB_SERVER_FavoritesParse {
 
     Log3( $hash, 5, "SB_SERVER_FavoritesParse($name): called" );
 
+    my $subfolder=0;
+
+    # 0058 something went wrong
+    if($str=~/networkerror:/) {
+      Log3($hash, 3, "SB_SERVER_FavoritesParse($name): cannot parse favorites $str");
+      return;
+    }
+
     # flush the existing list
-    foreach my $titi ( keys %{$favorites{$name}} ) {
-        delete( $favorites{$name}{$titi} );
+    if($str!~/fhem:noflush/) {  # CD 0057 don't flush for subfolders
+      foreach my $titi ( keys %{$favorites{$name}} ) {
+          delete( $favorites{$name}{$titi} );
+      }
+    } else {
+      $subfolder=1;
     }
 
     # split up the string we got
@@ -3072,15 +3084,28 @@ sub SB_SERVER_FavoritesParse {
             }
         }
     }
-    readingsSingleUpdate( $hash, "favoritestotal", $totals, 0 );
+    # CD 0057 add favorites in subfolders to total
+    if($subfolder==1) {
+      readingsSingleUpdate( $hash, 'favoritestotal', ReadingsVal($name, 'favoritestotal', 0)+$totals, 0 );
+    } else {
+      readingsSingleUpdate( $hash, 'favoritestotal', $totals, 0 );
+    }
 
+    # CD 0057 remove unneeded tags
+    if($str=~/title:/) {  # CD 0058 only if title exists
+      while($data[ 0 ] !~ /^(title:)(.*)/) {
+        shift( @data );
+      }
+    }
 
-    my $favname = "";
+    my $favname = '';
+    my $titlestarted = false;
+
     if( $data[ 0 ] =~ /^(title:)(.*)/ ) {
         $favname = $2;
         shift( @data );
+        $titlestarted = true;
     }
-    readingsSingleUpdate( $hash, "favoritesname", $favname, 0 );
 
     # check if we got all the favoites with our response
     if( $totals > $maxwanted ) {
@@ -3097,30 +3122,41 @@ sub SB_SERVER_FavoritesParse {
     my $isaudiobuf = "";
     my $isplaylist = false;
     my $url = "?";           # CD 0009 hinzugefügt
+    my $islink=false;
 
     my $cnt=0;
 
     foreach ( @data ) {
         #Log 0,$_;
         if( $_ =~ /^(id:|ID:)([A-Za-z0-9\.]*)/ ) {
+            $titlestarted = false;
             # we found an ID, that is typically the start of a new session
             # so save the old session first
             if( $firstone == false ) {
-                if(( $hasitemsbuf == false )||($isplaylist == true)) {
+                if(( $hasitemsbuf == false )||($isplaylist == true)||($isaudiobuf == true)) {
                     # derive our hash entry
                     $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
+                    #if($subfolder==1) {
+                    #  $namebuf='__'.$favname.'__'.$namebuf;
+                    #}
                     my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                     $favorites{$name}{$entryuid} = {
                     ID => $idbuf,
                     Name => $namebuf,
                     URL => $url, };         # CD 0009 hinzugefügt
                     $namebuf = "";
-                    $isaudiobuf = "";
+                    $isaudiobuf = false;
                     $url = "?";              # CD 0009 hinzugefügt
                     $hasitemsbuf = false;
                     $isplaylist = false;
                 } else {
                     # that is a folder we found, but we don't handle that
+                    # CD 0057 try to handle subfolders
+                    if($islink==false) {
+                      DevIo_SimpleWrite( $hash, 'favorites items 0 ' .
+                         AttrVal( $name, 'maxfavorites', 100 ) .
+                         " item_id:$idbuf want_url:1 fhem:noflush\n", 0 );
+                    }
                 }
             }
 
@@ -3132,11 +3168,17 @@ sub SB_SERVER_FavoritesParse {
                 $namestarted = false;
             }
         } elsif( $_ =~ /^(isaudio:)([0|1]?)/ ) {
-            $isaudiobuf = $2;
+            $titlestarted = false;
+            if( int( $2 ) == 0 ) {
+                $isaudiobuf = false;
+            } else {
+                $isaudiobuf = true;
+            }
             if( $namestarted == true ) {
                 $namestarted = false;
             }
         } elsif( $_ =~ /^(hasitems:)([0|1]?)/ ) {
+            $titlestarted = false;
             if( int( $2 ) == 0 ) {
                 $hasitemsbuf = false;
             } else {
@@ -3147,33 +3189,43 @@ sub SB_SERVER_FavoritesParse {
             }
         # CD 0018 start
         } elsif( $_ =~ /^(type:)(.*)/ ) {
+            $titlestarted = false;
             $isplaylist = true if($2 eq "playlist");
+            $islink = true if($2 eq "link");
             if( $namestarted == true ) {
                 $namestarted = false;
             }
         # CD 0018 end
         #} elsif( $_ =~ /^(name:)([0-9a-zA-Z]*)/ ) {     # CD 0007   # CD 0009 deaktiviert
         } elsif( $_ =~ /^(name:)(.*)/ ) {     # CD 0009 hinzugefügt
+            $titlestarted = false;
             $namebuf = $2;
             $namestarted = true;
         # CD 0009 start
         } elsif( $_ =~ /^(url:)(.*)/ ) {
+            $titlestarted = false;
             $url = $2;
             $url =~ s/file:\/\/\///;
         # CD 0009 end
         } else {
             # no regexp matched, so it must be part of the name
             if( $namestarted == true ) {
-            $namebuf .= " " . $_;
+              $namebuf .= " " . $_;
+            }
+            if( $titlestarted == true ) {
+              $favname .= ' ' . $_;
             }
         }
     }
 
     # capture the last element also
     if( ( $namebuf ne "" ) && ( $idbuf ne "" ) ) {
-        if(( $hasitemsbuf == false )||($isplaylist == true)) {
+        if(( $hasitemsbuf == false )||($isplaylist == true)||($isaudiobuf == true)) {
             # CD 0003 replaced ** my $entryuid = join( "", split( " ", $namebuf ) ); ** with:
             $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);            # CD 0037
+            #if($subfolder==1) {
+            #  $namebuf='__'.$favname.'__'.$namebuf;
+            #}
             my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
             $favorites{$name}{$entryuid} = {
             ID => $idbuf,
@@ -3181,7 +3233,18 @@ sub SB_SERVER_FavoritesParse {
             URL => $url, };         # CD 0009 hinzugefügt
         } else {
             # that is a folder we found, but we don't handle that
+            # CD 0057 try to handle subfolders
+            if($islink==false) {
+              DevIo_SimpleWrite( $hash, 'favorites items 0 ' .
+                 AttrVal( $name, 'maxfavorites', 100 ) .
+                 " item_id:$idbuf want_url:1 fhem:noflush\n", 0 );
+            }
         }
+    }
+
+    # CD 0057 update only if root folder
+    if($subfolder==0) {
+      readingsSingleUpdate( $hash, "favoritesname", $favname, 0 );
     }
 
     # make all client create e new favorites list

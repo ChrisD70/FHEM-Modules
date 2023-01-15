@@ -1,13 +1,13 @@
 ﻿97_SB_SERVER:
+  230112 0058 - Favoriten aus Unterordnern lesen
   210429 0056 - statusRequest ausgelagert
               - neue Alben intern abspeichern
               - Code und Formatierung etwas aufgeräumt
          0055 - zufälligen Namen für Favoriten die nur ungültige Zeichen enthalten generieren 
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
-  190229 0052 - Attribut maxplaylists hinzugefügt
-              - voltage auslesen, benötigt Plugin für LMS
 98_SB_PLAYER:
+  221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
   210523 0112 - Reading willSleepIn geändert
@@ -15,19 +15,11 @@
   210501 0110 - Reading willSleepIn hinzugefügt
   210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
               - Trigger für WILLSLEEPIN hinzugefügt
-  200422 0108 - Fehlermeldung wenn Player mit gleicher ID bereits existiert
-  190324 0107 - ftuiSupport um albumsWithArtist erweitert
-              - Warnung behoben beim Aufbau der ftui-Listen
-  181222 0106 - bei playlist loadalbum UTF8 benutzen
-  181124 0105 - voltage auslesen (benötigt LMS-Plugin)
-  180903 0104 - wenn ftuiSupport auf 1 steht werden die Readings für Genres, Artisten und Alben nicht angelegt
-              - neuer Wert 'all' für ftuiSupport, legt alle FTUI-Readings an (auch zukünftige !)
-  180902 0103 - FTUI-Unterstützung für Genres, Alben und Artisten hinzugefügt
-  180926 0102 - Perl-Fehler behoben wenn SYNCMASTERPN oder SYNCGROUPPN leer sind
               .    
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  230112 0058 - Favoriten aus Unterordnern lesen
   210429 0056 - statusRequest ausgelagert
               - neue Alben intern abspeichern
               - Code und Formatierung etwas aufgeräumt
@@ -142,6 +134,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
   210523 0112 - Reading willSleepIn geändert
