@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0114 2021-11-13 10:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0115 2022-12-22 20:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -5340,38 +5340,52 @@ sub SB_PLAYER_CoverArt {
     my $lastCoverartUrl=$hash->{COVERARTURL};           # CD 0013
 
     # compile the link to the album cover
-    if(( $hash->{ISREMOTESTREAM} eq "0" ) || ($hash->{ARTWORKURL} =~ /imageproxy%2F/)) {    # CD 0026 LMS 7.8/7.9
-        $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
-            "current/cover_" . AttrVal( $name, "coverartheight", 50 ) .
-            "x" . AttrVal( $name, "coverartwidth", 50 ) .
-            ".jpg?player=$hash->{PLAYERMAC}&x=".int(rand(100000));      # CD 0025 added rand() to force browser refresh
+
+    # CD 0115 added imageproxy handling, may not be compatible with older LMS versions
+    if ($hash->{ARTWORKURL} =~ /imageproxy%2F/) {
+        $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . uri_unescape($hash->{ARTWORKURL});
+        my $cover = "image.png";
+        my $coverArtWithSize = "image_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 ).".png";
+        $hash->{COVERARTURL} =~ s/$cover/$coverArtWithSize/g;
+        $cover = "image.jpg";
+        $coverArtWithSize = "image_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 ).".jpg";
+        $hash->{COVERARTURL} =~ s/$cover/$coverArtWithSize/g;
+        $hash->{COVERARTURL} .= '?x='.int(rand(100000));
         $hash->{helper}{CoverOk}=1;                                     # CD 0026 added
-    } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
-        # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
-        if($hash->{ARTWORKURL} ne "?") {
-            # CD 0034 Abfrage für Spotify und LMS < 7.8, ungetest, #674, KernSani
-            # CD 0035 Code von KernSani übernommen, #676
-            if ($hash->{ARTWORKURL} =~ /spotifyimage%2Fspotify/) {
-                my $cover = "cover.jpg";
-                my $coverArtWithSize = "cover_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 )."_o.jpg";
-                $hash->{ARTWORKURL} =~ s/$cover/$coverArtWithSize/g;
-                $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . uri_unescape($hash->{ARTWORKURL});
-            } else {
-                $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" .
-                    "imageproxy?u=" . $hash->{ARTWORKURL} .
-                    "&h=" . AttrVal( $name, "coverartheight", 50 ) .
-                    "&w=". AttrVal( $name, "coverartwidth", 50 );
-            }
-        } else {
-            $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
-                $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) .
-                "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
-        }
-        # CD 0011 Ende
     } else {
-        $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
-            $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) .     # CD 0011 -160206228 durch $hash->{COVERID} ersetzt
-            "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
+      if(( $hash->{ISREMOTESTREAM} eq "0" ) || ($hash->{ARTWORKURL} =~ /imageproxy%2F/)) {    # CD 0026 LMS 7.8/7.9
+          $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
+              "current/cover_" . AttrVal( $name, "coverartheight", 50 ) .
+              "x" . AttrVal( $name, "coverartwidth", 50 ) .
+              ".jpg?player=$hash->{PLAYERMAC}&x=".int(rand(100000));      # CD 0025 added rand() to force browser refresh
+          $hash->{helper}{CoverOk}=1;                                     # CD 0026 added
+      } elsif( $hash->{ISREMOTESTREAM} eq "1" ) { # CD 0017 Abfrage  || ( $hash->{ISREMOTESTREAM} == 1 ) entfernt
+          # CD 0011 überprüfen ob überhaupt eine URL vorhanden ist
+          if($hash->{ARTWORKURL} ne "?") {
+              # CD 0034 Abfrage für Spotify und LMS < 7.8, ungetest, #674, KernSani
+              # CD 0035 Code von KernSani übernommen, #676
+              if ($hash->{ARTWORKURL} =~ /spotifyimage%2Fspotify/) {
+                  my $cover = "cover.jpg";
+                  my $coverArtWithSize = "cover_".AttrVal( $name, "coverartheight", 50 )."x".AttrVal( $name, "coverartwidth", 50 )."_o.jpg";
+                  $hash->{ARTWORKURL} =~ s/$cover/$coverArtWithSize/g;
+                  $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . uri_unescape($hash->{ARTWORKURL});
+              } else {
+                  $hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" .
+                      "imageproxy?u=" . $hash->{ARTWORKURL} .
+                      "&h=" . AttrVal( $name, "coverartheight", 50 ) .
+                      "&w=". AttrVal( $name, "coverartwidth", 50 );
+              }
+          } else {
+              $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
+                  $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) .
+                  "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
+          }
+          # CD 0011 Ende
+      } else {
+          $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .
+              $hash->{COVERID} . "/cover_" . AttrVal( $name, "coverartheight", 50 ) .     # CD 0011 -160206228 durch $hash->{COVERID} ersetzt
+              "x" . AttrVal( $name, "coverartwidth", 50 ) . ".jpg";
+      }
     }
 
     # CD 0004, url as reading
