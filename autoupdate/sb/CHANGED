@@ -7,14 +7,10 @@
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
 98_SB_PLAYER:
+  230825 0116 - shuffle für talk deaktivieren
   221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
-  210523 0112 - Reading willSleepIn geändert
-  210508 0111 - Reading willSleepIn geändert
-  210501 0110 - Reading willSleepIn hinzugefügt
-  210429 0109 - Anzahl dalgN Fehlermeldungen im Server-Log reduzieren
-              - Trigger für WILLSLEEPIN hinzugefügt
               .    
 Historie Änderungen:
                                                                                                  .    
@@ -134,6 +130,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  230825 0116 - shuffle für talk deaktivieren
   221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
   210609 0113 - Attribut additionalSonginfos hinzugefügt
