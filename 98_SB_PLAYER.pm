@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0115 2022-12-22 20:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0116 2023-08-25 10:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3783,6 +3783,7 @@ sub SB_PLAYER_PrepareTalk {
     }
     $hash->{helper}{saveLocked}=1;
     IOWrite( $hash, "$hash->{PLAYERMAC} playlist repeat 0\n" );
+    IOWrite( $hash, "$hash->{PLAYERMAC} playlist shuffle 0\n"); # CD 0116
     IOWrite( $hash, "$hash->{PLAYERMAC} playlist clear\n" );
     if(defined($hash->{helper}{ttsVolume})) {
         SB_PLAYER_SetTTSVolume($hash,$hash->{helper}{ttsVolume},1);
@@ -6578,14 +6579,14 @@ sub SB_PLAYER_RemoveInternalTimers {
     <li>trackPositionQueryInterval &lt;sec&gt;<br>
       Interval in seconds for querying the current track position, 0 disables the periodic update of the track position</li>
     <li>ttsAPIKey &lt;API-key&gt;<br>
-      For the use of T2Speech from the company VoiceRSS (voicerss.org) an API-key is needed. Not needed with Google’s T2Speech.</li>
+      For the use of T2Speech from the company VoiceRSS (voicerss.org) an API-key is needed. Not needed with Google's T2Speech.</li>
     <li>ttsDelay &lt;sec1&gt;[,&lt;sec2&gt;]<br>
       Delay in seconds before starting text to speech playback. A second comma separated delay may optionally be given to be used if the player is off.</li>
     <li>ttslanguage de|en|fr<br>
-      Specifies the language of the voice output. A complete list of available languages using Google’s TTS can be found at wikipedia.org.</li>
+      Specifies the language of the voice output. A complete list of available languages using Google's TTS can be found at wikipedia.org.</li>
     <li>ttslink &lt;link&gt;<br>
-      Enter the link to the TTS-Funktion. Google, VoiceRSS and –with reservations- Text2Speech are supported.<br><br>
-      Example of using Google’s TTS:<br>
+      Enter the link to the TTS-Funktion. Google, VoiceRSS and -with reservations- Text2Speech are supported.<br><br>
+      Example of using Google's TTS:<br>
       <code>attr &lt;playername&gt; ttslink http://translate.google.com/translate_tts?ie=UTF-8&amp;tl=&lt;LANG&gt;&amp;q=&lt;TEXT&gt;&amp;client=tw-ob</code></li><br>
     <li>ttsMP3FileDir &lt;directory&gt;<br>
       Directory to be used by default for text-embedded MP3-Files.</li><br>
@@ -6594,7 +6595,7 @@ sub SB_PLAYER_RemoveInternalTimers {
     <li>ttsOptions &lt;options&gt;<br>various options, comma-separated, for TTS-output.
       <br><br>Options:<ul>
       <li>debug - Write additional information into the FHEM-logfile</li>
-      <li>debugsaverestore - Additional information about loading/saving of player‘s status are written into the logfile</li>
+      <li>debugsaverestore - Additional information about loading/saving of player's status are written into the logfile</li>
       <li>nosaverestore - Do not save and restore the status of the player, thereby the normal playing stops after using TTS.</li>
       <li>forcegroupon - Switch on all players of the group.</li>
       <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output.</li>
@@ -6612,7 +6613,7 @@ sub SB_PLAYER_RemoveInternalTimers {
     <li>volumeOffset &lt;value&gt;<br>
     The offset is added to the volume sent to the server. It is subtracted from the volume returned by the server.</li>
     <li>volumeStep &lt;value&gt;<br>
-      Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1–100. Default value: 10</li>
+      Sets the volume adjustment to a granularity given by &lt;value&gt;. Possible values: 1-100. Default value: 10</li>
   </ul>
 </ul>
 =end html
