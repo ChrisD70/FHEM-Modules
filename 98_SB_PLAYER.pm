@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0116 2023-08-25 10:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0117 2024-04-19 22:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -3200,12 +3200,17 @@ sub SB_PLAYER_Set {
                     $w =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
                     $w =~ s/\s+/ /g;
                     $w =~ s/^\s|\s$//g;
-                    $w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g if(AttrVal( $name, "ttslink", "x" ) !~ m/voicerss/i);    # CD 0045 Sonderzeichen für VoiceRSS nicht ersetzen
+                    #$w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g if(AttrVal( $name, "ttslink", "x" ) !~ m/voicerss/i);    # CD 0045 Sonderzeichen für VoiceRSS nicht ersetzen
                     $w = uri_escape( $w ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0060
                 # CD 0032 end
                     if((length($tl)+length($w)+1)<100) {
                         $tl.=' ' if(length($tl)>0);
                         $tl.=$w;
+                        # CD 0117 versuchen ganze Sätze einzufügen
+                        if(substr($w,-1) eq '.') {
+                          push(@textlines,$tl);
+                          $tl='';
+                        }
                     } else {
                         push(@textlines,$tl);
                         $tl=$w;
@@ -3322,9 +3327,9 @@ sub SB_PLAYER_Set {
                         $lang="fr-fr" if($lang eq "fr");
                     }
 
-                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047, CD 0048 client=tw-ob verwenden
-                    $ttslink="http://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq "Google");  # CD 0048 client=tw-ob verwenden
-                    $ttslink="http://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>&c=AAC" if ($ttslink eq "VoiceRSS");
+                    $ttslink="https://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq 'http://translate.google.com/translate_tts?ie=UTF-8'); # CD 0047, CD 0048 client=tw-ob verwenden
+                    $ttslink="https://translate.google.com/translate_tts?ie=UTF-8&tl=<LANG>&q=<TEXT>&client=tw-ob" if ($ttslink eq "Google");  # CD 0048 client=tw-ob verwenden
+                    $ttslink="https://api.voicerss.org/?key=<APIKEY>&src=<TEXT>&hl=<LANG>&c=AAC" if ($ttslink eq "VoiceRSS");
 
                     # alte Links anpassen
                     if($ttslink !~ m/<TEXT>/) {
@@ -5084,6 +5089,19 @@ sub SB_PLAYER_ParseAlarms {
         } elsif( $_ =~ /^(count:)([0-9]+)/ ) {
             $hash->{helper}{ALARMSCOUNT} = $2;  # CD 0016 ALARMSCOUNT nach {helper} verschoben
             next;
+        # CD 117 start
+        } elsif( $_ =~ /^(shufflemode:)([0|1|2])/ ) {
+            if( $2 eq '0' ) {
+                readingsBulkUpdate( $hash, 'alarm'.$alarmcounter.'_shuffle', 'off' );
+            } elsif( $2 eq '1') {
+                readingsBulkUpdate( $hash, 'alarm'.$alarmcounter.'_shuffle', 'song' );
+            } elsif( $2 eq '2') {
+                readingsBulkUpdate( $hash, 'alarm'.$alarmcounter.'_shuffle', 'album' );
+            } else {
+                readingsBulkUpdate( $hash, 'alarm'.$alarmcounter.'_shuffle', '?' );
+            }
+            next;
+        # CD 117 end
         } else {
             Log3( $hash, 2, "SB_PLAYER_Alarms($name): Unknown data ($_)");
             next;
