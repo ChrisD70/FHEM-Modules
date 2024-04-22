@@ -7,6 +7,9 @@
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
 98_SB_PLAYER:
+  240419 0117 - Unterstützung fur Shuffle-Mode bei Weckern (LMS 8.5.1)
+              - TTS-Links von http auf https geändert
+              - Umlaute bei GoogleTTS nicht mehr ersetzen
   230825 0116 - shuffle für talk deaktivieren
   221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
@@ -130,6 +133,9 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  240419 0117 - Unterstützung fur Shuffle-Mode bei Weckern (LMS 8.5.1)
+              - TTS-Links von http auf https geändert
+              - Umlaute bei GoogleTTS nicht mehr ersetzen
   230825 0116 - shuffle für talk deaktivieren
   221222 0115 - Coverart geändert
   211113 0114 - bei negativer Lautstärke nicht permanent abfragen
