@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0117 2024-04-19 22:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0118 2024-06-06 22:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -156,7 +156,7 @@ sub SB_PLAYER_Initialize {
     $hash->{AttrList}  .= "coverartwidth:50,100,200,400,800,1600 ";
     # CD 0028
     $hash->{AttrList}  .= "ttsVolume ";
-    $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone,doubleescape "; # CD 0062 Auswahl vorgeben
+    $hash->{AttrList}  .= "ttsOptions:multiple-strict,debug,debugsaverestore,unsync,nosaverestore,forcegroupon,ignorevolumelimit,eventondone,doubleescape,replacediacritics "; # CD 0062 Auswahl vorgeben
 
     $hash->{AttrList}  .= "trackPositionQueryInterval "; # CD 0064
     $hash->{AttrList}  .= "sortFavorites:1,0 sortPlaylists:1,0 "; # CD 0064
@@ -271,6 +271,7 @@ sub SB_PLAYER_Attr {
                     $hash->{helper}{ttsOptions}{ignorevolumelimit}=1 if($opt=~ m/ignorevolumelimit/);   # CD 0031
                     $hash->{helper}{ttsOptions}{doubleescape}=1 if($opt=~ m/doubleescape/);   # CD 0059
                     $hash->{helper}{ttsOptions}{eventondone}=1 if($opt=~ m/eventondone/);   # CD 0061
+                    $hash->{helper}{ttsOptions}{replacediacritics}=1 if($opt=~ m/replacediacritics/);   # CD 0118
                 }
             } else {
                 return "invalid value for ttsOptions";
@@ -3200,7 +3201,9 @@ sub SB_PLAYER_Set {
                     $w =~ s/[\\|*~<>^\n\(\)\[\]\{\}[:cntrl:]]/ /g;
                     $w =~ s/\s+/ /g;
                     $w =~ s/^\s|\s$//g;
+                    
                     #$w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g if(AttrVal( $name, "ttslink", "x" ) !~ m/voicerss/i);    # CD 0045 Sonderzeichen für VoiceRSS nicht ersetzen
+                    $w =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g if defined($hash->{helper}{ttsOptions}{replacediacritics});    # CD 0118 Sonderzeichen über Attribut ersetzen
                     $w = uri_escape( $w ) if defined($hash->{helper}{ttsOptions}{doubleescape});  # CD 0060
                 # CD 0032 end
                     if((length($tl)+length($w)+1)<100) {
@@ -6618,6 +6621,7 @@ sub SB_PLAYER_RemoveInternalTimers {
       <li>forcegroupon - Switch on all players of the group.</li>
       <li>ignorevolumelimit - Ignore the attribute volumeLimit while using TTS-output.</li>
       <li>eventondone - Fire an event at the end of the TTS output.</li>
+      <li>replacediacritics - Replace some diacritics.</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text prepended to every text to speech output</li>
@@ -6894,6 +6898,7 @@ sub SB_PLAYER_RemoveInternalTimers {
       <li>forcegroupon - Player in der Gruppe werden eingeschaltet.</li>
       <li>ignorevolumelimit - Attribut volumeLimit f&uuml;r die TTS-Ausgabe ignorieren.</li>
       <li>eventondone - Erzeugt ein Event wenn die Sprachausgabe zu Ende ist.</li>
+      <li>replacediacritics - Ersetze Umlaute.</li>
       </ul></li>
     <li>ttsPrefix &lt;text&gt;<br>
       Text, der vor jede TTS-Ausgabe gehangen wird</li>
