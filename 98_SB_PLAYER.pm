@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0118 2024-06-06 22:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0119 2024-06-18 22:00:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -1800,6 +1800,7 @@ sub SB_PLAYER_Parse {
                     updateWillSleepIn( $hash, 1, -3); # CD 0111
                     # CD 0038 start
                     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
+                        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - power is on" );  # CD 0119
                         # CD 0042 readingsBulkUpdate abwarten
                         RemoveInternalTimer( "TTSStartAfterPowerOn:$name");
                         InternalTimer( gettimeofday() + 0.01,
@@ -3738,11 +3739,13 @@ sub SB_PLAYER_LoadTalk {
                             }
                         } else {
                             # ich steuere talk
+                            Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - add to playlist" );  # CD 0119
                             IOWrite( $hash, "$hash->{PLAYERMAC} playlist add " . $qe . "\n" );
                             $playlistadd=1;
                         }
                     } else {
                         # ein anderer Player steuert talk
+                        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - ".($hash->{helper}{ttsMaster})." : add to playlist" );  # CD 0119
                         IOWrite( $hash, $hash->{helper}{ttsMaster}." fhemrelay ttsadd ". $qe ."\n" );
                         $playlistadd=1;
                     }
@@ -3754,6 +3757,7 @@ sub SB_PLAYER_LoadTalk {
             if($hash->{helper}{ttsstate}!=TTS_SYNCGROUPACTIVE) {
                 # andere Player in Gruppe informieren
                 if (defined($hash->{SYNCGROUP}) && ($hash->{SYNCGROUP} ne '?') && ($hash->{SYNCMASTER} ne 'none')) {
+                    Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - inform other players" );  # CD 0119
                     my @pl=split(",",$hash->{SYNCGROUP}.",".$hash->{SYNCMASTER});
                     foreach (@pl) {
                         if ($hash->{PLAYERMAC} ne $_) {
@@ -5740,6 +5744,7 @@ sub SB_PLAYER_ParsePlayerStatus {
                     SB_PLAYER_Amplifier( $hash );
                     # CD 0042 start
                     if($hash->{helper}{ttsstate}==TTS_WAITFORPOWERON) {
+                        Log3( $hash, defined($hash->{helper}{ttsOptions}{debug})?0:6, "$name: ttsdebug - power is on" );  # CD 0119
                         RemoveInternalTimer( "TTSStartAfterPowerOn:$name");
                         InternalTimer( gettimeofday() + 0.01,
                            "SB_PLAYER_tcb_TTSStartAfterPowerOn",
