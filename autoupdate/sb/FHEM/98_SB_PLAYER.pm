@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0120 2024-12-15 17:00:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0121 2024-12-16 21:30:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -5397,11 +5397,12 @@ sub SB_PLAYER_CoverArt {
                   $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/" . uri_unescape($hash->{ARTWORKURL});
               } else {
                   # CD 120 mysqueezebox.com gibt's nicht mehr, lokalen Proxy verwenden
+                  # CD 121 URL korrigiert
                   #$hash->{COVERARTURL} = "http://www.mysqueezebox.com/public/" .
-                  $hash->{COVERARTURL} = 'http://' . $hash->{SBSERVER} .'/' .
-                      "imageproxy?u=" . $hash->{ARTWORKURL} .
-                      "&h=" . AttrVal( $name, "coverartheight", 50 ) .
-                      "&w=". AttrVal( $name, "coverartwidth", 50 );
+                  $hash->{COVERARTURL} = 'http://' . $hash->{SBSERVER} .
+                      '/imageproxy/' . $hash->{ARTWORKURL} . 
+                      '/image_'.AttrVal( $name, 'coverartheight', 50 ).'x'.AttrVal( $name, 'coverartwidth', 50 ).'.jpg'.
+                      '?x='.int(rand(100000));
               }
           } else {
               $hash->{COVERARTURL} = "http://" . $hash->{SBSERVER} . "/music/" .

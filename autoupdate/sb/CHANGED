@@ -7,6 +7,7 @@
   190415 0054 - Attribut artistFilter hinzugefügt
   190324 0053 - Artisten der Alben mit abfragen
 98_SB_PLAYER:
+  241216 0121 - URL für Coverart über lokalen Proxy korrigiert
   241215 0120 - Coverart über mysqueezebox.com entfernt
   240618 0119 - zusätzliche Log-Ausgaben für ttsdebug
   240606 0118 - neue TTS-Option replacediacritics, wenn definiert werden Umlaute ersetzt
@@ -133,6 +134,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  241216 0121 - URL für Coverart über lokalen Proxy korrigiert
   241215 0120 - Coverart über mysqueezebox.com entfernt
   240618 0119 - zusätzliche Log-Ausgaben für ttsdebug
   240606 0118 - neue TTS-Option replacediacritics, wenn definiert werden Umlaute ersetzt
