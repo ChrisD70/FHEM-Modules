@@ -1,11 +1,12 @@
 ﻿97_SB_SERVER:
+  251102 0059 - Smartmatch ersetzt
+              - Daten für FTUI an neuere LMS Versionen angepasst
   230112 0058 - Favoriten aus Unterordnern lesen
   210429 0056 - statusRequest ausgelagert
               - neue Alben intern abspeichern
               - Code und Formatierung etwas aufgeräumt
          0055 - zufälligen Namen für Favoriten die nur ungültige Zeichen enthalten generieren 
   190415 0054 - Attribut artistFilter hinzugefügt
-  190324 0053 - Artisten der Alben mit abfragen
 98_SB_PLAYER:
   241216 0121 - URL für Coverart über lokalen Proxy korrigiert
   241215 0120 - Coverart über mysqueezebox.com entfernt
@@ -19,6 +20,8 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  251102 0059 - Smartmatch ersetzt
+              - Daten für FTUI an neuere LMS Versionen angepasst
   230112 0058 - Favoriten aus Unterordnern lesen
   210429 0056 - statusRequest ausgelagert
               - neue Alben intern abspeichern
