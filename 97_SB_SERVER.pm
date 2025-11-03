@@ -1,5 +1,5 @@
 # ############################################################################
-# $Id: 97_SB_SERVER.pm 0058 2023-01-12 22:48:00Z CD $
+# $Id: 97_SB_SERVER.pm 0059 2025-11-02 17:22:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -52,7 +52,7 @@ use Net::Ping;
 use Encode qw(decode encode);           # CD 0009 hinzugefügt
 #use Text::Unidecode;
 
-no if $] >= 5.017011, warnings => 'experimental::smartmatch';
+#no if $] >= 5.017011, warnings => 'experimental::smartmatch';
 
 # this will hold the hash of hashes for all instances of SB_SERVER
 my %favorites;
@@ -2717,7 +2717,8 @@ sub SB_SERVER_ParseServerStatus {
         # CD 0017 check ignored IPs
         if( defined( $players{$player}{IP} ) ) {
             my @ip=split(':',$players{$player}{IP});
-            if ($ip[0] ~~ @ignoredIPs) {
+            if (grep { $_ eq $ip[0] } @ignoredIPs) {
+            # if ($ip[0] ~~ @ignoredIPs) {
                 $players{$player}{ignore}=1;
                 next;
             }
@@ -2725,7 +2726,8 @@ sub SB_SERVER_ParseServerStatus {
 
         # CD 0017 check ignored MACs
         if( defined( $players{$player}{MAC} ) ) {
-            if ($players{$player}{MAC} ~~ @ignoredMACs) {
+            if (grep { $_ eq $players{$player}{MAC} } @ignoredMACs) {
+            # if ($players{$player}{MAC} ~~ @ignoredMACs) {
                 $players{$player}{ignore}=1;
                 next;
             }
@@ -2868,6 +2870,7 @@ sub SB_SERVER_ParseGenreAlbumArtist {
     my $data2=""; # CD 0053
     my $albumartist;  # CD 0053
     my $ids="";
+    my $ignore = 0;
 
     foreach( @args ) {
         if( $_ =~ /^(id:)([0-9]*)/ ) {
@@ -2897,6 +2900,7 @@ sub SB_SERVER_ParseGenreAlbumArtist {
                 }
                 $buf="";
                 $indata=0;
+                $ignore=0;
             }
             next;
         } elsif( $_ =~ /^(genre:)(.*)/ ) {
@@ -2918,9 +2922,14 @@ sub SB_SERVER_ParseGenreAlbumArtist {
             next;
         } elsif( $_ =~ /^(count:)(.*)/ ) {
             next;
+        } elsif( $_ =~ /^(favorites_url:)(.*)/ ) {  # CD 0059 favorites_url überspringen
+            $ignore=1;
+            next;
+        } elsif( $_ =~ /^(performance:)(.*)/ ) {  # CD 0059 performance überspringen
+            next;
         } elsif( $_ =~ /^(role_id:)(.*)/ ) {
             next;
-        } elsif ($indata==1) {
+        } elsif (($indata==1)&&($ignore==0)) {  # CD 0059 favorites_url ignorieren
             if(defined($albumartist)) {
                 $albumartist.=" $_";
             } else {
@@ -4258,8 +4267,8 @@ sub SB_SERVER_readPassword
 
 =pod
 =item device
-=item summary    connect to a Logitech Media Server (LMS)
-=item summary_DE Anbindung an Logitech Media Server (LMS)
+=item summary    connect to a Lyrion Media Server (LMS)
+=item summary_DE Anbindung an Lyrion Media Server (LMS)
 =begin html
 
 <a name="SB_SERVER"></a>
@@ -4272,7 +4281,7 @@ sub SB_SERVER_readPassword
     <br><br>
 
     This module allows you in combination with the module SB_PLAYER to control a
-    Logitech Media Server (LMS) and connected Squeezebox Media Players.<br><br>
+    Lyrion Media Server (LMS) and connected Squeezebox Media Players.<br><br>
 
     Attention:  The <code>[:cliserverport]</code> parameter is
     optional. You just need to configure it if you changed it on the LMS.
@@ -4342,7 +4351,7 @@ sub SB_SERVER_readPassword
   <ul>
     <li><code>alivetimer &lt;sec&gt;</code><br>
     Default: 120. Every &lt;sec&gt; seconds it is checked, whether the computer with its LMS is still reachable
-    – either via an internal ping (that leads regulary to problems) or via PRESENCE (preferred, no problems)
+    - either via an internal ping (that leads regulary to problems) or via PRESENCE (preferred, no problems)
     - and running.</li>
     <li><code>artistFilter &lt;type1[,type2]&gt;</code><br>
     Limits the artists to the specified types. If the attribute is not set, all artists are shown.</li>
@@ -4352,7 +4361,7 @@ sub SB_SERVER_readPassword
     Adds the playlists and favorites (if available) of the specified LMS-plugins.</li>
     <li><code>httpport &lt;port&gt;</code><br>
     Normally the http-port is automatically detected. This attribute can be used to override the detected value.
-    You can check the port-number of the LMS within its setup under Setup – Network – Web Server Port Number.</li>
+    You can check the port-number of the LMS within its setup under Setup - Network - Web Server Port Number.</li>
     <li><a name="SBserver_attribut_ignoredIPs"><code>ignoredIPs &lt;IP-Address[,IP-Address]&gt;</code>
     </a><br />With this attribute you can define IP-addresses of players which will to be ignored by the server, e.g. "192.168.0.11,192.168.0.37"</li>
     <li><a name="SBserver_attribut_ignoredMACs"><code>ignoredMACs &lt;MAC-Address[,MAC-Address]&gt;</code>
@@ -4383,7 +4392,7 @@ sub SB_SERVER_readPassword
     <br><br>
 
     Diese Modul erm&ouml;glicht es - zusammen mit dem Modul SB_PLAYER - einen
-    Logitech Media Server (LMS) und die angeschlossenen Squeezebox Media
+    Lyrion Media Server (LMS) und die angeschlossenen Squeezebox Media
     Player zu steuern.<br><br>
 
     Achtung: Die Angabe des Parameters <code>[:cliserverport]</code> ist
@@ -4471,7 +4480,7 @@ sub SB_SERVER_readPassword
     Bindet die Wiedergabelisten und Favoriten (soweit vorhanden) von LMS-Plugins (z.B. Spotify) ein.</li>
     <li><code>httpport &lt;port&gt;</code><br>
     Im Normalfall wird der http-Port automatisch ermittelt. Sollte dies NICHT funktionieren kann er über das Attribut fest vorgegeben werden.
-    Zur &Uuml;berpr&uuml;fung kann im Server unter Einstellungen – Erweitert –Netzwerk
+    Zur &Uuml;berpr&uuml;fung kann im Server unter Einstellungen - Erweitert - Netzwerk
     - Anschlussnummer des Webservers nachgeschlagen werden.</li>
     <li><a name="SBserver_attribut_ignoredIPs"><b><code>ignoredIPs &lt;IP-Adresse&gt;[,IP-Adresse]</code></b>
     </a><br />Mit diesem Attribut kann die automatische Erkennung dedizierter Ger&auml;te durch die Angabe derer IP-Adressen unterdrückt werden, z.B. "192.168.0.11,192.168.0.37"</li>
