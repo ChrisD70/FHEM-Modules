@@ -1,13 +1,12 @@
 ﻿97_SB_SERVER:
+  251115 0061 - Namen aller Favoriten und Wiedergabelisten gleich behandeln
+  251110 0060 - Kategorien für Soundcloud angepasst
+              - Rückmeldung der Plugins geändert
   251102 0059 - Smartmatch ersetzt
               - Daten für FTUI an neuere LMS Versionen angepasst
   230112 0058 - Favoriten aus Unterordnern lesen
-  210429 0056 - statusRequest ausgelagert
-              - neue Alben intern abspeichern
-              - Code und Formatierung etwas aufgeräumt
-         0055 - zufälligen Namen für Favoriten die nur ungültige Zeichen enthalten generieren 
-  190415 0054 - Attribut artistFilter hinzugefügt
 98_SB_PLAYER:
+  251110 0122 - doppelte Spotify-Wiedergabelisten filtern
   241216 0121 - URL für Coverart über lokalen Proxy korrigiert
   241215 0120 - Coverart über mysqueezebox.com entfernt
   240618 0119 - zusätzliche Log-Ausgaben für ttsdebug
@@ -20,6 +19,9 @@
 Historie Änderungen:
                                                                                                  .    
 97_SB_SERVER:
+  251115 0061 - Namen aller Favoriten und Wiedergabelisten gleich behandeln
+  251110 0060 - Kategorien für Soundcloud angepasst
+              - Rückmeldung der Plugins geändert
   251102 0059 - Smartmatch ersetzt
               - Daten für FTUI an neuere LMS Versionen angepasst
   230112 0058 - Favoriten aus Unterordnern lesen
@@ -137,6 +139,7 @@ Historie Änderungen:
               - bei einem fehlenden Ping nicht sofort abschalten
                                                                                                  .    
 98_SB_PLAYER:
+  251110 0122 - doppelte Spotify-Wiedergabelisten filtern
   241216 0121 - URL für Coverart über lokalen Proxy korrigiert
   241215 0120 - Coverart über mysqueezebox.com entfernt
   240618 0119 - zusätzliche Log-Ausgaben für ttsdebug
