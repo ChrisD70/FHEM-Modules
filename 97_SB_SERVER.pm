@@ -1,5 +1,5 @@
 # ############################################################################
-# $Id: 97_SB_SERVER.pm 0059 2025-11-02 17:22:00Z CD $
+# $Id: 97_SB_SERVER.pm 0061 2025-11-15 21:18:00Z CD $
 #
 #  FHEM Module for Squeezebox Servers
 #
@@ -1658,9 +1658,7 @@ sub SB_SERVER_ParseAppResponse {
                     RemoveInternalTimer( "SB_SERVER_tcb_SendPlaylists:$name");
                     foreach my $pl ( keys %{$hash->{helper}{appcmd}{$appcmd}{playlists}} ) {
                         my $plname=$hash->{helper}{appcmd}{$appcmd}{playlists}{$pl}{name};
-                        $plname=~s/ /_/g;
-                        $plname=~s/[^[:ascii:]]//g;
-                        #$plname=unidecode($plname);
+                        $plname=SB_SERVER_CleanupPlaylistName($plname); # CD 0061
                         my $uniquename = SB_SERVER_FavoritesName2UID( $plname );
                         push @SB_SERVER_PLS, "ADD $plname $pl $uniquename $appcmd";
                     }
@@ -1676,9 +1674,7 @@ sub SB_SERVER_ParseAppResponse {
                     RemoveInternalTimer( "SB_SERVER_tcb_SendFavorites:$name");
                     foreach my $pl ( keys %{$hash->{helper}{appcmd}{$appcmd}{favorites}} ) {
                         my $plname=$hash->{helper}{appcmd}{$appcmd}{favorites}{$pl}{name};
-                        $plname=~s/ /_/g;
-                        $plname=~s/[^[:ascii:]]//g;
-                        #$plname=unidecode($plname);
+                        $plname=SB_SERVER_CleanupPlaylistName($plname); # CD 0061
                         my $uniquename = SB_SERVER_FavoritesName2UID( $plname );
                         push @SB_SERVER_FAVS, "ADD $name $pl $uniquename url $appcmd $plname";
                     }
@@ -1706,10 +1702,12 @@ sub SB_SERVER_ParseAppResponse {
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
                             $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                            $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'My playlists'); # CD 0060 SoundCloud
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Wiedergabelisten'); # CD 0035
                             $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Listes de lecture'); # CD 0036
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
                             $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
+                            $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Liked playlists');
                             $save=0;
                         }
                         $id=$2;
@@ -1752,8 +1750,12 @@ sub SB_SERVER_ParseAppResponse {
                     $hash->{helper}{appcmd}{$appcmd}{items}{$id}{isaudio}=$isaudio;
                     $hash->{helper}{appcmd}{$appcmd}{items}{$id}{hasitems}=$hasitems;
                     $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Playlists');
+                    $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'My playlists'); # CD 0060 SoundCloud
+                    $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Wiedergabelisten'); # CD 0035
+                    $hash->{helper}{appcmd}{$appcmd}{playlistsId}=$id if($iname eq 'Listes de lecture'); # CD 0036
                     $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Likes');
                     $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Favorites');
+                    $hash->{helper}{appcmd}{$appcmd}{favoritesId}=$id if($iname eq 'Liked playlists');
                 }
                 if(defined($hash->{helper}{appcmd}{$appcmd}{playlistsId})) {
                     DevIo_SimpleWrite( $hash, "$appcmd items 0 200 item_id:".($hash->{helper}{appcmd}{$appcmd}{playlistsId})."\n", 0 );
@@ -2084,6 +2086,7 @@ sub SB_SERVER_ParseCmds {
         my $appcmd="";
         my $appname="";
         my $scansubs=0;
+        my $inname=0; # CD 0060
 
         # 1. Mal ?
         $scansubs=1 unless (defined($hash->{helper}{apps}));
@@ -2091,28 +2094,46 @@ sub SB_SERVER_ParseCmds {
         delete($hash->{helper}{apps}) if(defined($hash->{helper}{apps}));
         delete($hash->{helper}{appcmd}) if(defined($hash->{helper}{appcmd}));
 
+        # CD 0060 komplett überarbeitet wegen völlig zufälliger Reihenfolge der Tags
         foreach( @args ) {
             if( $_ =~ /^(icon:)(.*)/ ) {
-                # new entry
-                if($save==1) {
+                next;
+            } elsif( $_ =~ /^(cmd:)(.*)/ ) {
+                # speichern ?
+                if(($appcmd ne "")&&($save==1)) {
                     $hash->{helper}{apps}{$appname}{cmd}=$appcmd;
                     $hash->{helper}{appcmd}{$appcmd}{name}=$appname;
                     $save=0;
+                    $appname="";
                 }
-                next;
-            } elsif( $_ =~ /^(cmd:)(.*)/ ) {
                 $appcmd=$2;
                 $save=1;
+                $inname=0;
                 next;
             } elsif( $_ =~ /^(name:)(.*)/ ) {
+                # speichern ?
+                if(($appname ne "")&&($save==1)) {
+                    $hash->{helper}{apps}{$appname}{cmd}=$appcmd;
+                    $hash->{helper}{appcmd}{$appcmd}{name}=$appname;
+                    $save=0;
+                    $inname=0;
+                    $appcmd="";
+                }
                 $appname=$2;
                 $appname=~s/\./_/g;
                 $appname=~s/-/_/g;
                 $save=1;
+                $inname=1;
                 next;
             } elsif( $_ =~ /^(type:)(.*)/ ) {
                 $save=0 if($2 ne 'xmlbrowser');
                 next;
+            } elsif( $_ =~ /^(weight:)(.*)/ ) { # CD 0060 ignorieren
+                next;
+            } else {
+                if($inname==1) {  # CD 0060 Apps mit Leerzeichen korrekt einlesen
+                    $appname=$appname . '_' . $_;
+                }
             }
         }
         if($save==1) {
@@ -3148,6 +3169,7 @@ sub SB_SERVER_FavoritesParse {
                     #if($subfolder==1) {
                     #  $namebuf='__'.$favname.'__'.$namebuf;
                     #}
+                    $namebuf=SB_SERVER_CleanupPlaylistName($namebuf);           # CD 0061
                     my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );     # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
                     $favorites{$name}{$entryuid} = {
                     ID => $idbuf,
@@ -3235,6 +3257,7 @@ sub SB_SERVER_FavoritesParse {
             #if($subfolder==1) {
             #  $namebuf='__'.$favname.'__'.$namebuf;
             #}
+            $namebuf=SB_SERVER_CleanupPlaylistName($namebuf);                   # CD 0061
             my $entryuid = SB_SERVER_FavoritesName2UID( $namebuf );             # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
             $favorites{$name}{$entryuid} = {
             ID => $idbuf,
@@ -3317,6 +3340,31 @@ sub SB_SERVER_tcb_SendFavorites {
 }
 # CD 0029 end
 
+# CD 0061 start
+sub SB_SERVER_CleanupPlaylistName {
+    my $namestr = shift( @_ );
+
+    # eliminate spaces
+    $namestr=~s/ /_/g;
+
+    # verschiedene Sonderzeichen ersetzen
+    my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
+                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c", "í" => "i", "ô" => "o", "‒" => "-", "–" => "-", "–" => "—" );
+    my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
+    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
+
+    # remove all remaining Unicode characters
+    #$namestr=~s/[^[:ascii:]]//g;
+
+    # remove double underscores
+    while($namestr=~"__") {
+      $namestr=~s/__/_/g;
+    }
+
+    return( $namestr );
+}
+# CD 0061 end
+
 # ----------------------------------------------------------------------------
 #  generate a UID for the hash entry from the name
 # ----------------------------------------------------------------------------
@@ -3328,7 +3376,7 @@ sub SB_SERVER_FavoritesName2UID {
 
     # CD 0009 verschiedene Sonderzeichen ersetzen und nicht mehr löschen
     my %Sonderzeichen = ("ä" => "ae", "Ä" => "Ae", "ü" => "ue", "Ü" => "Ue", "ö" => "oe", "Ö" => "Oe", "ß" => "ss",
-                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c" );
+                        "é" => "e", "è" => "e", "ë" => "e", "à" => "a", "ç" => "c", "í" => "i", "ô" => "o", "‒" => "-", "–" => "-", "–" => "—" );
     my $Sonderzeichenkeys = join ("|", keys(%Sonderzeichen));
     $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}/g;
 #    $namestr =~ s/($Sonderzeichenkeys)/$Sonderzeichen{$1}||''/g;
@@ -3349,6 +3397,11 @@ sub SB_SERVER_FavoritesName2UID {
 
     $namestr =~ s/$tobereplaced//g;
     
+    # remove double underscores
+    while($namestr=~"__") {
+      $namestr=~s/__/_/g;
+    }
+
     # CD 0055
     if($namestr eq '') {
       $namestr='INVALIDNAME_' . time();
@@ -3559,8 +3612,9 @@ sub SB_SERVER_ParseServerPlaylists {
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
                 $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);                # CD 0037
+                $namebuf=SB_SERVER_CleanupPlaylistName($namebuf);               # CD 0061
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";     # CD 0029
             }
             $idbuf = $2;
             $namebuf = "";
@@ -3575,8 +3629,9 @@ sub SB_SERVER_ParseServerPlaylists {
               "id:$idbuf name:$namebuf " );
             if( $idbuf != -1 ) {
                 $namebuf="noname_".$cnt++ if($namebuf=~/^\s*$/);                # CD 0037
+                $namebuf=SB_SERVER_CleanupPlaylistName($namebuf);               # CD 0061
                 $uniquename = SB_SERVER_FavoritesName2UID( $namebuf );          # CD 0009 decode hinzugefügt # CD 0010 decode wieder entfernt
-                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";         # CD 0029
+                push @SB_SERVER_PLS, "ADD $namebuf $idbuf $uniquename LMS";     # CD 0029
             }
         } else {
             $namebuf .= "_" . $_;
