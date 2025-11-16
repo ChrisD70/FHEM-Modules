@@ -1,5 +1,5 @@
 # ##############################################################################
-# $Id: 98_SB_PLAYER.pm 0121 2024-12-16 21:30:00Z CD/MM/Matthew/Heppel $
+# $Id: 98_SB_PLAYER.pm 0122 2025-11-10 21:09:00Z CD/MM/Matthew/Heppel $
 #
 #  FHEM Module for Squeezebox Players
 #
@@ -337,8 +337,8 @@ sub SB_PLAYER_Attr {
     elsif( $args[ 0 ] eq "sortPlaylists" ) {
         if( $cmd eq "set" ) {
             if ($args[1] eq "1") {
-                my @radios = split(',',$hash->{SERVERPLAYLISTS});
-                $hash->{SERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
+                my @radios = split(',',$hash->{FILTEREDSERVERPLAYLISTS});
+                $hash->{FILTEREDSERVERPLAYLISTS} = join(',',sort { "\L$a" cmp "\L$b" } @radios);
             }
         }
     }
@@ -403,7 +403,7 @@ sub SB_PLAYER_Attr {
                     readingsBulkUpdate( $hash, "ftuiFavoritesAlias", $t );
                 }
                 if(defined($hash->{helper}{ftuiSupport}{playlists})) {
-                    my $t=$hash->{SERVERPLAYLISTS};
+                    my $t=$hash->{FILTEREDSERVERPLAYLISTS};
                     $t=~s/,/:/g;
                     readingsBulkUpdate( $hash, "ftuiPlaylistsItems", $t );
                     $t=~s/_/ /g;
@@ -671,6 +671,7 @@ sub SB_PLAYER_Define {
         $hash->{ISREMOTESTREAM} = "?";
         # the server side playlists
         $hash->{SERVERPLAYLISTS} = "not,yet,defined";
+        $hash->{FILTEREDSERVERPLAYLISTS} = "not,yet,defined"; # CD 0122
         # the URL to the artwork
         $hash->{ARTWORKURL} = "?";
         $hash->{COVERARTURL} = "?";
@@ -2843,7 +2844,7 @@ sub SB_PLAYER_Set {
         # add the syncmasters
         $res .= "sync:" . $hash->{SYNCMASTERS} . " ";
         # add the playlists
-        $res .= "playlists:-," . $hash->{SERVERPLAYLISTS} . " ";    # CD 0014 '-' hinzugefügt
+        $res .= "playlists:-," . $hash->{FILTEREDSERVERPLAYLISTS} . " ";    # CD 0014 '-' hinzugefügt CD 0122 FILTEREDSERVERPLAYLISTS verwenden
         # add player saved lists      # CD 0036
         my $out="";
         if (defined($hash->{helper}{savedPlayerState})) {
@@ -4833,8 +4834,17 @@ sub SB_PLAYER_RecBroadcast {
                 }
             }
         } elsif( $args[ 0 ] eq "DONE" ) {
+            # CD 0122 doppelte Spotify Einträge entfernen
+            my @spl = split(',',$hash->{SERVERPLAYLISTS});
+            my @splf=@spl;
+            for(@spl) {
+                my $ss='Spotify_'.$_;
+                @splf = grep {!/$ss$/} @splf;
+            }
+            $hash->{FILTEREDSERVERPLAYLISTS}=join(',',@splf);
+            
             if(defined($hash->{helper}{ftuiSupport}{playlists})) {
-                my $t=$hash->{SERVERPLAYLISTS};
+                my $t=$hash->{FILTEREDSERVERPLAYLISTS};
                 $t=~s/,/:/g;
                 readingsSingleUpdate( $hash, "ftuiPlaylistsItems", $t, 1 );
                 $t=~s/_/ /g;
@@ -6435,7 +6445,7 @@ sub SB_PLAYER_RemoveInternalTimers {
   <ul>
     <code>define &lt;name&gt; SB_PLAYER &lt;player_mac_address&gt; [ampl:&lt;ampl&gt;] [coverart:&lt;coverart&gt;]</code>
     <br><br>
-    This module controls Squeezebox Media Players connected to a defined Logitech Media Server (LMS). A SB_SERVER device is required.<br>
+    This module controls Squeezebox Media Players connected to a defined Lyrion Media Server (LMS). A SB_SERVER device is required.<br>
     Usually SB_PLAYER devices are created automatically by autocreate.<br><br>
 
    <ul>
@@ -6659,7 +6669,7 @@ sub SB_PLAYER_RemoveInternalTimers {
     <code>define &lt;name&gt; SB_PLAYER &lt;player_mac_address&gt; [ampl:&lt;ampl&gt;] [coverart:&lt;coverart&gt;]</code>
     <br><br>
     Dieses Modul steuert Squeezebox-Player, die mit einem bereits definiertem
-    Logitech Media Server (LMS) verbunden sind. Ein SB_SERVER-Device ist erforderlich.
+    Lyrion Media Server (LMS) verbunden sind. Ein SB_SERVER-Device ist erforderlich.
     Normalerweise wird das SB_PLAYER Device automatisch durch autocreate erzeugt.<br><br>
 
    <ul>
